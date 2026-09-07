@@ -1,6 +1,6 @@
 # v0.2.0 verification
 
-Verified 2026-09-08. GitHub publication and Linux CI are pending the final release steps; the application is deployed and the checks below are observed, not planned.
+Verified and released 2026-09-08. [Linux CI passed](https://github.com/bestagentkits/design-studio-ai/actions/runs/34149162480) for commit `87e35f03152c763b148d52c464bbe8da9fb195a1`. The public [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) contains the standalone CLI and agent skill archives; the application is deployed and the checks below are observed, not planned.
 
 ## Delivered behavior
 
@@ -23,6 +23,7 @@ Verified 2026-09-08. GitHub publication and Linux CI are pending the final relea
 | Docker build | Image `design-studio-ai:0.2.0`, digest `sha256:25232c17156235f2d6cb11d052dbc9570607892c0467d6893b1ad20cd502fda1` built successfully |
 | Docker smoke | Same 21 checks passed against real SQLite/files/headless Chromium on local port 8788; public canonical/llms/sitemap used that origin, unknown path returned 404 |
 | CLI archive | Extracted `bestagentkits-design-studio-ai-0.2.0.tgz` prints `0.2.0` and includes get/put/interview/approve commands; eight CLI integration/packaging tests passed in the 70-test suite |
+| Published downloads | Downloaded both GitHub release assets; SHA-256 matches local verified CLI and skill archives |
 | Live browser | Latest workspace and guide load, System/Dark selection persists across navigation, existing GitHub session remains authenticated |
 
 The E2E harness now waits for its own server's listening signal as well as health, and gives each device a fresh rate-limit bucket instead of relaxing production limits. An earlier overlapping review server invalidated one run; only the subsequent clean 14/14 run is counted. A stale locator was scoped to the Settings dialog after the account button gained an accessible name.
@@ -32,6 +33,8 @@ Cloud smoke accounts, projects and temporary keys were removed. The real GitHub 
 ## Performance and review
 
 The production entry bundle is 63.95 kB gzip; the workspace is loaded separately at 68.51 kB gzip. Documentation is 18.61 kB gzip and the guide 6.40 kB gzip. The 159.39 kB gzip Three.js scene and 123.20 kB gzip PowerPoint modules are lazy-loaded. These are build measurements, not a synthetic Lighthouse score or a network-latency guarantee. Public pages contain meaningful content before JavaScript executes.
+
+An anonymous production Chromium check confirmed that neither the homepage nor REST documentation requests the Three.js/PowerPoint modules, and the documentation does not request the workspace module. Both fit the 1440-pixel viewport. Pre-commit exact-secret and high-confidence credential scans passed across 139 staged blobs; no real dotenv or private data was included. The repository is public and MIT licensed.
 
 Direct [Claude Design exploration](claude-design-observation.md) informed contextual questions, explicit scope, simple/progressive editing controls, and theme tweaks. [Authentication/brief review](auth-brief-review.md) and [onboarding review](onboarding-quality-review.md) found and resolved the object-property question-ID bug and pending-request edit race. Actual Cloudflare execution exposed unsupported `redirect: 'error'`; GitHub and provider transports now use `manual` and reject non-success responses without forwarding credentials.
 

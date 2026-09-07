@@ -1,7 +1,7 @@
 ---
 title: Bootstrap Design Studio AI
 description: Deliver the agent-first design workspace, portable hosting, and verified deployment.
-status: in-progress
+status: completed
 priority: P1
 effort: 40h
 tags: [feature, frontend, backend, api, auth, infra]
@@ -40,4 +40,4 @@ The cloud recorder failure was fixed and reverified: ffprobe decoded VP9 WebM at
 
 ## Active added scope
 
-GitHub login, public documentation/guide/discovery, contextual interviews, appearance controls, and design checks are implemented and verified on 2026-09-08. Actual GitHub authorization, callback, logout and relogin succeeded; 70 unit/integration tests, 14 desktop/mobile E2E checks, and 21 checks each on Cloudflare and Docker passed. See [v0.2.0 verification](reports/release-v020.md). GitHub publication and final CI are the remaining release steps. The earlier evidence remains specific to v0.1.0.
+GitHub login, public documentation/guide/discovery, contextual interviews, appearance controls, and design checks are implemented and verified on 2026-09-08. Actual GitHub authorization, callback, logout and relogin succeeded; 70 unit/integration tests, 14 desktop/mobile E2E checks, and 21 checks each on Cloudflare and Docker passed. See [v0.2.0 verification](reports/release-v020.md). [Linux CI passed](https://github.com/bestagentkits/design-studio-ai/actions/runs/34149162480) for released commit `87e35f03152c763b148d52c464bbe8da9fb195a1`; the public [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) includes CLI and skill archives. Completion means this verified implementation and documented boundaries, not unverified provider success or full desktop-editor parity. The earlier evidence remains specific to v0.1.0.
