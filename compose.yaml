@@ -1,0 +1,14 @@
+services:
+  studio:
+    build: .
+    ports: ["8787:8787"]
+    environment:
+      APP_URL: ${APP_URL:-http://localhost:8787}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set a stable ENCRYPTION_KEY}
+      ALLOW_REGISTRATION: ${ALLOW_REGISTRATION:-true}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    volumes: ["studio-data:/data"]
+    restart: unless-stopped
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  studio-data:

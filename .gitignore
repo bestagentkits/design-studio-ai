@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.wrangler/
+.data/
+*.env
+.env*
+!.env.example
+screenshots/
+test-results/
+playwright-report/
+coverage/
+*.log
+artifacts/
+tmp/
+public/studio-renderer.js
+public/studio-viewer.js
+data/

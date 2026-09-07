@@ -1,0 +1,50 @@
+{
+  "name": "design-studio-ai",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
+    "dev:api": "tsx watch server/node.ts",
+    "build": "node scripts/build-renderer.mjs && vite build",
+    "typecheck": "tsc --noEmit && tsc -p packages/cli/tsconfig.json",
+    "test": "node scripts/build-renderer.mjs && tsx --test tests/*.test.ts",
+    "start": "tsx server/node.ts",
+    "cf": "node scripts/cloudflare.mjs",
+    "deploy": "npm run build && node scripts/cloudflare.mjs deploy",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "build:cli": "npm run build --prefix packages/cli"
+  },
+  "dependencies": {
+    "@cloudflare/puppeteer": "^1.4.0",
+    "@hono/node-server": "^2.1.1",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "hono": "^4.13.7",
+    "html-to-image": "^1.11.13",
+    "lucide-react": "^1.42.0",
+    "pptxgenjs": "^4.0.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "three": "^0.185.1",
+    "zod": "^4.5.4"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260907.1",
+    "@playwright/test": "^1.63.0",
+    "@types/node": "^26.5.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@types/three": "^0.185.4",
+    "@vitejs/plugin-react": "^6.1.1",
+    "esbuild": "^0.28.2",
+    "jszip": "^3.10.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "wrangler": "^4.129.1"
+  }
+}

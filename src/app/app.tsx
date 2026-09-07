@@ -1,0 +1,1078 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  ArrowDownUp,
+  ArrowRight,
+  ArrowUp,
+  Box,
+  Check,
+  Code2,
+  Copy,
+  FileText,
+  Film,
+  FolderOpen,
+  Grid2X2,
+  Import,
+  Layers3,
+  LayoutTemplate,
+  List,
+  Monitor,
+  Plus,
+  Presentation,
+  Search,
+  Settings2,
+  SlidersHorizontal,
+  Sparkles,
+  Trash2,
+  X,
+} from "lucide-react";
+import type { DesignDocument, Project } from "../shared/schema";
+import { createDocument, templates, themes } from "../shared/catalog";
+import { renderSvg } from "../shared/render";
+import { api, post, message, type User, type Provider } from "./api";
+import { Brand, Busy, Empty, Field, Modal } from "./ui";
+import { Editor } from "./editor";
+import { Settings } from "./settings";
+import { importDesign } from "./file-formats";
+
+type Kind = DesignDocument["kind"];
+const kinds: {
+  id: Kind;
+  name: string;
+  icon: typeof Monitor;
+  description: string;
+}[] = [
+  {
+    id: "web",
+    name: "Website",
+    icon: Monitor,
+    description: "Give your idea a home",
+  },
+  {
+    id: "slides",
+    name: "Presentation",
+    icon: Presentation,
+    description: "Make your story land",
+  },
+  {
+    id: "report",
+    name: "Document",
+    icon: FileText,
+    description: "Bring clarity to the details",
+  },
+  {
+    id: "wireframe",
+    name: "Wireframe",
+    icon: LayoutTemplate,
+    description: "Find the right structure",
+  },
+  {
+    id: "3d",
+    name: "3D scene",
+    icon: Box,
+    description: "Explore another dimension",
+  },
+  {
+    id: "video",
+    name: "Motion",
+    icon: Film,
+    description: "Set your ideas in motion",
+  },
+];
+type Summary = Omit<Project, "document"> & { document?: DesignDocument };
+type Draft = {
+  kind: Kind;
+  name: string;
+  prompt: string;
+  audience: string;
+  theme: string;
+  template?: string;
+  document?: DesignDocument;
+  importNotice?: string;
+};
+
+export function App() {
+  const [user, setUser] = useState<User | null>(null),
+    [ready, setReady] = useState(false),
+    [projects, setProjects] = useState<Summary[]>([]);
+  const [project, setProject] = useState<Project | null>(null),
+    [error, setError] = useState(""),
+    [notice, setNotice] = useState("");
+  const [auth, setAuth] = useState(false),
+    [settings, setSettings] = useState(false),
+    [busy, setBusy] = useState(false);
+  const [prompt, setPrompt] = useState(""),
+    [kind, setKind] = useState<Kind>("web"),
+    [theme, setTheme] = useState(""),
+    [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all"),
+    [sort, setSort] = useState("updated"),
+    [view, setView] = useState<"grid" | "list">("grid"),
+    [tab, setTab] = useState("projects");
+  const [draft, setDraft] = useState<Draft | null>(null),
+    [providers, setProviders] = useState<Provider[]>([]),
+    [provider, setProvider] = useState("openai");
+  const [remove, setRemove] = useState<Summary | null>(null);
+  async function refresh() {
+    const data = await api<{ projects: Summary[] }>("/api/projects");
+    setProjects(data.projects);
+  }
+  useEffect(() => {
+    api<{ user: User | null }>("/api/auth/me")
+      .then((data) => {
+        setUser(data.user);
+      })
+      .catch((e) => setError(message(e)))
+      .finally(() => setReady(true));
+  }, []);
+  useEffect(() => {
+    if (user) {
+      refresh().catch((e) => setError(message(e)));
+      api<{ providers: Provider[] }>("/api/providers")
+        .then((d) => setProviders(d.providers))
+        .catch((e) => setError(message(e)));
+    } else setProjects([]);
+  }, [user]);
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(""), 9000);
+    return () => clearTimeout(timer);
+  }, [notice]);
+  const filtered = useMemo(
+    () =>
+      projects
+        .filter(
+          (p) =>
+            (filter === "all" || p.kind === filter) &&
+            `${p.name} ${p.description}`
+              .toLowerCase()
+              .includes(search.toLowerCase()),
+        )
+        .sort((a, b) =>
+          sort === "name"
+            ? a.name.localeCompare(b.name)
+            : new Date(
+                sort === "created" ? b.createdAt : b.updatedAt,
+              ).getTime() -
+              new Date(
+                sort === "created" ? a.createdAt : a.updatedAt,
+              ).getTime(),
+        ),
+    [projects, search, filter, sort],
+  );
+  const galleryItems =
+    tab === "templates"
+      ? templates
+          .filter((t) => filter === "all" || t.kind === filter)
+          .map((template) => ({
+            ...kinds.find((k) => k.id === template.kind)!,
+            template,
+          }))
+      : kinds.map((k) => ({
+          ...k,
+          template: templates.find((t) => t.kind === k.id),
+        }));
+  function begin(selectedKind = kind, template?: string) {
+    setError("");
+    setDraft({
+      kind: selectedKind,
+      name: "",
+      prompt,
+      audience: "",
+      theme:
+        theme ||
+        templates.find((t) => t.id === template)?.themeId ||
+        themes[0]?.id ||
+        "",
+      template,
+    });
+  }
+  async function create(blank = false) {
+    if (!draft) return;
+    if (!user) {
+      setAuth(true);
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const document =
+        draft.document ||
+        createDocument(
+          draft.kind,
+          draft.name.trim() || "Untitled design",
+          draft.theme,
+          draft.template,
+        );
+      if (blank && !draft.document) {
+        document.pages = [{ ...document.pages[0]!, nodes: [] }];
+        if (document.timeline) document.timeline.tracks = [];
+      }
+      const { project: created } = await post<{ project: Project }>(
+        "/api/projects",
+        {
+          name: document.name,
+          kind: draft.kind,
+          description: [
+            draft.prompt,
+            draft.audience && `Audience: ${draft.audience}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          document,
+        },
+      );
+      setProject(created);
+      setDraft(null);
+      await refresh();
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function open(id: string) {
+    setBusy(true);
+    setError("");
+    try {
+      setProject(
+        (await api<{ project: Project }>(`/api/projects/${id}`)).project,
+      );
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function duplicate(item: Summary) {
+    setBusy(true);
+    try {
+      const source = (
+        await api<{ project: Project }>(`/api/projects/${item.id}`)
+      ).project;
+      const document = structuredClone(source.document);
+      document.name = `${source.name} copy`;
+      const result = await post<{ project: Project }>("/api/projects", {
+        name: document.name,
+        kind: source.kind,
+        description: source.description,
+        document,
+      });
+      await refresh();
+      setNotice(`Created “${result.project.name}”.`);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function importFile(file: File) {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await importDesign(file);
+      setDraft({
+        kind: result.document.kind,
+        name: result.document.name,
+        prompt: "",
+        audience: "",
+        theme: result.document.theme.id,
+        document: result.document,
+        importNotice: result.notice,
+      });
+      setNotice(result.notice);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <>
+      {project ? (
+        <Editor
+          initial={project}
+          onBack={() => {
+            setProject(null);
+            refresh().catch((e) => setError(message(e)));
+          }}
+          onSettings={() => setSettings(true)}
+          onProject={setProject}
+          notify={setNotice}
+        />
+      ) : (
+        <div className="home-shell">
+          <header className="main-header">
+            <a
+              className="brand-link"
+              href="/"
+              onClick={(e) => {
+                e.preventDefault();
+                setTab("projects");
+              }}
+            >
+              <Brand />
+            </a>
+            <nav aria-label="Main navigation">
+              <button
+                className={tab === "projects" ? "active" : ""}
+                onClick={() => setTab("projects")}
+              >
+                Workspace
+              </button>
+              <button
+                className={tab === "templates" ? "active" : ""}
+                onClick={() => setTab("templates")}
+              >
+                Templates
+              </button>
+              <button
+                className={tab === "themes" ? "active" : ""}
+                onClick={() => setTab("themes")}
+              >
+                Design systems
+              </button>
+            </nav>
+            <div className="header-end">
+              <button
+                className="icon-button"
+                title="Settings and connections"
+                aria-label="Settings and connections"
+                onClick={() => (user ? setSettings(true) : setAuth(true))}
+              >
+                <Settings2 size={19} />
+              </button>
+              {user ? (
+                <button
+                  className="avatar"
+                  onClick={() => setSettings(true)}
+                  title={user.email}
+                >
+                  {(user.name || user.email).slice(0, 1).toUpperCase()}
+                </button>
+              ) : (
+                <button className="button small" onClick={() => setAuth(true)}>
+                  {ready ? "Sign in" : "Connecting…"}
+                </button>
+              )}
+            </div>
+          </header>
+          <main className="home-main">
+            {tab !== "themes" && (
+              <section className="creation-section">
+                <div className="intro-label">
+                  <span className="tiny-star">✳</span> A space for your next
+                  idea
+                </div>
+                <h1>
+                  What should we <em>create?</em>
+                </h1>
+                <p className="intro-copy">
+                  From a first thought to something worth sharing.
+                </p>
+                <div className="composer">
+                  <textarea
+                    aria-label="Describe your design"
+                    placeholder="A pitch deck for a big idea, a website for a small business…"
+                    value={prompt}
+                    onChange={(e) => setPrompt(e.target.value)}
+                  />
+                  <div className="composer-footer">
+                    <div className="composer-controls">
+                      <label
+                        className="icon-button import-button"
+                        title="Import a design"
+                      >
+                        <Import size={19} />
+                        <input
+                          type="file"
+                          accept=".json,.svg,.html,.htm"
+                          aria-label="Import a design"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) void importFile(file);
+                            e.target.value = "";
+                          }}
+                        />
+                      </label>
+                      <label className="composer-select">
+                        <Layers3 size={16} />
+                        <select
+                          aria-label="Design system"
+                          value={theme}
+                          onChange={(e) => setTheme(e.target.value)}
+                        >
+                          <option value="">Design system</option>
+                          {themes.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <button
+                      className="button primary"
+                      disabled={busy}
+                      onClick={() => begin()}
+                    >
+                      {busy ? (
+                        <Busy label="Opening…" />
+                      ) : (
+                        <>
+                          <span>Let's create</span>
+                          <ArrowUp size={18} />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+                <div
+                  className="kind-picker"
+                  role="group"
+                  aria-label="Design type"
+                >
+                  {kinds.map((k) => (
+                    <button
+                      key={k.id}
+                      className={kind === k.id ? "selected" : ""}
+                      onClick={() => {
+                        setKind(k.id);
+                        if (tab === "templates") setFilter(k.id);
+                      }}
+                    >
+                      <k.icon size={17} />
+                      {k.name}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+            {tab === "themes" ? (
+              <section className="systems-section">
+                <div className="section-title">
+                  <div>
+                    <h1>Your design, in character.</h1>
+                    <p>
+                      Choose a system. Every color and type choice travels with
+                      your design.
+                    </p>
+                  </div>
+                </div>
+                <div className="theme-gallery">
+                  {themes.map((t) => (
+                    <button
+                      className={`theme-card ${theme === t.id ? "selected" : ""}`}
+                      key={t.id}
+                      onClick={() => {
+                        setTheme(t.id);
+                        setNotice(`${t.name} selected for your next project.`);
+                      }}
+                    >
+                      <div
+                        className="theme-type"
+                        style={{
+                          color: t.colors.text || t.colors.foreground,
+                          background: t.colors.background,
+                          fontFamily: t.fonts.heading,
+                        }}
+                      >
+                        Aa
+                        <span style={{ fontFamily: t.fonts.body }}>
+                          Good design feels like you.
+                        </span>
+                      </div>
+                      <div className="theme-meta">
+                        <strong>{t.name}</strong>
+                        <span>{theme === t.id && <Check size={16} />}</span>
+                      </div>
+                      <div className="color-strip">
+                        {Object.entries(t.colors)
+                          .slice(0, 6)
+                          .map(([name, color]) => (
+                            <span
+                              key={name}
+                              title={`${name}: ${color}`}
+                              style={{ background: color }}
+                            />
+                          ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <p className="quiet-note">
+                  Open any design to edit its color palette, fonts, and corner
+                  radius in the Theme inspector.
+                </p>
+              </section>
+            ) : (
+              <>
+                <section className="template-section">
+                  <div className="section-title">
+                    <div>
+                      <h2>
+                        {tab === "templates"
+                          ? "Find your starting point"
+                          : "A head start, beautifully made"}
+                      </h2>
+                      <p>Thoughtful templates. Yours to make your own.</p>
+                    </div>
+                    {tab !== "templates" ? (
+                      <button
+                        className="text-button"
+                        onClick={() => {
+                          setTab("templates");
+                          setFilter("all");
+                        }}
+                      >
+                        Explore templates <ArrowRight size={16} />
+                      </button>
+                    ) : (
+                      <label className="inline-select">
+                        <select
+                          aria-label="Filter templates"
+                          value={filter}
+                          onChange={(e) => setFilter(e.target.value)}
+                        >
+                          <option value="all">All templates</option>
+                          {kinds.map((k) => (
+                            <option key={k.id} value={k.id}>
+                              {k.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
+                  <div className="template-gallery">
+                    {galleryItems.map((k, i) => {
+                      const template = k.template;
+                      const doc = createDocument(
+                        k.id,
+                        template?.name || k.name,
+                        undefined,
+                        template?.id,
+                      );
+                      return (
+                        <button
+                          className={`template-card template-${k.id}`}
+                          key={template?.id || k.id}
+                          onClick={() => begin(k.id, template?.id)}
+                        >
+                          <div className={`template-preview preview-${i % 6}`}>
+                            <div
+                              className="template-art"
+                              dangerouslySetInnerHTML={{
+                                __html: renderSvg(doc, 0, 2),
+                              }}
+                            />
+                            <span className="template-use">
+                              Use template <ArrowUp size={15} />
+                            </span>
+                          </div>
+                          <div className="template-caption">
+                            <k.icon size={16} />
+                            <span>
+                              <strong>
+                                {tab === "templates"
+                                  ? template?.name || k.name
+                                  : k.name}
+                              </strong>
+                              <small>{k.description}</small>
+                            </span>
+                            <ArrowRight size={15} />
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                {tab === "projects" && (
+                  <section className="projects-section">
+                    <div className="section-title">
+                      <div className="title-with-count">
+                        <h2>Your projects</h2>
+                        <span className="count">{projects.length}</span>
+                      </div>
+                      <button className="text-button" onClick={() => begin()}>
+                        <Plus size={17} /> New project
+                      </button>
+                    </div>
+                    <div className="project-controls">
+                      <label className="search-box">
+                        <Search size={17} />
+                        <input
+                          placeholder="Search your projects"
+                          aria-label="Search your projects"
+                          value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                        />
+                        {search && (
+                          <button
+                            className="icon-button"
+                            aria-label="Clear search"
+                            onClick={() => setSearch("")}
+                          >
+                            <X size={14} />
+                          </button>
+                        )}
+                      </label>
+                      <div className="filter-controls">
+                        <label className="inline-select">
+                          <SlidersHorizontal size={15} />
+                          <select
+                            aria-label="Filter project type"
+                            value={filter}
+                            onChange={(e) => setFilter(e.target.value)}
+                          >
+                            <option value="all">All types</option>
+                            {kinds.map((k) => (
+                              <option key={k.id} value={k.id}>
+                                {k.name}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className="inline-select">
+                          <ArrowDownUp size={15} />
+                          <select
+                            aria-label="Sort projects"
+                            value={sort}
+                            onChange={(e) => setSort(e.target.value)}
+                          >
+                            <option value="updated">Last edited</option>
+                            <option value="created">Date created</option>
+                            <option value="name">Name</option>
+                          </select>
+                        </label>
+                        <div className="view-toggle">
+                          <button
+                            className={view === "grid" ? "selected" : ""}
+                            title="Grid view"
+                            aria-label="Grid view"
+                            onClick={() => setView("grid")}
+                          >
+                            <Grid2X2 size={16} />
+                          </button>
+                          <button
+                            className={view === "list" ? "selected" : ""}
+                            title="List view"
+                            aria-label="List view"
+                            onClick={() => setView("list")}
+                          >
+                            <List size={17} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    {!user ? (
+                      <div className="welcome-projects">
+                        <div className="welcome-mark">
+                          <FolderOpen size={26} />
+                        </div>
+                        <div>
+                          <h3>A home for everything you make</h3>
+                          <p>
+                            Sign in to save your ideas, pick up where you left
+                            off, and share your work.
+                          </p>
+                        </div>
+                        <button
+                          className="button"
+                          onClick={() => setAuth(true)}
+                        >
+                          Create your workspace <ArrowRight size={16} />
+                        </button>
+                      </div>
+                    ) : filtered.length === 0 ? (
+                      <Empty
+                        icon={<FolderOpen size={28} />}
+                        title={
+                          search || filter !== "all"
+                            ? "No matching projects"
+                            : "Your next project starts here"
+                        }
+                      >
+                        {search || filter !== "all"
+                          ? "Try a different search or select all project types."
+                          : "Choose a template above or tell us what you have in mind."}
+                      </Empty>
+                    ) : (
+                      <div className={`project-list ${view}`}>
+                        {filtered.map((item) => {
+                          const Icon =
+                            kinds.find((k) => k.id === item.kind)?.icon ||
+                            FileText;
+                          return (
+                            <article className="project-card" key={item.id}>
+                              <button
+                                className="project-open"
+                                onClick={() => void open(item.id)}
+                              >
+                                <div
+                                  className={`project-thumbnail thumb-${item.kind}`}
+                                >
+                                  {item.document ? (
+                                    <div
+                                      dangerouslySetInnerHTML={{
+                                        __html: renderSvg(item.document),
+                                      }}
+                                    />
+                                  ) : (
+                                    <Icon size={32} strokeWidth={1.3} />
+                                  )}
+                                </div>
+                                <div className="project-detail">
+                                  <strong>{item.name}</strong>
+                                  <span>
+                                    {
+                                      kinds.find((k) => k.id === item.kind)
+                                        ?.name
+                                    }{" "}
+                                    <span aria-hidden="true">·</span>{" "}
+                                    {new Date(
+                                      item.updatedAt,
+                                    ).toLocaleDateString(undefined, {
+                                      month: "short",
+                                      day: "numeric",
+                                    })}
+                                  </span>
+                                </div>
+                              </button>
+                              <div className="project-actions">
+                                <button
+                                  className="icon-button"
+                                  aria-label={`Duplicate ${item.name}`}
+                                  onClick={() => void duplicate(item)}
+                                >
+                                  <Copy size={16} />
+                                </button>
+                                <button
+                                  className="icon-button"
+                                  aria-label={`Delete ${item.name}`}
+                                  onClick={() => setRemove(item)}
+                                >
+                                  <Trash2 size={16} />
+                                </button>
+                              </div>
+                            </article>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </section>
+                )}
+              </>
+            )}
+          </main>
+          <footer className="home-footer">
+            <span>Made for people. Open to agents.</span>
+            <button
+              className="text-button"
+              onClick={() => (user ? setSettings(true) : setAuth(true))}
+            >
+              <Code2 size={16} /> Connect your tools <ArrowRight size={14} />
+            </button>
+          </footer>
+        </div>
+      )}
+      {error && (
+        <div className="toast error" role="alert">
+          <span>{error}</span>
+          <button
+            className="icon-button"
+            aria-label="Dismiss error"
+            onClick={() => setError("")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {notice && (
+        <div className="toast" role="status">
+          <Check size={17} />
+          <span>{notice}</span>
+          <button
+            className="icon-button"
+            aria-label="Dismiss notification"
+            onClick={() => setNotice("")}
+          >
+            <X size={16} />
+          </button>
+        </div>
+      )}
+      {draft && (
+        <Modal
+          title={
+            draft.document
+              ? "Import your design"
+              : "Give your idea a little direction"
+          }
+          onClose={() => !busy && setDraft(null)}
+        >
+          <div className="modal-body brief-form">
+            <p className="modal-description">
+              A few details make a better starting point. You can change
+              everything in the editor.
+            </p>
+            {draft.importNotice && (
+              <p className="import-summary">{draft.importNotice}</p>
+            )}
+            <div className="brief-kind">
+              <span>{kinds.find((k) => k.id === draft.kind)?.name}</span>
+              <span>
+                {draft.document ? "Imported document" : "Editable template"}
+              </span>
+            </div>
+            <Field label="Project name">
+              <input
+                autoFocus
+                value={draft.name}
+                placeholder="A name for your next idea"
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    name: e.target.value,
+                    document: draft.document
+                      ? { ...draft.document, name: e.target.value }
+                      : undefined,
+                  })
+                }
+              />
+            </Field>
+            <Field label="What are we making?">
+              <textarea
+                value={draft.prompt}
+                placeholder="The outcome, the story, the feeling…"
+                onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
+              />
+            </Field>
+            <Field label="Who is it for?">
+              <input
+                value={draft.audience}
+                placeholder="Investors, your customers, your team…"
+                onChange={(e) =>
+                  setDraft({ ...draft, audience: e.target.value })
+                }
+              />
+            </Field>
+            <Field label="Design system">
+              <select
+                value={draft.theme}
+                onChange={(e) => setDraft({ ...draft, theme: e.target.value })}
+              >
+                {themes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <div className="brief-note">
+              <Sparkles size={18} />
+              <p>
+                Start with a template, then ask AI to shape it. AI generation
+                uses your own provider key.
+              </p>
+            </div>
+            {error && (
+              <p className="inline-error" role="alert">
+                {error}
+              </p>
+            )}
+            <button
+              className="button primary full"
+              disabled={busy}
+              onClick={() => void create(false)}
+            >
+              {busy ? (
+                <Busy label="Creating…" />
+              ) : (
+                <>
+                  {user
+                    ? draft.document
+                      ? "Import into workspace"
+                      : "Start from template"
+                    : "Sign in to create"}
+                  <ArrowRight size={17} />
+                </>
+              )}
+            </button>
+            {!draft.document && (
+              <button
+                className="text-button full"
+                disabled={busy}
+                onClick={() => void create(true)}
+              >
+                Start with a blank canvas
+              </button>
+            )}
+          </div>
+        </Modal>
+      )}
+      {auth && (
+        <Auth
+          onClose={() => setAuth(false)}
+          onUser={(value) => {
+            setUser(value);
+            setAuth(false);
+          }}
+        />
+      )}{" "}
+      {settings && user && (
+        <Settings
+          user={user}
+          onClose={() => setSettings(false)}
+          onLogout={async () => {
+            await post("/api/auth/logout");
+            setUser(null);
+            setProject(null);
+            setSettings(false);
+          }}
+          onProviders={setProviders}
+        />
+      )}
+      {remove && (
+        <Modal title="Delete this project?" onClose={() => setRemove(null)}>
+          <div className="modal-body">
+            <p>
+              “{remove.name}” and its saved design will be deleted. This cannot
+              be undone.
+            </p>
+            <div className="button-row">
+              <button className="button" onClick={() => setRemove(null)}>
+                Keep project
+              </button>
+              <button
+                className="button danger"
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await api(`/api/projects/${remove.id}`, {
+                      method: "DELETE",
+                    });
+                    setRemove(null);
+                    await refresh();
+                  } catch (e) {
+                    setError(message(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                Delete project
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+
+function Auth({
+  onClose,
+  onUser,
+}: {
+  onClose: () => void;
+  onUser: (user: User) => void;
+}) {
+  const [register, setRegister] = useState(false),
+    [email, setEmail] = useState(""),
+    [password, setPassword] = useState(""),
+    [name, setName] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  return (
+    <Modal
+      title={register ? "Make yourself at home" : "Welcome back to the studio"}
+      onClose={onClose}
+    >
+      <form
+        className="modal-body auth-form"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          setBusy(true);
+          setError("");
+          try {
+            const result = await post<{ user: User }>(
+              `/api/auth/${register ? "register" : "login"}`,
+              { email, password, ...(register ? { name } : {}) },
+            );
+            onUser(result.user);
+          } catch (err) {
+            setError(message(err));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <p className="modal-description">
+          Your ideas, saved in one place. Your provider keys, kept private.
+        </p>
+        {register && (
+          <Field label="Your name">
+            <input
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </Field>
+        )}
+        <Field label="Email address">
+          <input
+            type="email"
+            autoComplete="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoFocus
+          />
+        </Field>
+        <Field
+          label="Password"
+          hint={register ? "At least 12 characters." : undefined}
+        >
+          <input
+            type="password"
+            autoComplete={register ? "new-password" : "current-password"}
+            minLength={register ? 12 : undefined}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+        </Field>
+        {error && (
+          <p className="inline-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="button primary full" disabled={busy}>
+          {busy ? (
+            <Busy />
+          ) : (
+            <>
+              {register ? "Create account" : "Sign in"}
+              <ArrowRight size={17} />
+            </>
+          )}
+        </button>
+        <p className="auth-switch">
+          {register ? "Already have a workspace?" : "New around here?"}{" "}
+          <button
+            type="button"
+            className="text-button"
+            onClick={() => {
+              setRegister(!register);
+              setError("");
+            }}
+          >
+            {register ? "Sign in" : "Create an account"}
+          </button>
+        </p>
+      </form>
+    </Modal>
+  );
+}
