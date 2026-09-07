@@ -1,6 +1,6 @@
 {
   "name": "design-studio-ai",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1 --port 5173 --strictPort",
     "dev:api": "tsx watch server/node.ts",
-    "build": "node scripts/build-renderer.mjs && vite build",
+    "build": "node scripts/build-renderer.mjs && vite build && node scripts/build-public-docs.mjs",
     "typecheck": "tsc --noEmit && tsc -p packages/cli/tsconfig.json",
     "test": "node scripts/build-renderer.mjs && tsx --test tests/*.test.ts",
     "start": "tsx server/node.ts",

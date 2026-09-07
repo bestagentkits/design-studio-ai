@@ -24,6 +24,21 @@ try {
   const key = await request('/api/tokens', 'POST', { name: 'Release verification temporary' }); token = (await key.json()).token;
   const mcp = await fetch(origin + '/mcp', { method: 'POST', headers: { Authorization: `Bearer ${token}`, Accept: 'application/json, text/event-stream', 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'release-check', version: '1.0' } } }) });
   expect(mcp.ok && !!(await mcp.json()).result?.capabilities?.tools, 'MCP SDK initialization over Streamable HTTP');
+  const scope = {objective:'Explain the release',audience:'Design teams',direction:'Clear and readable',deliverables:['A presentation'],constraints:['Preserve the approved copy'],acceptanceCriteria:['Readable text and correct export']};
+  const briefResponse = await request(`/api/projects/${projectId}/brief`, 'PUT', {expectedRevision:0,request:'Create a release presentation',interview:{message:'Confirm the audience.',questions:[{id:'audience',title:'Who is this for?',description:'',type:'text',options:[],required:true}],scope},answers:{audience:'Design teams'}});
+  expect(briefResponse.ok && (await briefResponse.json()).brief.status === 'ready', 'D1 interview and answers persisted without implicit approval');
+  const mcpCall = async (name, args) => {
+    const response = await fetch(origin + '/mcp', {method:'POST',headers:{Authorization:`Bearer ${token}`,Accept:'application/json, text/event-stream','Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:2,method:'tools/call',params:{name,arguments:args}})});
+    const envelope=await response.json();
+    if (!response.ok || envelope.error || envelope.result?.isError) throw new Error(`Production MCP tool ${name} failed`);
+    return JSON.parse(envelope.result.content[0].text);
+  };
+  expect((await mcpCall('approve_design_brief',{projectId,expectedRevision:1})).brief.status==='approved','MCP explicit scope approval uses persisted brief revision');
+  expect((await request(`/api/projects/${projectId}/brief/approve`,'POST',{expectedRevision:1})).status===409,'Production stale brief approval rejected');
+  const designChecks=await mcpCall('inspect_design',{projectId});
+  expect(designChecks.revision===2 && Array.isArray(designChecks.issues),'MCP design preflight inspects saved revision');
+  const docs=await fetch(origin+'/docs/api'), markdown=await fetch(origin+'/docs/api.md'), sitemap=await fetch(origin+'/sitemap.xml');
+  expect(docs.ok && (await docs.text()).includes('application/ld+json') && markdown.headers.get('content-type')?.includes('text/markdown') && (await markdown.text()).includes('/brief/approve') && sitemap.ok,'Public HTML, Markdown and sitemap served on production');
   const publication = await request(`/api/projects/${projectId}/publish`, 'POST'); const { url } = await publication.json();
   const publicView = await fetch(url); expect(publicView.ok && (await publicView.text()).includes('Verified cloud design'), 'Anonymous published snapshot');
   for (const format of ['png', 'pdf', 'pptx']) {

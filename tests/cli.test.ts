@@ -64,11 +64,31 @@ after(async () => {
   if (directory) { assert.equal(resolve(directory).startsWith(resolve(tmpdir())), true); assert.ok(basename(directory).startsWith('dsa-cli-test-')); await rm(directory, { recursive: true, force: true }); }
 });
 
+test('CLI persists a versioned brief, approves scope and reads deterministic design checks', async () => {
+  const created = await json(['projects','create','--name','Interview contract','--kind','web']);
+  const projectId=created.project.id;
+  const scope={objective:'Explain a ceramics class',audience:'Local beginners',direction:'Calm and tactile',deliverables:['One landing page'],constraints:['Use supplied copy'],acceptanceCriteria:['Readable type']};
+  const begun=await json(['brief','put',projectId,'--revision','0','--file','-'],{input:JSON.stringify({request:'Create a ceramics class landing page',interview:{message:'Who is it for?',questions:[{id:'audience',title:'Audience',description:'',type:'text',options:[],required:true}],scope}})});
+  assert.equal(begun.brief.status,'interview');
+  const incomplete=await run(['brief','approve',projectId,'--revision','1']);
+  assert.notEqual(incomplete.code,0);
+  const answered=await json(['brief','put',projectId,'--revision','1','--file','-'],{input:JSON.stringify({answers:{audience:'Local beginners'}})});
+  assert.equal(answered.brief.status,'ready');
+  const approved=await json(['brief','approve',projectId,'--revision','2']);
+  assert.equal(approved.brief.status,'approved');
+  assert.equal((await json(['brief','get',projectId])).brief.revision,3);
+  assert.notEqual((await run(['brief','approve',projectId,'--revision','2'])).code,0);
+  const checks=await json(['projects','check',projectId]);
+  assert.equal(checks.projectId,projectId);
+  assert.equal(checks.revision,created.project.revision);
+  assert.ok(Array.isArray(checks.issues)&&Array.isArray(checks.limitations));
+});
+
 test('standalone built executable prints help and version without checkout dependencies', async () => {
   const standalone = join(directory, 'standalone.mjs'); await copyFile(executable, standalone);
   const help = await run(['--help'], { executable: standalone });
   assert.equal(help.code, 0); assert.match(help.stdout, /projects/); assert.match(help.stdout, /google-slides/);
-  const version = await run(['--version'], { executable: standalone }); assert.equal(version.code, 0); assert.equal(version.stdout.trim(), '0.1.0');
+  const version = await run(['--version'], { executable: standalone }); assert.equal(version.code, 0); assert.equal(version.stdout.trim(), '0.2.0');
 });
 
 test('schema and templates use the actual shared document format', async () => {

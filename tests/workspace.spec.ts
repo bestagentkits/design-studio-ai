@@ -32,8 +32,8 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Your next project starts here' })).toBeVisible();
 
-    await page.getByRole('button', { name: 'Settings and connections' }).click();
-    await page.getByRole('button', { name: 'Your account' }).click();
+    await page.getByRole('button', { name: 'Your account and settings', exact: true }).click();
+    await page.getByRole('dialog').getByRole('button', { name: 'Your account' }).click();
     await page.getByRole('button', { name: 'Sign out', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
@@ -70,6 +70,9 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 
     await page.reload();
+    await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Back to workspace' }).click();
     await expect(page.locator('.project-card').filter({ hasText: name })).toHaveCount(1);
     await page.getByLabel('Search your projects', { exact: true }).fill('no-project-matches-this-search');
     await expect(page.getByRole('heading', { name: 'No matching projects' })).toBeVisible();

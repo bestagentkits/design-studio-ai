@@ -4,13 +4,29 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import net from 'node:net';
+// Each device gets a fresh database and rate-limit bucket, preserving production limits.
+if (!process.argv.slice(2).some(argument => argument === '--project' || argument.startsWith('--project='))) {
+  let code = 0, interrupted = false;
+  for (const project of ['desktop', 'mobile']) {
+    const child = spawn(process.execPath, [process.argv[1], ...process.argv.slice(2), `--project=${project}`], {stdio:'inherit',env:process.env,windowsHide:true});
+    const stop = () => { interrupted = true; child.kill('SIGTERM'); };
+    process.once('SIGINT',stop); process.once('SIGTERM',stop);
+    const result = await new Promise(accept => child.once('exit', value => accept(value ?? 1)));
+    process.removeListener('SIGINT',stop); process.removeListener('SIGTERM',stop);
+    if (result !== 0) code = Number(result);
+    if (interrupted) break;
+  }
+  process.exit(code);
+}
 const port = Number(process.env.E2E_PORT || 8791);
 const origin = `http://127.0.0.1:${port}`;
 await new Promise((accept, reject) => { const probe = net.createServer(); probe.once('error', reject); probe.listen(port, '127.0.0.1', () => probe.close(accept)); });
 const directory = await mkdtemp(join(tmpdir(), 'studio-e2e-'));
 const env = { ...process.env, PORT: String(port), APP_URL: origin, HOST: '127.0.0.1', DATA_DIR: directory, ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: randomBytes(32).toString('base64'), E2E_BASE_URL: origin };
 const server = spawn(process.execPath, ['--import', 'tsx', 'server/node.ts'], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
-server.stdout.on('data', data => process.stdout.write(data)); server.stderr.on('data', data => process.stderr.write(data));
+let listening = false, startupOutput = '';
+server.stdout.on('data', data => { startupOutput += data.toString(); listening = startupOutput.includes(`Design Studio AI listening on ${origin}`); process.stdout.write(data); });
+server.stderr.on('data', data => process.stderr.write(data));
 console.log(`E2E server PID ${server.pid}, port ${port}, temporary database`);
 let exitCode = 1, runner;
 const terminate = () => { runner?.kill('SIGTERM'); server.kill('SIGTERM'); };
@@ -19,7 +35,7 @@ try {
   let ready = false;
   for (let attempt = 0; attempt < 100; attempt++) {
     if (server.exitCode !== null) throw new Error('E2E server exited before becoming ready');
-    try { ready = (await fetch(origin + '/api/health')).ok; } catch { /* Startup has not bound the port yet. */ }
+    try { ready = listening && (await fetch(origin + '/api/health')).ok && server.exitCode === null; } catch { /* Startup has not bound the port yet. */ }
     if (ready) break;
     await new Promise(accept => setTimeout(accept, 100));
   }

@@ -7,7 +7,7 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application",
+    "not_found_handling": "none",
     "run_worker_first": ["/api/*", "/mcp", "/oauth/*", "/.well-known/*", "/published/*"]
   },
   "d1_databases": [{ "binding": "DB", "database_name": "design-studio-ai", "database_id": "920d59d1-d4e9-4e8b-b01b-9dbf45a180aa", "migrations_dir": "migrations" }],

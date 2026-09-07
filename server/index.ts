@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { getCookie, deleteCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -17,6 +17,7 @@ import {
   passwordMatches,
   rateLimit,
   secret,
+  createSession,
 } from "./security";
 import { projectRoutes, published, serveAsset } from "./projects";
 import { generationRoutes, providerRoutes } from "./providers";
@@ -25,6 +26,14 @@ import { googleRoutes } from "./google-slides";
 import { handleMcp } from "./mcp";
 import { exportRoutes } from './exports';
 import { conversationRoutes } from './conversations';
+import { githubRoutes, githubEnabled } from './github-login';
+import { documentSchema } from '../src/shared/schema';
+import { operationsSchema } from '../src/shared/operations';
+import { themes, templates, blocks } from '../src/shared/catalog';
+import { briefRoutes } from './briefs';
+import { interviewSchema, scopeSchema } from '../src/shared/brief';
+import { inspectDesign } from '../src/shared/design-checks';
+import { projectRow } from './projects';
 export const app = new Hono<Env>();
 app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
@@ -124,10 +133,13 @@ app.onError((error, c) => {
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "design-studio-ai" }),
 );
+app.get('/api/schema', c => c.json({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema) }));
+app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
 app.get("/api/config", (c) =>
   c.json({
     googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
     allowRegistration: c.env.ALLOW_REGISTRATION === "true",
+    githubEnabled: githubEnabled(c),
   }),
 );
 const credentials = z.object({
@@ -139,21 +151,7 @@ const credentials = z.object({
   password: z.string().min(12).max(128),
   name: z.string().trim().min(1).max(100).optional(),
 });
-async function session(c: Parameters<typeof owner>[0], user: User) {
-  const token = secret();
-  await c.env.DB.prepare(
-    "INSERT INTO sessions(hash,user_id,expires_at) VALUES(?,?,?)",
-  )
-    .bind(await hash(token), user.id, Date.now() + 7 * 86400000)
-    .run();
-  setCookie(c, "studio_session", token, {
-    httpOnly: true,
-    secure: origin(c).startsWith("https:"),
-    sameSite: "Lax",
-    path: "/",
-    maxAge: 7 * 86400,
-  });
-}
+app.route('/api/auth/github', githubRoutes);
 app.post("/api/auth/register", async (c) => {
   if (c.env.ALLOW_REGISTRATION !== "true")
     fail(
@@ -180,7 +178,7 @@ app.post("/api/auth/register", async (c) => {
       fail(409, "email_registered", "This email is already registered.");
     throw error;
   }
-  await session(c, user);
+  await createSession(c, user);
   return c.json({ user }, 201);
 });
 app.post("/api/auth/login", async (c) => {
@@ -197,7 +195,7 @@ app.post("/api/auth/login", async (c) => {
   if (!row || !valid)
     fail(401, "invalid_credentials", "Email or password is incorrect.");
   const user = { id: row.id, email: row.email, name: row.name };
-  await session(c, user);
+  await createSession(c, user);
   return c.json({ user });
 });
 app.get("/api/auth/me", (c) => c.json({ user: c.get("user") }));
@@ -219,6 +217,11 @@ app.route("/api/projects", generationRoutes);
 app.route("/api/projects", googleRoutes);
 app.route('/api/projects', exportRoutes);
 app.route('/api/projects', conversationRoutes);
+app.route('/api/projects', briefRoutes);
+app.get('/api/projects/:id/checks', async c => {
+  const project = await projectRow(c, c.req.param('id'));
+  return c.json({projectId:project.id, revision:project.revision, ...inspectDesign(JSON.parse(project.document))});
+});
 app.get("/api/assets/:id", (c) => serveAsset(c, c.req.param("id")));
 app.get("/published/:slug", (c) => published(c, c.req.param("slug")));
 app.get("/published/:slug/assets/:id", (c) =>

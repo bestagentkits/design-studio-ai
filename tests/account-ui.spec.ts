@@ -1,0 +1,32 @@
+import { test, expect } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
+
+test.use({ screenshot: 'off' });
+test('agent-settings link authenticates first and manages real revocable API credentials', async ({ page, baseURL }) => {
+  await page.goto('/?auth_error=email_exists');
+  await expect(page.getByRole('alert')).toContainText('Sign in with your password');
+  await expect(page).toHaveURL(new URL('/', baseURL!).href);
+  await page.goto('/?settings=agents');
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Create an account', exact: true }).click();
+  await page.getByLabel('Your name', { exact: true }).fill('Account workflow test');
+  await page.getByLabel('Email address', { exact: true }).fill(`account-${randomUUID()}@studio.test`);
+  await page.getByLabel('Password').fill(randomUUID() + randomUUID());
+  await page.getByRole('button', { name: 'Create account', exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'A workspace your agents can use.' })).toBeVisible();
+  await expect(page.getByLabel('MCP server URL')).toHaveValue(`${baseURL}/mcp`);
+  const label = `Verification ${randomUUID().slice(0, 8)}`;
+  await page.getByLabel('Token name').fill(label);
+  const creating = page.waitForResponse(response => response.url().endsWith('/api/tokens') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: 'Create token', exact: true }).click();
+  const response = await creating;
+  expect(response.status()).toBe(201);
+  const credential = (await response.json()).token as string;
+  expect(typeof credential === 'string' && credential.length > 20).toBe(true);
+  const authenticated = await page.request.get('/api/projects', { headers: { Authorization: `Bearer ${credential}` } });
+  expect(authenticated.status()).toBe(200);
+  await page.getByRole('button', { name: `Revoke ${label}`, exact: true }).click();
+  await expect(page.getByRole('button', { name: `Revoke ${label}`, exact: true })).toHaveCount(0);
+  expect((await page.request.get('/api/projects', { headers: { Authorization: `Bearer ${credential}` } })).status()).toBe(401);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+});

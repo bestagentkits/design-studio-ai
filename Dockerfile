@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+ARG PUBLIC_SITE_URL=https://studio.agentkit.best
+ENV PUBLIC_SITE_URL=$PUBLIC_SITE_URL
 RUN npm run build
 
 FROM node:24-bookworm-slim

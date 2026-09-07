@@ -147,6 +147,9 @@ export function staticAssets(root: string) {
         ".png": "image/png",
         ".ico": "image/x-icon",
         ".json": "application/json",
+        ".md": "text/markdown; charset=utf-8",
+        ".txt": "text/plain; charset=utf-8",
+        ".xml": "application/xml; charset=utf-8",
         ".woff2": "font/woff2",
       };
       try {
@@ -155,13 +158,18 @@ export function staticAssets(root: string) {
           data = await readFile(file);
         } catch (error) {
           if (extname(file)) throw error;
-          file = resolve(root, "index.html");
-          data = await readFile(file);
+          try {
+            file = resolve(file, 'index.html');
+            data = await readFile(file);
+          } catch {
+            return new Response('Not found', {status:404});
+          }
         }
         return new Response(data, {
           headers: {
             "Content-Type": mime[extname(file)] ?? "application/octet-stream",
             "X-Content-Type-Options": "nosniff",
+            "Cache-Control": path.startsWith('/assets/') ? 'public, max-age=31536000, immutable' : 'public, max-age=0, must-revalidate',
           },
         });
       } catch {

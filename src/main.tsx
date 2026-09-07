@@ -1,7 +1,11 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
-import { App } from "./app/app";
+import { initializeTheme } from "./app/theme-toggle";
 import "./styles.css";
+const App = React.lazy(() => import('./app/app').then(module => ({ default: module.App })));
+const DocsApp = React.lazy(() => import('./app/documentation').then(module => ({ default: module.DocsApp })));
+const GuideApp = React.lazy(() => import('./app/guide').then(module => ({ default: module.GuideApp })));
+initializeTheme();
 
 class ErrorBoundary extends React.Component<
   React.PropsWithChildren,
@@ -26,7 +30,9 @@ class ErrorBoundary extends React.Component<
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <React.Suspense fallback={<main className="fatal-error" aria-busy="true">Opening the studio…</main>}>
+        {location.pathname === '/docs' || location.pathname.startsWith('/docs/') ? <DocsApp /> : location.pathname === '/guide' || location.pathname === '/guide/' ? <GuideApp /> : <App />}
+      </React.Suspense>
     </ErrorBoundary>
   </React.StrictMode>,
 );

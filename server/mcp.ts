@@ -13,6 +13,7 @@ import { renderHtml, renderSvg } from "../src/shared/render";
 import { fail, origin, owner, unb64 } from "./security";
 import { projectRow, saveDocument, storeAsset } from "./projects";
 import { mediaInputSchema } from './providers';
+import { interviewSchema, answerSchema, scopeSchema } from '../src/shared/brief';
 export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   if (c.req.header("Origin") && c.req.header("Origin") !== origin(c))
     fail(403, "invalid_origin", "MCP origin is not allowed.");
@@ -52,7 +53,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.1.0" },
+    { name: "design-studio-ai", version: "0.2.0" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -78,6 +79,31 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     if (!response.ok) return { isError: true, ...result(value) };
     return result(value);
   };
+  server.registerTool(
+    'inspect_design',
+    {description:'Run read-only deterministic design preflight on the saved revision: text fitting, estimated contrast, page bounds, media, chart data and export limits. Returns exact node IDs and suggestions. These hints do not replace visual inspection or certify accessibility.', inputSchema:{projectId:z.string()}, annotations:{readOnlyHint:true}},
+    async ({projectId}) => callApi('GET', `/api/projects/${encodeURIComponent(projectId)}/checks`),
+  );
+  server.registerTool(
+    'get_design_brief',
+    {description:'Read the persisted request, interactive questions, answers, scope, approval and brief revision. A null brief has not been started.', inputSchema:{projectId:z.string()}, annotations:{readOnlyHint:true}},
+    async ({projectId}) => callApi('GET', `/api/projects/${encodeURIComponent(projectId)}/brief`),
+  );
+  server.registerTool(
+    'update_design_brief',
+    {description:'Start or update an interview using your own model without a server provider key. Supply contextual questions and a proposed scope; show questions to the human in your chat or the Studio UI. Every edit invalidates approval. expectedRevision is the brief revision (0 creates), independent from document revision.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().min(0),request:z.string().trim().min(1).max(12000).optional(),interview:interviewSchema.optional(),answers:answerSchema.optional(),scope:scopeSchema.optional()}},
+    async ({projectId,...body}) => callApi('PUT', `/api/projects/${encodeURIComponent(projectId)}/brief`,body),
+  );
+  server.registerTool(
+    'interview_design_brief',
+    {description:'Ask the owner-configured BYOK provider to prepare contextual questions or a scope from saved answers. Incurs provider usage. Updates the brief only if its revision is unchanged.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().positive(),provider:z.enum(['openai','anthropic','gemini','openrouter']),model:z.string().min(1).max(200).optional()}},
+    async ({projectId,...body}) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/brief/interview`,body),
+  );
+  server.registerTool(
+    'approve_design_brief',
+    {description:'Lock the scope after the human explicitly approves the current objective, audience, direction, deliverables and acceptance criteria. Never infer approval from missing answers or silence. Requires all required answers and a complete scope. Does not generate or publish.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().positive()}},
+    async ({projectId,...body}) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/brief/approve`,body),
+  );
   server.registerTool(
     "list_projects",
     {

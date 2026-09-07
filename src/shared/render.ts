@@ -30,7 +30,7 @@ export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0)
   }
   return result;
 }
-function wrappedLines(value: string, width: number, size: number): string[] {
+export function wrappedLines(value: string, width: number, size: number): string[] {
   const capacity = Math.max(1, Math.floor(width / (size * 0.52)));
   const lines: string[] = [];
   for (const paragraph of value.split('\n')) {

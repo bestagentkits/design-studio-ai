@@ -1,6 +1,6 @@
 import type { Context } from "hono";
 import type { Env, Bindings, User } from "./types";
-import { getCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 export const now = () => new Date().toISOString();
 export const id = () => crypto.randomUUID();
 const encoder = new TextEncoder();
@@ -65,6 +65,12 @@ export const owner = (c: Context<Env>) =>
   fail(401, "unauthorized", "Sign in or supply an API token.");
 export const origin = (c: Context<Env>) =>
   c.env.APP_URL ? new URL(c.env.APP_URL).origin : new URL(c.req.url).origin;
+export async function createSession(c: Context<Env>, user: User) {
+  const token = secret();
+  await c.env.DB.prepare('INSERT INTO sessions(hash,user_id,expires_at) VALUES(?,?,?)')
+    .bind(await hash(token), user.id, Date.now() + 7 * 86400000).run();
+  setCookie(c, 'studio_session', token, { httpOnly: true, secure: origin(c).startsWith('https:'), sameSite: 'Lax', path: '/', maxAge: 7 * 86400 });
+}
 export async function authenticate(c: Context<Env>) {
   const bearer = c.req.header("Authorization")?.match(/^Bearer (\S+)$/)?.[1];
   const cookie = getCookie(c, "studio_session");

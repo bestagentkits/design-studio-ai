@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownUp,
   ArrowRight,
   ArrowUp,
   Box,
+  BookOpen,
   Check,
   Code2,
   Copy,
@@ -28,11 +29,12 @@ import {
 import type { DesignDocument, Project } from "../shared/schema";
 import { createDocument, templates, themes } from "../shared/catalog";
 import { renderSvg } from "../shared/render";
-import { api, post, message, type User, type Provider } from "./api";
+import { api, post, put, message, type User, type Provider } from "./api";
 import { Brand, Busy, Empty, Field, Modal } from "./ui";
 import { Editor } from "./editor";
-import { Settings } from "./settings";
+import { Settings, GitHubMark } from "./settings";
 import { importDesign } from "./file-formats";
+import { ThemeToggle } from "./theme-toggle";
 
 type Kind = DesignDocument["kind"];
 const kinds: {
@@ -89,8 +91,112 @@ type Draft = {
   document?: DesignDocument;
   importNotice?: string;
 };
+const oauthBriefKey = "design-studio:github-brief";
+const githubErrors: Record<string, string> = {
+  cancelled:
+    "GitHub sign-in was cancelled. You can try again or sign in with your password.",
+  invalid_state:
+    "This GitHub sign-in expired or could not be verified. Please start again.",
+  github_unavailable:
+    "GitHub could not complete sign-in. Please try again in a moment.",
+  email_required:
+    "GitHub needs a verified email address for sign-in. Add and verify an email in your GitHub settings, then try again.",
+  email_exists:
+    "An account already uses this email. Sign in with your password, then connect GitHub in Settings → Your account.",
+  account_linked:
+    "This GitHub account is already connected to another studio account. Use its existing account or choose a different GitHub account.",
+  registration_disabled:
+    "New accounts are not enabled on this studio. Ask your administrator for access.",
+  link_session_changed:
+    "Your studio session changed while connecting GitHub. Sign in to the intended account and try again from Settings.",
+  configuration_error:
+    "GitHub sign-in is not configured correctly on this studio. Please contact your administrator.",
+};
+function githubError(code: string) {
+  return Object.hasOwn(githubErrors, code)
+    ? githubErrors[code]!
+    : "GitHub sign-in could not finish. Please try again.";
+}
+
+function githubReturn() {
+  const url = new URL(location.href),
+    errorCode = url.searchParams.get("auth_error"),
+    connected = url.searchParams.get("github") === "connected";
+  let saved: {
+    prompt: string;
+    kind: Kind;
+    theme: string;
+    draft: Draft | null;
+    imported: boolean;
+    agents: boolean;
+    interview: boolean;
+  } | null = null;
+  try {
+    const raw = sessionStorage.getItem(oauthBriefKey);
+    if (raw) {
+      const data = JSON.parse(raw) as Record<string, unknown>;
+      if (
+        data.version === 1 &&
+        typeof data.createdAt === "number" &&
+        Date.now() - data.createdAt < 30 * 60 * 1000 &&
+        Date.now() >= data.createdAt
+      ) {
+        const text = (value: unknown, limit = 50000) =>
+          typeof value === "string" ? value.slice(0, limit) : "";
+        const kind = kinds.some((k) => k.id === data.kind)
+          ? (data.kind as Kind)
+          : "web";
+        const source =
+          data.draft && typeof data.draft === "object"
+            ? (data.draft as Record<string, unknown>)
+            : null;
+        const draftKind =
+          source && kinds.some((k) => k.id === source.kind)
+            ? (source.kind as Kind)
+            : kind;
+        saved = {
+          prompt: text(data.prompt),
+          kind,
+          theme: text(data.theme, 120),
+          imported: data.imported === true,
+          agents: data.agents === true,
+          interview: data.interview === true,
+          draft:
+            source && data.imported !== true
+              ? {
+                  kind: draftKind,
+                  name: text(source.name, 200),
+                  prompt: text(source.prompt),
+                  audience: text(source.audience, 10000),
+                  theme: text(source.theme, 120),
+                  ...(typeof source.template === "string" &&
+                  templates.some((t) => t.id === source.template)
+                    ? { template: source.template }
+                    : {}),
+                }
+              : null,
+        };
+      }
+    }
+  } catch {
+    /* An unavailable browser store must not prevent sign-in. */
+  }
+  return { errorCode, connected, saved };
+}
 
 export function App() {
+  const [oauthReturn] = useState(githubReturn);
+  const [callbackError, setCallbackError] = useState(() =>
+    oauthReturn.errorCode ? githubError(oauthReturn.errorCode) : "",
+  );
+  const [agentsRequested, setAgentsRequested] = useState(
+    () =>
+      new URL(location.href).searchParams.get("settings") === "agents" ||
+      oauthReturn.saved?.agents === true,
+  );
+  const [settingsTab, setSettingsTab] = useState<
+    "providers" | "agents" | "account"
+  >("providers");
   const [user, setUser] = useState<User | null>(null),
     [ready, setReady] = useState(false),
     [projects, setProjects] = useState<Summary[]>([]);
@@ -111,6 +217,12 @@ export function App() {
   const [draft, setDraft] = useState<Draft | null>(null),
     [providers, setProviders] = useState<Provider[]>([]),
     [provider, setProvider] = useState("openai");
+  const [pendingInterview, setPendingInterview] = useState(
+    oauthReturn.saved?.interview === true,
+  );
+  const [openingBriefRequest, setOpeningBriefRequest] = useState("");
+  const creationRunning = useRef(false),
+    resumeStarted = useRef(false);
   const [remove, setRemove] = useState<Summary | null>(null);
   async function refresh() {
     const data = await api<{ projects: Summary[] }>("/api/projects");
@@ -125,6 +237,71 @@ export function App() {
       .finally(() => setReady(true));
   }, []);
   useEffect(() => {
+    const url = new URL(location.href);
+    if (url.searchParams.has("auth_error") || url.searchParams.has("github")) {
+      url.searchParams.delete("auth_error");
+      url.searchParams.delete("github");
+      history.replaceState(
+        history.state,
+        "",
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    }
+    try {
+      sessionStorage.removeItem(oauthBriefKey);
+    } catch {
+      /* Recovery is optional. */
+    }
+    if (oauthReturn.saved) {
+      setPrompt(oauthReturn.saved.prompt);
+      setKind(oauthReturn.saved.kind);
+      setTheme(oauthReturn.saved.theme);
+      setDraft(oauthReturn.saved.draft);
+    }
+    if (oauthReturn.errorCode) {
+      setAuth(true);
+    } else if (oauthReturn.connected) {
+      setNotice(
+        oauthReturn.saved?.imported
+          ? "GitHub connected. Re-import your design file to continue its import."
+          : "GitHub connected. Welcome to your workspace.",
+      );
+    }
+  }, [oauthReturn]);
+  function preserveBrief() {
+    try {
+      sessionStorage.setItem(
+        oauthBriefKey,
+        JSON.stringify({
+          version: 1,
+          createdAt: Date.now(),
+          prompt,
+          kind,
+          theme,
+          imported: Boolean(draft?.document),
+          agents: agentsRequested,
+          interview: pendingInterview,
+          draft: draft
+            ? {
+                kind: draft.kind,
+                name: draft.name,
+                prompt: draft.prompt,
+                audience: draft.audience,
+                theme: draft.theme,
+                template: draft.template,
+              }
+            : null,
+        }),
+      );
+    } catch {
+      /* Sign-in still works when browser storage is unavailable. */
+    }
+  }
+  function continueWithGitHub() {
+    preserveBrief();
+    location.assign("/api/auth/github");
+  }
+  useEffect(() => {
     if (user) {
       refresh().catch((e) => setError(message(e)));
       api<{ providers: Provider[] }>("/api/providers")
@@ -132,6 +309,24 @@ export function App() {
         .catch((e) => setError(message(e)));
     } else setProjects([]);
   }, [user]);
+  useEffect(() => {
+    if (!agentsRequested || !ready) return;
+    const url = new URL(location.href);
+    url.searchParams.delete("settings");
+    history.replaceState(
+      history.state,
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
+    if (!user) {
+      setAuth(true);
+      return;
+    }
+    setSettingsTab("agents");
+    setAuth(false);
+    setSettings(true);
+    setAgentsRequested(false);
+  }, [agentsRequested, ready, user]);
   useEffect(() => {
     if (!notice) return;
     const timer = setTimeout(() => setNotice(""), 9000);
@@ -173,6 +368,12 @@ export function App() {
         }));
   function begin(selectedKind = kind, template?: string) {
     setError("");
+    if (prompt.trim() && !template) {
+      setKind(selectedKind);
+      setPendingInterview(true);
+      if (!user) setAuth(true);
+      return;
+    }
     setDraft({
       kind: selectedKind,
       name: "",
@@ -186,6 +387,71 @@ export function App() {
       template,
     });
   }
+  function showProject(next: Project) {
+    setProject(next);
+    const url = new URL(location.href);
+    url.searchParams.set("project", next.id);
+    history.replaceState(
+      history.state,
+      "",
+      url.pathname + url.search + url.hash,
+    );
+  }
+  useEffect(() => {
+    if (!ready || resumeStarted.current) return;
+    const id = new URL(location.href).searchParams.get("project");
+    if (!id) return;
+    if (!user) {
+      setAuth(true);
+      return;
+    }
+    resumeStarted.current = true;
+    void open(id);
+  }, [ready, user]);
+  useEffect(() => {
+    if (!pendingInterview || !user || creationRunning.current || !prompt.trim())
+      return;
+    creationRunning.current = true;
+    setPendingInterview(false);
+    setAuth(false);
+    setBusy(true);
+    setError("");
+    const request = prompt.trim();
+    void (async () => {
+      let created: Project | undefined;
+      try {
+        const document = createDocument(
+          kind,
+          request.split("\n")[0]!.slice(0, 72),
+          theme || undefined,
+        );
+        document.pages = [{ ...document.pages[0]!, nodes: [] }];
+        if (document.timeline) document.timeline.tracks = [];
+        created = (
+          await post<{ project: Project }>("/api/projects", {
+            name: document.name,
+            kind,
+            description: request,
+            document,
+          })
+        ).project;
+        setOpeningBriefRequest(request);
+        await put(`/api/projects/${created.id}/brief`, {
+          expectedRevision: 0,
+          request,
+        });
+        showProject(created);
+        setPrompt("");
+        await refresh();
+      } catch (e) {
+        if (created) showProject(created);
+        setError(message(e));
+      } finally {
+        creationRunning.current = false;
+        setBusy(false);
+      }
+    })();
+  }, [pendingInterview, user, prompt, kind, theme]);
   async function create(blank = false) {
     if (!draft) return;
     if (!user) {
@@ -221,7 +487,7 @@ export function App() {
           document,
         },
       );
-      setProject(created);
+      showProject(created);
       setDraft(null);
       await refresh();
     } catch (e) {
@@ -234,8 +500,12 @@ export function App() {
     setBusy(true);
     setError("");
     try {
-      setProject(
-        (await api<{ project: Project }>(`/api/projects/${id}`)).project,
+      showProject(
+        (
+          await api<{ project: Project }>(
+            `/api/projects/${encodeURIComponent(id)}`,
+          )
+        ).project,
       );
     } catch (e) {
       setError(message(e));
@@ -291,12 +561,25 @@ export function App() {
     <>
       {project ? (
         <Editor
+          key={project.id}
           initial={project}
+          initialBriefRequest={openingBriefRequest}
           onBack={() => {
             setProject(null);
+            setOpeningBriefRequest("");
+            const url = new URL(location.href);
+            url.searchParams.delete("project");
+            history.replaceState(
+              history.state,
+              "",
+              url.pathname + url.search + url.hash,
+            );
             refresh().catch((e) => setError(message(e)));
           }}
-          onSettings={() => setSettings(true)}
+          onSettings={() => {
+            setSettingsTab("providers");
+            setSettings(true);
+          }}
           onProject={setProject}
           notify={setNotice}
         />
@@ -332,8 +615,23 @@ export function App() {
               >
                 Design systems
               </button>
+              <a className="header-docs-link" href="/docs">
+                Documentation
+              </a>
+              <a className="header-docs-link" href="/guide">
+                Guide
+              </a>
             </nav>
             <div className="header-end">
+              <ThemeToggle />
+              <a
+                className="icon-button documentation-shortcut"
+                href="/docs"
+                aria-label="Documentation"
+                title="Documentation"
+              >
+                <BookOpen size={19} />
+              </a>
               <button
                 className="icon-button"
                 title="Settings and connections"
@@ -345,6 +643,7 @@ export function App() {
               {user ? (
                 <button
                   className="avatar"
+                  aria-label="Your account and settings"
                   onClick={() => setSettings(true)}
                   title={user.email}
                 >
@@ -413,6 +712,7 @@ export function App() {
                     </div>
                     <button
                       className="button primary"
+                      aria-label="Let's create"
                       disabled={busy}
                       onClick={() => begin()}
                     >
@@ -767,12 +1067,26 @@ export function App() {
           </main>
           <footer className="home-footer">
             <span>Made for people. Open to agents.</span>
-            <button
-              className="text-button"
-              onClick={() => (user ? setSettings(true) : setAuth(true))}
-            >
-              <Code2 size={16} /> Connect your tools <ArrowRight size={14} />
-            </button>
+            <div className="footer-links">
+              <a className="text-button" href="/guide">
+                Guide <ArrowRight size={14} />
+              </a>
+              <a className="text-button" href="/docs">
+                <BookOpen size={16} />
+                Documentation
+              </a>
+              <button
+                className="text-button"
+                onClick={() => {
+                  setSettingsTab("agents");
+                  user
+                    ? setSettings(true)
+                    : (setAgentsRequested(true), setAuth(true));
+                }}
+              >
+                <Code2 size={16} /> Connect your tools <ArrowRight size={14} />
+              </button>
+            </div>
           </footer>
         </div>
       )}
@@ -912,15 +1226,27 @@ export function App() {
       )}
       {auth && (
         <Auth
-          onClose={() => setAuth(false)}
+          onGitHub={continueWithGitHub}
+          initialError={callbackError}
+          onClose={() => {
+            setAuth(false);
+            setCallbackError("");
+          }}
           onUser={(value) => {
             setUser(value);
             setAuth(false);
+            setCallbackError("");
+            if (oauthReturn.saved?.imported)
+              setNotice(
+                "Your brief was restored. Re-import your design file to continue its import.",
+              );
           }}
         />
       )}{" "}
       {settings && user && (
         <Settings
+          initialTab={settingsTab}
+          onBeforeGitHubLink={preserveBrief}
           user={user}
           onClose={() => setSettings(false)}
           onLogout={async () => {
@@ -929,7 +1255,10 @@ export function App() {
             setProject(null);
             setSettings(false);
           }}
-          onProviders={setProviders}
+          onProviders={(next) => {
+            setProviders(next);
+            window.dispatchEvent(new Event("studio-providers-updated"));
+          }}
         />
       )}
       {remove && (
@@ -974,16 +1303,39 @@ export function App() {
 function Auth({
   onClose,
   onUser,
+  onGitHub,
+  initialError,
 }: {
   onClose: () => void;
   onUser: (user: User) => void;
+  onGitHub: () => void;
+  initialError: string;
 }) {
   const [register, setRegister] = useState(false),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [name, setName] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(initialError),
+    [githubEnabled, setGithubEnabled] = useState(false);
+  useEffect(() => {
+    let active = true;
+    api<{ githubEnabled: boolean }>("/api/config")
+      .then((config) => {
+        if (active) setGithubEnabled(config.githubEnabled === true);
+      })
+      .catch(() => {
+        if (active)
+          setError(
+            (current) =>
+              current ||
+              "Sign-in options could not load. You can still use your email and password.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
   return (
     <Modal
       title={register ? "Make yourself at home" : "Welcome back to the studio"}
@@ -1011,6 +1363,25 @@ function Auth({
         <p className="modal-description">
           Your ideas, saved in one place. Your provider keys, kept private.
         </p>
+        {githubEnabled && (
+          <>
+            <button
+              type="button"
+              className="button github-button full"
+              disabled={busy}
+              onClick={() => {
+                setBusy(true);
+                onGitHub();
+              }}
+            >
+              <GitHubMark size={19} aria-hidden="true" />
+              Continue with GitHub
+            </button>
+            <div className="auth-divider">
+              <span>or continue with email</span>
+            </div>
+          </>
+        )}
         {register && (
           <Field label="Your name">
             <input

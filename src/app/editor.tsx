@@ -24,6 +24,7 @@ import {
   Film,
   ImagePlus,
   Layers3,
+  ListChecks,
   LockKeyhole,
   Maximize2,
   MessageSquare,
@@ -67,6 +68,10 @@ import {
 } from "./api";
 import { Brand, Busy, Field, Modal } from "./ui";
 import { Inspector } from "./inspector";
+import { ThemeToggle } from "./theme-toggle";
+import { DesignBriefWorkspace } from "./design-brief";
+import type { DesignBrief } from "../shared/brief";
+import { inspectDesign } from "../shared/design-checks";
 
 import { exportDesign } from "./file-formats";
 const SceneView = lazy(() =>
@@ -81,23 +86,149 @@ type ToolContext = {
     description: string;
     inputSchema: Record<string, unknown>;
     execute: (args: Record<string, unknown>) => Promise<unknown>;
+    annotations?: {
+      readOnlyHint?: boolean;
+      destructiveHint?: boolean;
+      idempotentHint?: boolean;
+      openWorldHint?: boolean;
+    };
   }) => void;
   unregisterTool?: (name: string) => void;
 };
 
 export function Editor({
   initial,
+  initialBriefRequest = "",
   onBack,
   onSettings,
   onProject,
   notify,
 }: {
   initial: Project;
+  initialBriefRequest?: string;
   onBack: () => void;
   onSettings: () => void;
   onProject: (project: Project) => void;
   notify: (message: string) => void;
 }) {
+  const [brief, setBrief] = useState<DesignBrief | null>(null),
+    [briefLoaded, setBriefLoaded] = useState(false),
+    [briefManual, setBriefManual] = useState(false),
+    [briefError, setBriefError] = useState("");
+  const briefProposal = useRef<{
+    document: DesignDocument;
+    briefRevision: number;
+    projectRevision: number;
+  } | null>(null);
+  async function loadBrief() {
+    setBriefError("");
+    try {
+      let next = (
+        await api<{ brief: DesignBrief | null }>(
+          `/api/projects/${initial.id}/brief`,
+        )
+      ).brief;
+      if (!next && initialBriefRequest)
+        next = (
+          await put<{ brief: DesignBrief }>(
+            `/api/projects/${initial.id}/brief`,
+            { expectedRevision: 0, request: initialBriefRequest },
+          )
+        ).brief;
+      setBrief(next);
+      setBriefManual(
+        Boolean(
+          next?.status === "approved" &&
+          initial.document.pages.some((p) => p.nodes.length),
+        ),
+      );
+      setBriefLoaded(true);
+    } catch (e) {
+      setBriefError(message(e));
+    }
+  }
+  useEffect(() => {
+    void loadBrief();
+  }, [initial.id]);
+  async function buildFromBrief(
+    approvedBrief: DesignBrief,
+    selectedProvider: string,
+    selectedModel: string,
+  ) {
+    if (approvedBrief.status !== "approved" || !approvedBrief.scope)
+      throw new Error("Approve the design scope before generating.");
+    if (dirty)
+      throw new Error(
+        "Save your manual canvas edits before building from this scope.",
+      );
+    const latest = (
+      await api<{ brief: DesignBrief }>(
+        `/api/projects/${projectRef.current.id}/brief`,
+      )
+    ).brief;
+    if (
+      latest.revision !== approvedBrief.revision ||
+      latest.status !== "approved"
+    )
+      throw new Error(
+        "The brief changed. Reload it and approve the latest scope before building.",
+      );
+    let pending = briefProposal.current;
+    if (!pending || pending.briefRevision !== approvedBrief.revision) {
+      const response = await post<{ document: DesignDocument }>(
+        `/api/projects/${projectRef.current.id}/generate`,
+        {
+          prompt:
+            "Build the design from this approved scope.\n" +
+            JSON.stringify({
+              request: approvedBrief.request,
+              answers: approvedBrief.answers,
+              scope: approvedBrief.scope,
+            }),
+          provider: selectedProvider,
+          ...(selectedModel.trim() ? { model: selectedModel.trim() } : {}),
+          expectedRevision: projectRef.current.revision,
+        },
+      );
+      const generated = documentSchema.parse(response.document);
+      if (
+        generated.id !== projectRef.current.id ||
+        generated.kind !== projectRef.current.kind
+      )
+        throw new Error(
+          "The generated design changed the project identity or format. Retry with your provider.",
+        );
+      pending = {
+        document: generated,
+        briefRevision: approvedBrief.revision,
+        projectRevision: projectRef.current.revision,
+      };
+      briefProposal.current = pending;
+      setProposal(generated);
+    }
+    const { project: next } = await put<{ project: Project }>(
+      `/api/projects/${projectRef.current.id}/document`,
+      { document: pending.document, expectedRevision: pending.projectRevision },
+    );
+    remember();
+    projectRef.current = next;
+    docRef.current = next.document;
+    setProject(next);
+    setDoc(next.document);
+    setSaved(JSON.stringify(next.document));
+    onProject(next);
+    setProposal(null);
+    briefProposal.current = null;
+    setPageIndex(0);
+    setSelected(null);
+    setPrompt("");
+    setBriefManual(true);
+    notify("Your first design is ready and saved.");
+    void appendChat(
+      "assistant",
+      "Created and saved the first design from your approved scope.",
+    ).catch((e) => setError(message(e)));
+  }
   const [project, setProject] = useState(initial),
     [doc, setDoc] = useState<DesignDocument>(() => clone(initial.document));
   const [saved, setSaved] = useState(JSON.stringify(initial.document)),
@@ -116,6 +247,8 @@ export function Editor({
     [proposal, setProposal] = useState<DesignDocument | null>(null),
     [exportOpen, setExportOpen] = useState(false),
     [shareUrl, setShareUrl] = useState("");
+  const [showChecks, setShowChecks] = useState(false);
+  const designChecks = showChecks ? inspectDesign(doc) : null;
   const [showCode, setShowCode] = useState(false),
     [preview, setPreview] = useState(false),
     [zoom, setZoom] = useState(1),
@@ -523,7 +656,14 @@ export function Editor({
     });
   }
   async function generate() {
-    if (!prompt.trim()) return;
+    if (!prompt.trim() || busy) return;
+    if (!briefLoaded || (brief && brief.status !== "approved")) {
+      setError(
+        "Complete and approve the design brief before AI generation. You can keep editing the canvas manually.",
+      );
+      if (brief) setBriefManual(false);
+      return;
+    }
     if (dirty) {
       setError(
         "Save your edits before generating so the provider works from the latest design.",
@@ -804,6 +944,10 @@ export function Editor({
       "studio_update_node",
       "studio_save_design",
       "studio_set_design",
+      "studio_get_brief",
+      "studio_update_brief",
+      "studio_approve_brief",
+      "studio_inspect_design",
     ];
     try {
       context.registerTool({
@@ -931,6 +1075,90 @@ export function Editor({
           return result({ revision: response.project.revision });
         },
       });
+      context.registerTool({
+        name: "studio_get_brief",
+        description:
+          "Read the saved interview questions, answers, scope and independent brief revision for the open project.",
+        annotations: {
+          readOnlyHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        inputSchema: { type: "object", properties: {} },
+        execute: async () =>
+          result(await api(`/api/projects/${projectRef.current.id}/brief`)),
+      });
+      context.registerTool({
+        name: "studio_update_brief",
+        description:
+          "Persist request, interview, answers or scope for the open project. Requires the brief expectedRevision (0 creates). Every update invalidates scope approval. Use only known question IDs; use a string for custom answers.",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+        inputSchema: {
+          type: "object",
+          properties: {
+            expectedRevision: { type: "integer", minimum: 0 },
+            request: { type: "string" },
+            interview: { type: "object" },
+            answers: { type: "object" },
+            scope: { type: "object" },
+          },
+          required: ["expectedRevision"],
+          additionalProperties: false,
+        },
+        execute: async (args) => {
+          const response = await put<{ brief: DesignBrief }>(
+            `/api/projects/${projectRef.current.id}/brief`,
+            args,
+          );
+          setBrief(response.brief);
+          setBriefManual(false);
+          setBriefLoaded(true);
+          return result(response);
+        },
+      });
+      context.registerTool({
+        name: "studio_approve_brief",
+        description:
+          "Approve the current saved scope at its exact brief revision. Only invoke after the user explicitly approves this scope. This does not generate a design.",
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
+        inputSchema: {
+          type: "object",
+          properties: { expectedRevision: { type: "integer", minimum: 1 } },
+          required: ["expectedRevision"],
+          additionalProperties: false,
+        },
+        execute: async (args) => {
+          const response = await post<{ brief: DesignBrief }>(
+            `/api/projects/${projectRef.current.id}/brief/approve`,
+            args,
+          );
+          setBrief(response.brief);
+          setBriefManual(false);
+          return result(response);
+        },
+      });
+      context.registerTool({
+        name: "studio_inspect_design",
+        description:
+          "Inspect the current local document, including unsaved edits, for bounded deterministic geometry, media, text-fitting and contrast hints. These are not an aesthetic score or accessibility certification.",
+        annotations: {
+          readOnlyHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+        inputSchema: { type: "object", properties: {} },
+        execute: async () => result(inspectDesign(docRef.current)),
+      });
     } catch (e) {
       setError(`Browser tool registration failed: ${message(e)}`);
     }
@@ -1057,6 +1285,25 @@ export function Editor({
       </div>
     );
   }
+  if (brief && !briefManual)
+    return (
+      <DesignBriefWorkspace
+        projectId={project.id}
+        projectName={project.name}
+        brief={brief}
+        onBrief={setBrief}
+        onBack={onBack}
+        onManual={() => setBriefManual(true)}
+        onSettings={onSettings}
+        onGenerate={buildFromBrief}
+      />
+    );
+  if (!briefLoaded && !briefError)
+    return (
+      <div className="loading-workspace">
+        <Busy label="Opening your project…" />
+      </div>
+    );
   return (
     <div
       className={`editor-shell ${preview ? "preview-mode" : ""} mobile-${mobilePanel}`}
@@ -1095,6 +1342,7 @@ export function Editor({
           </div>
         </div>
         <div className="editor-header-actions">
+          <ThemeToggle />
           <button
             className="icon-button"
             disabled={!historyCount || !!busy}
@@ -1149,6 +1397,23 @@ export function Editor({
           </button>
         </div>
       </header>
+      {brief && (
+        <button className="brief-return" onClick={() => setBriefManual(false)}>
+          <Sparkles size={14} />
+          {brief.status === "approved"
+            ? "View approved scope"
+            : "Continue design interview"}
+          <ArrowRight size={14} />
+        </button>
+      )}
+      {briefError && (
+        <div className="inline-error" role="alert">
+          Brief could not load: {briefError}{" "}
+          <button className="text-button" onClick={() => void loadBrief()}>
+            Retry loading brief
+          </button>
+        </div>
+      )}
       <div className="mobile-editor-nav">
         <button
           className={mobilePanel === "chat" ? "active" : ""}
@@ -1537,6 +1802,14 @@ export function Editor({
               </label>
             </div>
             <div className="canvas-toolbar-end">
+              <button
+                className="icon-button"
+                title="Design checks"
+                aria-label="Design checks"
+                onClick={() => setShowChecks(true)}
+              >
+                <ListChecks size={17} />
+              </button>
               <button
                 className="icon-button"
                 title="Document JSON"
@@ -2039,6 +2312,76 @@ export function Editor({
                 Open design <ArrowRight size={16} />
               </a>
             </div>
+          </div>
+        </Modal>
+      )}
+      {showChecks && designChecks && (
+        <Modal title="Design checks" onClose={() => setShowChecks(false)} wide>
+          <div className="modal-body design-checks">
+            <p className="modal-description">
+              Hints for the current canvas, including unsaved edits. These
+              checks do not block export or judge visual quality.
+            </p>
+            <div className="checks-counts">
+              <strong>{designChecks.counts.warnings} warnings</strong>
+              <span>{designChecks.counts.information} notes</span>
+            </div>
+            {!designChecks.counts.total && (
+              <p className="checks-empty">
+                <Check size={18} />
+                No issues found by these checks. Preview the design at its
+                intended size before sharing.
+              </p>
+            )}
+            <div className="checks-list">
+              {designChecks.issues.slice(0, 200).map((issue, index) => (
+                <button
+                  key={index}
+                  disabled={!issue.pageId}
+                  className={`check-issue ${issue.severity}`}
+                  onClick={() => {
+                    const target = doc.pages.findIndex(
+                      (p) => p.id === issue.pageId,
+                    );
+                    if (target >= 0) {
+                      setPageIndex(target);
+                      setSelected(issue.nodeId || null);
+                      setMobilePanel("canvas");
+                      setShowChecks(false);
+                      setProposal(null);
+                    }
+                  }}
+                >
+                  <span className="check-severity">
+                    {issue.severity === "warning" ? "Warning" : "Note"}
+                    {issue.pageId &&
+                      " · " +
+                        (doc.pages.find((p) => p.id === issue.pageId)?.name ||
+                          "Page")}
+                  </span>
+                  <strong>{issue.message}</strong>
+                  <span>{issue.suggestion}</span>
+                  {issue.pageId && (
+                    <small>
+                      Show on canvas <ArrowRight size={13} />
+                    </small>
+                  )}
+                </button>
+              ))}
+            </div>
+            {designChecks.truncated && (
+              <p className="brief-hint">
+                Showing the first 200 findings. Counts include all findings.
+              </p>
+            )}
+            <details className="checks-limits" open>
+              <summary>What these checks can tell you</summary>
+              <ul>
+                {designChecks.limitations.map((limit) => (
+                  <li key={limit}>{limit}</li>
+                ))}
+              </ul>
+            </details>
           </div>
         </Modal>
       )}

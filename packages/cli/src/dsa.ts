@@ -6,10 +6,11 @@ import { documentSchema, kinds, type DesignDocument, type Project, type ProjectK
 import { blocks, createBlock, createDocument, templates, themes } from '../../../src/shared/catalog';
 import { duplicateDocument, mutateDocument, operationsSchema } from '../../../src/shared/operations';
 import { renderHtml, renderSvg } from '../../../src/shared/render';
+import { interviewSchema, answerSchema, scopeSchema } from '../../../src/shared/brief';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.1.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.2.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
@@ -62,6 +63,16 @@ blockGroup.command('list').action(wrap(() => ({ blocks: blocks.map(({ nodes, ...
 blockGroup.command('get <id>').option('--offset <pixels>', 'Vertical offset', '0').action(wrap((id, options) => { selection(blocks, id); return { nodes: createBlock(id, nonnegativeNumber(options.offset)) }; }));
 
 const projects = program.command('projects').description('Manage persisted projects');
+const briefs = program.command('brief').description('Persist an interview and explicitly approve its design scope');
+briefs.command('get <id>').action(wrap(id => client().json(`${projectPath(id)}/brief`)));
+briefs.command('put <id>').description('Create/update from JSON: request, interview, answers, scope; every write invalidates approval').requiredOption('--revision <number>', 'Expected brief revision; 0 creates').requiredOption('--file <path>', 'Brief update JSON or - for stdin').action(wrap(async (id, options) => {
+  const expectedRevision = Number(options.revision);
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) throw new CliError('invalid_revision', 'Brief revision must be a nonnegative integer.');
+  const body = z.object({request:z.string().trim().min(1).max(12000).optional(), interview:interviewSchema.optional(), answers:answerSchema.optional(), scope:scopeSchema.optional()}).strict().parse(await inputJson(options.file));
+  return client().json(`${projectPath(id)}/brief`, 'PUT', {...body,expectedRevision});
+}));
+briefs.command('interview <id>').description('Ask a configured BYOK provider for contextual questions or scope; incurs provider usage').requiredOption('--revision <number>', 'Expected brief revision').requiredOption('--provider <name>', 'openai, anthropic, gemini or openrouter').option('--model <id>', 'Provider model override').action(wrap((id, options) => client().json(`${projectPath(id)}/brief/interview`, 'POST', {expectedRevision:revision(options.revision),provider:options.provider,model:options.model})));
+briefs.command('approve <id>').description('Approve the reviewed scope after explicit human confirmation; no generation or publication').requiredOption('--revision <number>', 'Expected brief revision').action(wrap((id, options) => client().json(`${projectPath(id)}/brief/approve`, 'POST', {expectedRevision:revision(options.revision)})));
 projects.command('list').option('--query <text>', 'Search name/description').option('--kind <kind>', 'Filter document kind').option('--sort <sort>', 'updated, created, or name', 'updated').action(wrap(options => {
   if (!['updated', 'created', 'name'].includes(options.sort)) throw new CliError('invalid_sort', 'Sort must be updated, created, or name.');
   const query = new URLSearchParams({ sort: options.sort });
@@ -70,6 +81,7 @@ projects.command('list').option('--query <text>', 'Search name/description').opt
   return client().json(`/api/projects?${query}`);
 }));
 projects.command('get <id>').action(wrap(id => client().json(projectPath(id))));
+projects.command('check <id>').description('Read-only preflight with node IDs, severity and actionable design checks').action(wrap(id => client().json(`${projectPath(id)}/checks`)));
 projects.command('create').requiredOption('--name <name>', 'Project name').option('--description <text>', 'Project description', '').option('--kind <kind>', 'Document kind').option('--template <id>', 'Template ID').option('--theme <id>', 'Theme ID').option('--file <path>', 'Document JSON file or - for stdin').action(wrap(async options => {
   if (options.file && options.template) throw new CliError('conflicting_options', 'Choose either --file or --template.');
   const template = options.template ? selection(templates, options.template) : undefined;

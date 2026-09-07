@@ -5,6 +5,7 @@ import type { Env } from "./types";
 import { decrypt, encrypt, fail, id, now, owner, unb64, rateLimit } from "./security";
 import { projectRow, storeAsset, validateAssets } from "./projects";
 import { documentSchema } from "../src/shared/schema";
+import type { DesignBrief } from '../src/shared/brief';
 const defaults: Record<string, { baseUrl: string; model: string }> = {
   openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4.1" },
   anthropic: {
@@ -107,7 +108,7 @@ export async function upstream(
   try {
     response = await fetch(url, {
       ...init,
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(timeout),
     });
   } catch {
@@ -189,24 +190,13 @@ providerRoutes.delete("/:provider", async (c) => {
     .run();
   return c.json({ ok: true });
 });
-export const generationRoutes = new Hono<Env>();
-generationRoutes.post("/:id/generate", async (c) => {
-  const row = await projectRow(c, c.req.param("id"));
-  const body = z
-    .object({
-      prompt: z.string().trim().min(1).max(12000),
-      provider: z.enum(["openai", "anthropic", "gemini", "openrouter"]),
-      model: z.string().min(1).max(200).optional(),
-      expectedRevision: z.number().int().positive(),
-    })
-    .parse(await c.req.json());
-  if (body.expectedRevision !== row.revision)
-    fail(409, "revision_conflict", "Reload the project before generating.");
+export const textProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'openrouter']);
+export async function completeText(c: Context<Env>, body: {
+  provider: z.infer<typeof textProviderSchema>; model?: string; system: string; prompt: string; maxTokens?: number;
+}) {
   const config = await providerConfig(c, body.provider);
   const model = body.model ?? config.model;
-  const system =
-    "You edit DesignDocument v1 JSON. Return only the complete valid document, no prose or markdown. Preserve id and kind and existing useful content unless asked. Nodes have finite pixel x,y,width,height; type frame,text,image,shape,icon,chart,model3d,video,audio. Text belongs in text, styles in style. Never return executable code, scripts, event handlers, or javascript URLs. Parent IDs must exist on the same page. Preserve schemaVersion, theme, pages, assets and metadata. Current document: " +
-    row.document;
+  const system = body.system;
   let result: any;
   let output: string = "";
   if (body.provider === "anthropic") {
@@ -220,7 +210,7 @@ generationRoutes.post("/:id/generate", async (c) => {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 16000,
+          max_tokens: body.maxTokens ?? 16000,
           system,
           messages: [{ role: "user", content: body.prompt }],
         }),
@@ -244,7 +234,7 @@ generationRoutes.post("/:id/generate", async (c) => {
         body: JSON.stringify({
           systemInstruction: { parts: [{ text: system }] },
           contents: [{ role: "user", parts: [{ text: body.prompt }] }],
-          generationConfig: { responseMimeType: "application/json" },
+          generationConfig: { responseMimeType: "application/json", ...(body.maxTokens ? { maxOutputTokens: body.maxTokens } : {}) },
         }),
       }),
     );
@@ -267,11 +257,30 @@ generationRoutes.post("/:id/generate", async (c) => {
             { role: "user", content: body.prompt },
           ],
           response_format: { type: "json_object" },
+          ...(body.maxTokens ? { max_tokens: body.maxTokens } : {}),
         }),
       }),
     );
     output = result.choices?.[0]?.message?.content ?? "";
   }
+  if (typeof output !== 'string') fail(502, 'invalid_provider_response', 'Provider did not return text content.');
+  return { output, usage: result.usage ?? result.usageMetadata };
+}
+
+export const generationRoutes = new Hono<Env>();
+generationRoutes.post("/:id/generate", async (c) => {
+  const row = await projectRow(c, c.req.param("id"));
+  const body = z.object({ prompt: z.string().trim().min(1).max(12000), provider: textProviderSchema, model: z.string().min(1).max(200).optional(), expectedRevision: z.number().int().positive() }).parse(await c.req.json());
+  if (body.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Reload the project before generating.');
+  const savedBrief = await c.env.DB.prepare('SELECT brief,revision FROM design_briefs WHERE project_id=? AND user_id=?').bind(row.id, owner(c)).first<{ brief: string; revision: number }>();
+  const brief = savedBrief ? JSON.parse(savedBrief.brief) as DesignBrief : null;
+  if (brief && (brief.status !== 'approved' || !brief.scope || !brief.approvedAt)) fail(409, 'brief_not_approved', 'Review and explicitly approve the project scope before generating.');
+  const system = 'You edit DesignDocument v1 JSON. Return only the complete valid document, no prose or markdown. Preserve id and kind and existing useful content unless asked. Nodes have finite pixel x,y,width,height; type frame,text,image,shape,icon,chart,model3d,video,audio. Text belongs in text, styles in style. Never return executable code, scripts, event handlers, or javascript URLs. Parent IDs must exist on the same page. Preserve schemaVersion, theme, pages, assets and metadata. '
+    + (brief ? `The user explicitly approved this scope. Fulfill its objective, audience, direction, deliverables, constraints and acceptance criteria: ${JSON.stringify(brief.scope)}. ` : '')
+    + 'Current document: ' + row.document;
+  const { output, usage } = await completeText(c, { provider: body.provider, model: body.model, system, prompt: body.prompt });
+  const currentBrief = await c.env.DB.prepare('SELECT revision FROM design_briefs WHERE project_id=? AND user_id=?').bind(row.id, owner(c)).first<{ revision: number }>();
+  if ((currentBrief?.revision ?? 0) !== (savedBrief?.revision ?? 0)) fail(409, 'revision_conflict', 'The brief changed during generation. Review its latest scope before generating again.');
   let draft: unknown;
   try {
     draft = JSON.parse(
@@ -300,7 +309,7 @@ generationRoutes.post("/:id/generate", async (c) => {
   await validateAssets(c, parsed.data);
   return c.json({
     document: parsed.data,
-    usage: result.usage ?? result.usageMetadata,
+    usage,
   });
 });
 
