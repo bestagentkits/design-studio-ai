@@ -4,7 +4,9 @@ Design Studio AI exposes one shared document contract through REST, network MCP,
 
 ## Install and connect
 
-From the repository, install dependencies with `npm ci` and `npm ci --prefix packages/cli`, then run `npm run build --prefix packages/cli`. From `packages/cli`, run `npm pack`; install the resulting tarball with `npm install -g <path-to-tarball>`. The build also generates `dist/document.schema.json` and `dist/operations.schema.json`. A generated tarball is not evidence of publication to the npm registry.
+Install the [released CLI tarball](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz) with `npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz`. The package is not published to the npm registry.
+
+To build from source, install dependencies with `npm ci` and `npm ci --prefix packages/cli`, then run `npm run build --prefix packages/cli`. From `packages/cli`, run `npm pack`; install the resulting tarball with `npm install -g <path-to-tarball>`. The build also generates `dist/document.schema.json` and `dist/operations.schema.json`.
 
 Set `DESIGN_STUDIO_URL=https://studio.agentkit.best` and inject `DESIGN_STUDIO_API_KEY` from workspace Settings. `dsa` does not save a configuration file, keychain record, or login session. `--url` and `--api-key` override these values for one invocation; use environment injection to avoid shell history. HTTP is accepted for localhost development only.
 
@@ -19,6 +21,8 @@ Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying it
 | `catalog`, `themes list/get`, `templates list/get/instantiate`, `blocks list/get` | Bundled design resources; instantiated IDs are unique |
 | `projects list/get/create/rename/delete/clone` | Persisted project management; clone copies owned asset bytes |
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
+| `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
+| `projects check` | Read-only preflight hints with exact layer IDs; inspect the actual preview too |
 | `projects import/export`, `render` | Canonical JSON import; authenticated cloud export; offline JSON/HTML/SVG rendering |
 | `assets list/upload/download` | Authenticated asset storage; node placement is a separate document edit |
 | `generate` | Real provider document proposal; no implicit save |
@@ -32,6 +36,10 @@ Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying it
 All option details are available through command `--help`. Document and operation files accept `--file -` for stdin. The default output is JSON; document/export/template content is raw when sent to stdout. `--output` writes the artifact and returns JSON metadata. Errors are JSON on stderr. Exit codes are 0 success, 1 input/API/conflict, 2 auth, 3 network/invalid response, and 4 local runtime/file errors.
 
 ## Revision workflow
+
+Start prompt-driven projects with a saved brief. `update_design_brief` (CLI `brief put`) accepts a request and agent-authored contextual questions/scope; it needs no BYOK key when the agent uses its own model. `interview_design_brief` optionally uses a configured provider. Show questions in the host conversation or Studio, save answers, review the scope, and call `approve_design_brief` only after the human approves that version. Brief revisions and document revisions are independent. Any brief edit invalidates approval. Provider generation requires approval when a brief exists. Manual editing remains available.
+
+Run `inspect_design` (CLI `projects check`) after saving: findings point to specific nodes and suggest corrections for fitting, bounds, media and contrast. These deterministic hints supplement visual inspection; overlapping backgrounds, font metrics, rotation and animated extremes require preview.
 
 1. Read `projects get PROJECT_ID` and record `project.revision` with the document.
 2. Inspect `schema --operations`, page/node IDs, and the relevant catalog entry.
@@ -57,4 +65,4 @@ The CLI is the scoped agentization deliverable in [release phase](../plans/2026-
 
 CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); run `node --import tsx --test tests/cli.test.ts`. They build and execute the distributable in real subprocesses, inspect schema/template output, and exercise authenticated project editing against the SQLite-backed handler. Renderer/server tests cover actual binary export. External provider and Google success require separate credential-dependent checks. Release evidence belongs in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
-The package is not published to the npm registry. Check [GitHub Releases](https://github.com/bestagentkits/design-studio-ai/releases) for an attached tarball or build one locally; a generated package does not establish registry or release publication.
+The [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) provides the CLI tarball and agent-skill ZIP. GitHub release distribution is separate from npm registry publication.

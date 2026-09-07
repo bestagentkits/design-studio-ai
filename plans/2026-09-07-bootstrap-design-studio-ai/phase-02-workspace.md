@@ -1,6 +1,6 @@
 # Responsive design workspace
 
-Status: In progress. Owner: frontend agent. Estimate: 10h.
+Status: Completed. Owner: frontend agent. Estimate: 10h.
 
 Read [architecture](../../docs/architecture.md), [product brief](../../docs/product-brief.md), and screenshots under `D:/www/oss/design-studio/screenshots/`. May create/modify only `D:/www/oss/design-studio/src/app/**`. Shared modules and backend routes are controller/backend owned.
 
@@ -20,7 +20,7 @@ Risk: stale API assumptions. Use the exact architecture request/response envelop
 - [x] Revision conflicts and unconfigured-provider paths preserve saved designs.
 - [x] WebMCP registration is feature-detected with cleanup and ordinary UI fallback.
 - [x] Latest isolated desktop/mobile end-to-end run passed 2/2, as reported by the controller.
-- [ ] Verify conversation reload and source-media options against the final backend build.
+- [x] Conversation persistence passed final production/Docker smoke; source-media request options and isolation passed the provider/CLI integration checks.
 
 The UI is English; document content supports Unicode. Experimental WebMCP is not a claim of universal browser availability. See [finalization](reports/finalization.md).
 

@@ -1,6 +1,6 @@
 # Persistence, security, providers, and MCP
 
-Status: In progress. Owner: backend agent. Estimate: 14h.
+Status: Completed. Owner: backend agent. Estimate: 14h.
 
 Read [architecture](../../docs/architecture.md) and shared schema as soon as available. May create/modify `D:/www/oss/design-studio/server/**`, `D:/www/oss/design-studio/migrations/**`, and `D:/www/oss/design-studio/tests/server*`. Controller owns shared code, CLI, and infrastructure configuration.
 
@@ -20,7 +20,10 @@ Risks: read-check-write races, OAuth replay, token disclosure, unsafe proxy fetc
 - [x] Real server/CLI regressions cover ownership, CAS, OAuth, token revocation, source-independent clones, and snapshot isolation.
 - [x] Typed OpenAI/fal media generation/editing/music/effects requests, owned-source checks, and reusable completed jobs implemented; six capability tests passed.
 - [x] Production smoke verified authenticated D1 persistence, stale revisions, MCP, publication, and browser PNG/PDF/PPTX exports.
-- [ ] Re-run final checks/migrations after persisted conversation integration.
-- [ ] Exercise provider and Google success with separately supplied live credentials; none were available for initial implementation.
+- [x] Final conversation integration/migrations verified by production and Docker smoke; full 46-test suite and Linux CI passed.
+- [x] Security review findings fixed and regression-tested: OAuth privilege escalation, independent asset cloning, render pixel budgets, and blocked renderer network access.
+- [x] Credential-dependent provider/Google setup and unverified upstream success documented accurately; no unavailable live result is claimed.
 
 MCP advertises implemented 2025 SDK transport compatibility, not the unimplemented 2026 transport. Native Google Slides limits and upstream dependency findings remain explicit in [architecture](../../docs/architecture.md) and [deployment](../../docs/deployment.md). External-credential checks cannot be replaced with fabricated provider outputs.
+
+Provider and Google live success remain operator configuration/validation requirements because no relevant credentials were available during delivery. This does not establish provider output quality or native Google parity for unsupported nodes.

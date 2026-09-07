@@ -44,11 +44,17 @@ Export POST `/api/projects/:id/export` accepts `{format,pageIndex?,expectedRevis
 
 Passwords use salted PBKDF2. Opaque sessions are hashed, expire, and use HttpOnly/SameSite cookies with Secure on HTTPS. Cookie writes require a trusted Origin. API/OAuth tokens are hashed, revocable Bearer credentials. Provider keys use AES-GCM with a stable operator-held secret and return only masked metadata. Credentials do not belong in documents, exports, publication, or browser localStorage.
 
+[GitHub login](../server/github-login.ts) issues the same application sessions after a server-side authorization-code exchange. Stable GitHub IDs live in a separate identity table; email equality never automatically links an existing account. Encrypted PKCE verifiers, browser-bound hashed state, atomic state consumption, and session-bound explicit linking protect the callback. GitHub provider tokens are not persisted. This human sign-in flow is separate from the MCP OAuth authorization server.
+
 Publishing freezes a snapshot with snapshot-scoped assets; later private edits do not alter it. Unpublish removes the project's snapshots. Escaped published markup receives CSP/response headers. Uploaded media is bounded and type/signature checked. Imported markup becomes allowed document data rather than trusted application HTML.
 
 Provider origins are fixed or explicitly HTTPS-allowlisted by the operator. Requests reject redirects, bound time/bytes, and redact upstream diagnostics. Private media edits send bytes or a supported data URI directly to the chosen provider without automatically publishing the source.
 
 ## Agent surfaces
+
+Prompt-driven projects use a separate, owner-scoped design brief. [Brief routes](../server/briefs.ts) persist questions, answers, proposed scope and explicit approval with an independent revision. Server providers and external agents share this contract. Any change invalidates approval; late interview responses cannot overwrite newer answers. Provider generation reads approved scope and checks it again after the response. Manual document editing remains available.
+
+[Design checks](../src/shared/design-checks.ts) provide bounded, deterministic preflight findings. The editor checks current local geometry; REST/MCP/CLI check the saved revision. Findings identify exact layers and explain limits; they neither block publication nor certify visual or accessibility quality.
 
 Network MCP uses stateless Streamable HTTP POST at `/mcp`, with API-token/OAuth authentication and independent Origin validation. The server supports `2025-11-25` and declared SDK legacy compatibility, not the newer 2026 transport. Tools reuse ownership/revision services.
 

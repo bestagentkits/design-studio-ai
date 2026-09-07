@@ -1,37 +1,48 @@
 # Finalization evidence — 2026-09-07
 
-Status: In progress; controller release verification remains active. This report records observations, not a substitute for executable contracts or an assertion that every requested criterion passed.
+Status: Original v0.1.0 implementation delivery completed with explicit external-integration and format boundaries. The user's subsequently added [GitHub login phase](../phase-05-github-login.md) is in progress and is not covered by the release checks below. No paid-provider success, universal browser support, or full editable export parity is implied.
 
-## Observed and reported verification
+## Release and verification
 
-| Area | Evidence | State |
-| --- | --- | --- |
-| CLI distribution | Seven real subprocess/SQLite CLI tests passed during CLI delivery; built tarball extracted and executable ran without the repository runtime | Verified for that revision; latest media flags need final integrated run |
-| Provider capabilities | Six `provider-capabilities.test.ts` tests passed; source requests, owned-source isolation, missing credentials, unsafe locations, and stored completed jobs checked | Verified locally; no live paid-provider success claimed |
-| Server/CLI regression | `node --import tsx --test tests/server.test.ts tests/cli.test.ts` passed 16 reported tests including nested server checks | Verified before final conversations/viewer updates |
-| Integrated checks | Controller reported `npm test` 42/42 and typecheck passing, including TypeScript renderer scripts; four additional viewer regressions then passed | Final combined run expected to contain 46 tests; not yet reported |
-| Cloudflare | Controller reported deployed custom domain, D1/R2 and Browser Rendering bindings, then 11 passing production checks including registration, persisted revisions/conflict, authenticated MCP, immutable publication, PNG/PDF/PPTX | Production checks passed; later deployments require fresh reconciliation |
-| Docker | Controller built a real image on Docker Engine 29.7.2 and passed 16 checks: sessions, SQLite saves/CAS/messages, MCP, publish, PNG/PDF/PPTX, real 3D PNG, WebM, interactive HTML; test container stopped/removed | Verified self-host runtime and exports |
-| Browser workflows | Controller reported fresh isolated desktop/mobile E2E 2/2; runner uses temporary SQLite, deterministic port 8791, and cleanup | Passed for current UI |
-| Registry/release | CLI tarball exists; npm authentication returned 401; GitHub v0.1.0 release is planned | Registry unpublished; release asset unverified |
+| Area | Final evidence |
+| --- | --- |
+| Source | Implementation commit `96c792e` pushed to [bestagentkits/design-studio-ai](https://github.com/bestagentkits/design-studio-ai); final documentation is committed separately |
+| Integrated checks | 46/46 tests passed, including CLI subprocess/SQLite, provider input/ownership, security, renderer, and viewer regressions; typecheck and build passed |
+| Browser workflows | 2/2 desktop/mobile Chromium E2E passed against an isolated temporary SQLite server |
+| Linux CI | [Run 34144355459](https://github.com/bestagentkits/design-studio-ai/actions/runs/34144355459) succeeded with dependency installation, 46 tests, typecheck, build, E2E, and CLI packing |
+| Cloudflare | Final production smoke passed 16/16: authenticated persistence/revisions/messages, MCP, publication, PNG/PDF/PPTX, real 3D, WebM, and interactive HTML |
+| Docker | Real image built on Docker Engine 29.7.2; the equivalent self-host smoke passed 16/16 with SQLite/files and Chromium |
+| Video artifact | After the cloud recorder fix, ffprobe decoded VP9 WebM at 1280×720 containing 11 frames |
+| Distribution | [v0.1.0](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.1.0) published with CLI/skill archives; both downloaded, CLI SHA-256 matched the local package, and extracted CLI ran `--version` (0.1.0) and media help with the new flags independently |
+| Secret/process cleanup | Controller scanned 95 staged files for secret values successfully, stopped/removed its Docker test container, and stopped its API process PID 46200 |
 
-The controller's observed deployment used D1 `920d59d1-d4e9-4e8b-b01b-9dbf45a180aa`, R2 `design-studio-ai-assets`, and [studio.agentkit.best](https://studio.agentkit.best). A deployment version beginning `6bbdc` was reported before subsequent work; the final release must record its actual final version rather than treating that earlier version as current.
+The verified deployed Worker version is `e4bc730e-cd8e-4867-a0f8-dd29c2cba59a` at [studio.agentkit.best](https://studio.agentkit.best), with D1 `920d59d1-d4e9-4e8b-b01b-9dbf45a180aa`, R2 `design-studio-ai-assets`, and Browser Rendering. These are release observations, not instructions for another operator to reuse production resources.
+
+CLI asset: [bestagentkits-design-studio-ai-0.1.0.tgz](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.1.0/bestagentkits-design-studio-ai-0.1.0.tgz), GitHub-reported SHA-256 `1ca1819579225923ad4ab693a6890635897faa501155aff1a513713aca69f90b`. Skill asset: [design-studio-ai-skill.zip](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.1.0/design-studio-ai-skill.zip), SHA-256 `2d2b260f36689dd9b6cd1de67145abbec920df6451d1ba10122804caf31fceee`. The controller verified both downloads and the CLI's hash and extracted executable. npm authentication returned 401, so no npm registry publication is claimed.
+
+## Resolved findings
+
+Security review found and fixed OAuth privilege escalation, asset clones depending on source storage, unsafe render workloads, and renderer network exposure. Regression tests exercise token/ownership boundaries, independent copied assets, pixel budgets, and blocked external requests.
+
+Expanded production smoke initially found cloud WebM returning HTTP 200 with invalid bytes while Docker passed. The recorder was fixed to deliver explicit frames with a visible canvas and to reject empty output. The final production smoke and independent ffprobe decoding passed. The failed check is resolved; HTTP status alone was not accepted as proof of export validity.
 
 ## Documentation reconciliation
 
-Created [README](../../../README.md) and [deployment](../../../docs/deployment.md). Replaced the bootstrap schema copy in [architecture](../../../docs/architecture.md) with links to machine-owned validators, operations, routes, and rendering boundaries. Updated [agents](../../../docs/agents.md), the [CLI README](../../../packages/cli/README.md), and [agent skill](../../../skills/design-studio-ai/SKILL.md) for current media flags and cloud export behavior. Swept all four phase files and kept overall status in progress.
+[README](../../../README.md), [deployment](../../../docs/deployment.md), [architecture](../../../docs/architecture.md), [agents](../../../docs/agents.md), [CLI README](../../../packages/cli/README.md), and the [agent skill](../../../skills/design-studio-ai/SKILL.md) reflect release commands and boundaries. Architecture links to executable validators/operations/routes instead of copying a stale schema. The original four phases are completed; the overall plan remains in progress for the later GitHub-login request.
 
-Claims were checked against package scripts, CLI command definitions, Dockerfile/Compose, Wrangler bindings, Node entry/migration handling, export/provider/Google/MCP/conversation routes, shared rendering, and the isolated E2E runner. No changelog was added: release observations belong here, while evergreen documentation points to owning code.
+Claims were checked against package scripts, CLI flags, Dockerfile/Compose, Wrangler, Node migrations, provider/export/Google/MCP/conversation routes, rendering, and the isolated E2E runner. The release-doc pass validated 86 local Markdown links with no missing targets, including the README screenshot. `git diff --check` passed. GitHub independently reported the linked CI run completed successfully for full commit `96c792e5e31eea4a900be77aa3495219f956fb4e`. The updated skill passed the installed skill-creator `quick_validate.py`. No changelog was created because this report owns release observations.
 
-Relative Markdown link validation checked 83 local links across the changed documentation and phase files with zero missing targets. The CI workflow was inspected and matches the documented dependency installation, typecheck/test/build/E2E/pack sequence. Production and latest full-suite results are controller-reported evidence; this documentation task did not independently rerun paid providers or production writes.
+Production, Docker, latest full-suite, secret-scan, and cleanup results are controller-reported evidence. This documentation task independently inspected release asset metadata and local document references; it did not rerun paid providers or production writes.
 
-## Remaining release gates and disclosed limitations
+After adding the user-requested GitHub-login phase, the final local-link pass checked 94 targets with zero missing references. The new phase is the only phase with open implementation acceptance checks; it does not retroactively invalidate the released v0.1.0 results.
 
-- Final combined test/build/typecheck reconciliation, expanded production smoke, and remote GitHub CI. The earlier 42-test suite, additional four viewer regressions, and 2/2 desktop/mobile E2E passed.
-- MP4 remains encoder-dependent and cloud recordings cap at 60 seconds. Docker WebM/3D/interactive HTML outputs passed actual checks; expanded production output verification is underway.
-- GitHub release/tag/asset publication and downloadable tarball verification. npm registry publication has not happened.
-- Live provider/Google integration requires external credentials not present during this work. Native Google export supports text/shapes/HTTPS images and rejects unsupported complex/private-image content; PPTX uses editable primitives plus complex-node rasterization.
-- Remote media must be imported before cloud binary export. Size/pixel bounds and experimental WebMCP remain intentional capability boundaries, not hidden successes.
-- Initial `npm audit` reported five high findings in upstream browser-download/PowerPoint transitive dependencies with no compatible complete fix. The affected downloader path is unused in the Cloudflare runtime; PPTX receives trusted generated PNG raster input. Findings remain disclosed and require upstream monitoring.
+## Remaining capability and configuration boundaries
 
-The final controller should replace pending entries only with fresh evidence, update phase checkboxes accordingly, and leave genuinely unavailable external checks explicitly documented.
+- Provider creation/editing/music/video and Google Slides call real APIs but require external credentials/account access unavailable during delivery. Their upstream successful output and quality are not live-verified.
+- Native Google Slides supports text/shapes/HTTPS images and rejects unsupported complex nodes/private image URLs. PPTX retains editable primitives with complex-node rasterization; SVG is static; interactive HTML and binary WebGL have different capabilities.
+- Remote media must be imported before cloud binary export. Pixel/byte limits apply; motion caps at 60 seconds. MP4 depends on runtime encoder support; verified WebM does not establish MP4 support everywhere.
+- Cloud motion mixes imported audio/video. Browser fallback recordings are silent. 3D object properties persist, while orbit-camera adjustments are temporary preview state.
+- Browser WebMCP is experimental and feature-detected. Registration behavior and fallback are implemented; native WebMCP availability in every browser is not verified or claimed. Network MCP provides the supported 2025 SDK transport and does not advertise the newer 2026 transport.
+- Five high upstream dependency audit findings remain in browser-download/PowerPoint transitive dependencies without a compatible complete fix. The affected downloader is unused in the Cloudflare runtime, and PPTX receives trusted generated PNGs; these boundaries do not erase the findings. Monitor upstream updates.
+
+These disclosed boundaries are not fabricated passing checks and are not hidden incomplete implementation tasks. Additional provider credentials, browser capabilities, or upstream fixes can enable further validation without changing the completed delivery evidence above.

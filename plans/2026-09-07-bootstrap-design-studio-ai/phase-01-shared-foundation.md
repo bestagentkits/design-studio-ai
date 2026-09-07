@@ -1,6 +1,6 @@
 # Shared document, catalog, and rendering
 
-Status: In progress. Owner: controller. Estimate: 8h.
+Status: Completed. Owner: controller. Estimate: 8h.
 
 Read [architecture](../../docs/architecture.md) and [product brief](../../docs/product-brief.md). Create `D:/www/oss/design-studio/src/shared/**`; the controller also owns root package/tooling configuration. Other agents consume these files and report missing interfaces rather than editing them concurrently.
 
@@ -20,6 +20,6 @@ Risk: renderer/export divergence creates misleading previews. Compare the same k
 - [x] Themes/templates/blocks and six document kinds available through shared code and CLI.
 - [x] Schema/operation/static-render checks and real cloud PNG/PDF/PPTX verification completed.
 - [x] Four viewer regressions passed; Docker smoke inspected real 3D PNG, WebM, and interactive HTML alongside PNG/PDF/PPTX.
-- [ ] Record final integrated results after all shared/render changes.
+- [x] Final integrated results: 46 tests, passing Linux typecheck/build/CI, 16 production and 16 Docker smoke checks.
 
-Evidence and outstanding format boundaries: [finalization](reports/finalization.md), [architecture](../../docs/architecture.md#rendering-and-export). Keep this phase in progress until renderer fidelity checks are reconciled.
+Evidence and format boundaries: [finalization](reports/finalization.md), [architecture](../../docs/architecture.md#rendering-and-export). Cloud WebM was decoded by ffprobe after the recorder fix; SVG remains static, PPTX complex nodes are rasterized, and MP4 depends on encoder availability.

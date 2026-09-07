@@ -63,6 +63,16 @@ Missing browser configuration returns a capability error for server PNG/PDF/PPTX
 
 ## Optional integrations
 
+### GitHub sign-in
+
+Create a GitHub OAuth App with callback `https://YOUR_ORIGIN/api/auth/github/callback`. Configure `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, and `GITHUB_CALLBACK_URL` in the application runtime; the callback must exactly match `APP_URL`'s origin and this path. Keep `ENCRYPTION_KEY` configured for encrypted short-lived PKCE verifiers. For Cloudflare, set these values with Wrangler secrets; for Node, export them before starting the server. Compose forwards the three variables from its environment.
+
+The sign-in dialog displays **Continue with GitHub** when configured. Requests use `read:user user:email`, S256 PKCE, a browser-bound state cookie, and a one-use ten-minute database record. The application uses the stable GitHub numeric ID and a verified GitHub email for new accounts; provider access tokens are used transiently and are not saved. An email collision does not merge accounts: sign in using the existing password and choose **Settings → Your account → Connect GitHub**. Linking requires the same active browser session through the callback. Disabling registration still permits sign-in for already-linked identities.
+
+Operator reference: [GitHub's web application OAuth flow](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps). Never put the client secret in client-side code, public configuration, or the repository.
+
+### Design providers and Google Slides
+
 [Providers](providers.md) require per-user BYOK keys and model access. Custom compatible origins require the operator's `PROVIDER_ALLOWED_ORIGINS` HTTPS allowlist. There is no general-purpose URL-fetch proxy.
 
 Google browser authorization needs `GOOGLE_CLIENT_ID`, a Google OAuth web client with the application origin authorized, and the Slides API enabled. The user grants the presentations scope; access tokens are transient. API/CLI clients may supply an independently obtained short-lived token. Native Slides export currently rejects unsupported complex nodes and private image URLs.

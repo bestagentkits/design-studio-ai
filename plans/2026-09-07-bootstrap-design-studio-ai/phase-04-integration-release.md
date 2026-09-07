@@ -1,6 +1,6 @@
 # Agent clients, deployment, and integration
 
-Status: In progress. Owner: controller. Estimate: 8h.
+Status: Completed. Owner: controller. Estimate: 8h.
 
 Read [architecture](../../docs/architecture.md) and all prior phases. Controller coordinates `D:/www/oss/design-studio/packages/cli/**`, agent skill assets, root configuration, Docker, Cloudflare config, README, license, and integration tests. Review real changed files before assigning extra ownership.
 
@@ -19,14 +19,15 @@ Risk: deployment configuration drift or worker limits. Use dry-run deployment, a
 
 - [x] Bundled CLI, generated JSON schemas, installable skill, and real subprocess/SQLite tests completed.
 - [x] CLI tarball built and extracted executable verified; stateless secrets and revision-safe workflows checked.
-- [x] Cloudflare resources/custom domain deployed; 11 production checks passed including PNG/PDF/PPTX.
+- [x] Cloudflare resources/custom domain deployed; final 16 production checks passed including PNG/PDF/PPTX, 3D, WebM, and interactive HTML.
 - [x] Dockerfile/Compose persistence and stable-secret setup provided; README/deployment/architecture documentation reconciled.
 - [x] Real Docker image build and 16-check self-host smoke passed: sessions, SQLite/CAS/messages, MCP, publish, PNG/PDF/PPTX, 3D PNG, WebM, and interactive HTML. Controller stopped/removed its test container.
-- [x] Integrated tests passed 42/42, typecheck passed, and isolated desktop/mobile E2E passed 2/2.
-- [ ] Complete the additional viewer regression and final build after the last changes.
+- [x] Integrated tests passed 46/46, typecheck passed, and isolated desktop/mobile E2E passed 2/2.
+- [x] Cloud recorder fix reverified: VP9 WebM decodes at 1280×720 with 11 frames; final Linux build/typecheck/test/pack CI passed.
 - [x] Four viewer regressions and Docker motion/interactive HTML artifact checks passed.
-- [ ] Reconcile the expanded final production smoke and final build/test results.
-- [ ] Publish GitHub v0.1.0 release/tarball and confirm the downloadable asset. npm registry auth returned 401; do not claim registry publication.
-- [ ] Complete final review/secret checks and reconcile all phase status with controller evidence.
+- [x] Final production 16/16, Docker 16/16, tests 46/46, and E2E 2/2 reconciled.
 
-The repository remote is `https://github.com/bestagentkits/design-studio-ai.git`; release creation remains a separate gate. [Finalization](reports/finalization.md) owns the evidence record. No whole-plan completion is claimed while these gates remain open.
+- [x] GitHub v0.1.0 published; both archives downloaded, CLI SHA-256 matched the local pack, and the extracted standalone executable passed version/media-help checks. npm registry auth returned 401, so registry publication is not claimed.
+- [x] Security fixes regression-tested, 95 staged files passed secret-value scanning, all phase status reconciled, owned Docker/API test processes cleaned up.
+
+The repository is [bestagentkits/design-studio-ai](https://github.com/bestagentkits/design-studio-ai), with [v0.1.0](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.1.0) released and [Linux CI passing](https://github.com/bestagentkits/design-studio-ai/actions/runs/34144355459). [Finalization](reports/finalization.md) records implementation completion and external-credential, experimental-browser, encoder, and upstream-audit boundaries.

@@ -1,8 +1,10 @@
 # Design Studio AI
 
-[Open the studio](https://studio.agentkit.best) · [Source](https://github.com/bestagentkits/design-studio-ai) · [MIT license](LICENSE)
+[Open the studio](https://studio.agentkit.best) · [Guide](https://studio.agentkit.best/guide) · [Documentation](https://studio.agentkit.best/docs) · [Source](https://github.com/bestagentkits/design-studio-ai) · [MIT license](LICENSE)
 
 An agent-first design workspace for web interfaces, slides, reports, wireframes, 3D scenes, and timeline videos. Start with a brief or template, inspect the preview, make focused changes through chat or the manual editor, and export or publish the result. People and agents work on the same versioned document.
+
+![Design Studio AI desktop workspace](plans/2026-09-07-bootstrap-design-studio-ai/reports/home-desktop.png)
 
 ## Capabilities
 
@@ -12,6 +14,10 @@ An agent-first design workspace for web interfaces, slides, reports, wireframes,
 - JSON, HTML, SVG, PNG, PDF, PowerPoint, WebM, supported MP4 recording, and authorized Google Slides export.
 - Immutable public snapshots, REST, authenticated Streamable HTTP MCP with OAuth/API keys, experimental browser WebMCP, and the `dsa` CLI with an [agent skill](skills/design-studio-ai/SKILL.md).
 - Cloudflare hosting or Docker self-hosting with persistent SQLite/files.
+- Email/password and optional GitHub sign-in, with explicit account linking in Settings.
+- Persisted contextual interviews, editable scopes, explicit approval, and shared REST/MCP/CLI/WebMCP access to the same brief.
+- System/light/dark appearance, keyboard-friendly mobile controls, and design checks that locate likely text overflow, missing media, and contrast issues without changing the canvas.
+- Searchable API/CLI/connection documentation, a visual beginner guide, crawlable HTML, Markdown, sitemap, and llms indexes.
 
 Generation calls real providers and requires your credentials and account access. It returns a proposal or asset; saved designs change through explicit revision-checked writes.
 
@@ -49,19 +55,26 @@ Set `ENCRYPTION_KEY` and the public `APP_URL` in your environment or a local Com
 
 Create an API token in Settings and inject `DESIGN_STUDIO_API_KEY` into the agent environment. `DESIGN_STUDIO_URL` defaults to the live studio. Network MCP is at `https://studio.agentkit.best/mcp`, with OAuth discovery on the same origin.
 
-The CLI is built and distributable as a tarball; it is **not published to the npm registry**. Build and install from this checkout:
+Install the published [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) CLI tarball:
+
+```sh
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz
+dsa --help
+```
+
+The package is **not published to the npm registry**. To build and install from this checkout instead:
 
 ```sh
 cd packages/cli
 npm pack
 cd ../..
-npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.1.0.tgz
+npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.0.tgz
 dsa --help
 dsa schema
 dsa projects list
 ```
 
-Check [GitHub Releases](https://github.com/bestagentkits/design-studio-ai/releases) for attached release tarballs before installing a release URL. [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
+The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
 
 ## Verify and contribute
 
@@ -76,4 +89,4 @@ Run `npm run typecheck`, `npm test`, and `npm run build`. `npm run test:e2e` sta
 - WebMCP is experimental and feature-detected; other browsers retain the human UI and network MCP.
 - Upstream dependency audit findings remain; see [security notes](docs/deployment.md#dependency-security).
 
-[Product brief](docs/product-brief.md) records the requested scope. [Delivery status](plans/2026-09-07-bootstrap-design-studio-ai/plan.md) and its verification report distinguish completed checks from pending release work.
+[Product brief](docs/product-brief.md) records the requested scope. [Current verification](plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) records 70 passing tests, 14 desktop/mobile E2E checks, 21 production checks, and 21 Docker checks, alongside the boundaries above. [Initial delivery evidence](plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md) remains available for v0.1.0.

@@ -11,6 +11,10 @@ Use Design Studio's existing document, templates, and node operations to produce
 
 Reuse context for audience, purpose, deliverable format, dimensions, brand/theme, content, and success criteria. Ask only for missing choices that materially change the result. Respect supplied assets and exact copy. Distinguish a request to design from authorization to publish publicly or incur provider charges.
 
+For a new prompt-driven project, use `get_design_brief` and `update_design_brief` (CLI `brief get` / `brief put`). Start with `{request:"the user's request"}` and brief revision 0. Use your own model to propose an `interview` containing a concise `message`, up to eight contextual `questions`, and a proposed `scope` or null. Questions have stable IDs, title, description, type (`text`, `single`, `multiple`), options, and required. Ask these in the host conversation or direct the user to the project's interactive Studio questions. This path requires no additional provider API key.
+
+Persist answers rather than guessing them. Propose a scope with objective, audience, direction, deliverables, constraints, and acceptanceCriteria. Read it back to the human; invoke `approve_design_brief` only after explicit approval of this version. Brief revisions are separate from document revisions. Every update invalidates approval; a 409 requires rereading and reconciling the brief. BYOK `interview_design_brief` / `brief interview` is optional and incurs provider usage. An existing unapproved brief blocks provider design generation. A blank/manual project can still be edited directly.
+
 ## Connect and inspect
 
 Use `dsa --help` and `dsa health`. Authentication comes from `DESIGN_STUDIO_API_KEY`; server selection comes from `DESIGN_STUDIO_URL`. The CLI persists neither secret. If unavailable, install the source package's generated tarball using the repository's package instructions; do not assume an unpublished npm version exists. An authenticated MCP connection at `/mcp` can perform the same project workflows; discover its actual tool schemas first.
