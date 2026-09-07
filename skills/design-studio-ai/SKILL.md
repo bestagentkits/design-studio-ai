@@ -74,6 +74,8 @@ dsa media status PROJECT_ID JOB_ID
 
 ## Inspect quality and deliver
 
+Run `dsa projects check PROJECT_ID` or MCP `inspect_design` on the saved revision before delivery. Findings contain page/node IDs for targeted corrections; inspect them, apply focused edits, save with the observed revision, then check again. In an open browser editor, `studio_inspect_design` includes unsaved canvas changes. The inspector flags likely overflow, missing media/content and estimated contrast; its bounded output and stated limitations do not replace visual review or certify accessibility.
+
 Preview at the intended size and at a relevant smaller viewport. Check readable contrast, text fitting, hierarchy, alignment, consistent spacing, typography, asset sharpness, and intact page content. For motion, inspect timing and interpolation; for 3D, inspect the real scene in the editor. A successful save alone does not establish visual quality.
 
 CLI `projects export` requests actual JSON/HTML/SVG/PNG/PDF/PPTX/WebM/MP4 from the authenticated server. Binary formats require `--output FILE` and a configured renderer; unavailable encoders return errors. Use `--revision` to bind export to the inspected revision. Import remote media into the project before cloud binary export. Motion is limited to 60 seconds, and MP4 requires encoder support. Cloud motion mixes imported audio/video; browser fallback recordings are silent.
