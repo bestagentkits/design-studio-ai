@@ -90,7 +90,8 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
   const doc = hasScene ? selected : await prepare(selected), page = doc.pages[0], timeline = doc.timeline;
   if (!timeline) throw new Error('This document needs a timeline.');
   if (timeline.duration > 60) throw new Error('Cloud video exports currently support up to 60 seconds per clip.');
-  const candidates = format === 'mp4' ? ['video/mp4;codecs=avc1.42001E', 'video/mp4'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
+  // Prefer VP8 for real-time capture; cloud VP9 initialization can backlog short clips.
+  const candidates = format === 'mp4' ? ['video/mp4;codecs=avc1.42001E', 'video/mp4'] : ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'];
   const mime = candidates.find(t => MediaRecorder.isTypeSupported(t));
   if (!mime) throw new Error(`${format.toUpperCase()} encoding is unavailable in this renderer; use WebM.`);
   const canvas = document.createElement('canvas'); canvas.width = page.width; canvas.height = page.height;
@@ -101,6 +102,8 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
   context.drawImage(sceneCanvas ?? (usesDom(page) ? await captureExportPage(doc) : await imageOf(renderSvg(doc, 0, 0))), 0, 0);
   const stream = canvas.captureStream(0), videoTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
   const media = new Map<string, HTMLMediaElement>(), audio = new AudioContext(), destination = audio.createMediaStreamDestination();
+  let activeRecorder: MediaRecorder | undefined;
+  let startupTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     for (const node of page.nodes.filter(n => (n.type === 'video' || n.type === 'audio') && n.src && n.visible !== false)) {
       const element = document.createElement(node.type === 'video' ? 'video' : 'audio'); element.crossOrigin = 'anonymous'; element.src = node.src!;
@@ -108,12 +111,23 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
       audio.createMediaElementSource(element).connect(destination); media.set(node.id, element);
     }
     if (media.size) for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
-    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+    const recorder = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 }); activeRecorder = recorder;
     const chunks: BlobPart[] = []; recorder.ondataavailable = e => { if (e.data.size) chunks.push(e.data); };
     const finished = new Promise<void>((resolve, reject) => { recorder.onstop = () => resolve(); recorder.onerror = () => reject(new Error('Video encoding failed.')); });
     await audio.resume(); for (const element of media.values()) await element.play();
-    recorder.start(); const start = performance.now();
+    // Cloud Chromium can initialize its encoder after a short timeline has finished.
+    // Render on the original clock, but do not stop until its queued frames can encode.
+    let startupFailure: unknown;
+    const started = new Promise<void>((resolve, reject) => {
+      recorder.onstart = () => resolve();
+      startupTimer = setTimeout(() => reject(new Error('The video encoder did not start in time.')), 10000);
+    });
+    const ready = Promise.race([started, finished.then(() => { throw new Error('Video recording stopped before starting.'); })])
+      .catch(error => { startupFailure = error; }).finally(() => clearTimeout(startupTimer));
+    recorder.start(); videoTrack.requestFrame();
+    const start = performance.now();
     do {
+      if (startupFailure) throw startupFailure;
       const time = Math.min(timeline.duration, (performance.now() - start) / 1000);
       context.clearRect(0, 0, page.width, page.height);
       if (sceneCanvas || usesDom(page)) {
@@ -138,12 +152,14 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
       await new Promise(resolve => setTimeout(resolve, 1000 / timeline.fps));
     } while ((performance.now() - start) / 1000 < timeline.duration);
     videoTrack.requestFrame();
+    await ready; if (startupFailure) throw startupFailure;
+    // Allow queued frames to drain after initialization, including subsecond clips.
     await new Promise(resolve => setTimeout(resolve, 100));
     recorder.stop(); await finished;
     const blob = new Blob(chunks, { type: mime });
     if (blob.size < 32) throw new Error('The video encoder returned no frames.');
     return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob); });
-  } finally { for (const el of media.values()) el.pause(); stream.getTracks().forEach(t => t.stop()); await audio.close(); canvas.remove(); mounted?.dispose(); }
+  } finally { clearTimeout(startupTimer); if (activeRecorder && activeRecorder.state !== 'inactive') activeRecorder.stop(); for (const el of media.values()) el.pause(); stream.getTracks().forEach(t => t.stop()); await audio.close(); canvas.remove(); mounted?.dispose(); }
 }
 async function scene(input: DesignDocument, pageIndex: number, format: 'glb' | 'gltf') {
   const result = await exportScene(input, pageIndex, format === 'glb');

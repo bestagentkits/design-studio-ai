@@ -69,7 +69,7 @@ The package is **not published to the npm registry**. To build and install from 
 cd packages/cli
 npm pack
 cd ../..
-npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.2.tgz
+npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.3.tgz
 dsa --help
 dsa schema
 dsa projects list
