@@ -372,8 +372,10 @@ projectRoutes.post("/:id/assets", async (c) => {
     201,
   );
 });
-projectRoutes.post("/:id/publish", async (c) => {
-  const row = await projectRow(c, c.req.param("id"));
+async function createPublication(c: Context<Env>) {
+  const projectId = c.req.param("id");
+  if (!projectId) fail(400, "invalid_project", "Project ID is required.");
+  const row = await projectRow(c, projectId);
   const doc = JSON.parse(row.document) as DesignDocument;
   const refs = await validateAssets(c, doc, row.id);
   const slug = id();
@@ -402,9 +404,15 @@ projectRoutes.post("/:id/publish", async (c) => {
     url: `${origin(c)}/published/${slug}`,
     revision: row.revision,
   });
-});
-projectRoutes.delete("/:id/publish", async (c) => {
-  const row = await projectRow(c, c.req.param("id"));
+}
+projectRoutes.post("/:id/publish", createPublication);
+projectRoutes.post("/:id/preview", createPublication);
+projectRoutes.post("/:id/share", createPublication);
+
+async function removePublications(c: Context<Env>) {
+  const projectId = c.req.param("id");
+  if (!projectId) fail(400, "invalid_project", "Project ID is required.");
+  const row = await projectRow(c, projectId);
   await c.env.DB.batch([
     c.env.DB.prepare(
       "DELETE FROM publications WHERE project_id=? AND user_id=?",
@@ -414,7 +422,10 @@ projectRoutes.delete("/:id/publish", async (c) => {
     ).bind(row.id, owner(c)),
   ]);
   return c.json({ ok: true });
-});
+}
+projectRoutes.delete("/:id/publish", removePublications);
+projectRoutes.delete("/:id/preview", removePublications);
+projectRoutes.delete("/:id/share", removePublications);
 export async function serveAsset(
   c: Context<Env>,
   assetId: string,
