@@ -129,6 +129,10 @@ test('real SQLite project edits use stdin operations and reject stale revisions 
   const renamed = (await json(['projects', 'rename', created.id, 'Renamed safely', '--revision', '2'])).project; assert.equal(renamed.revision, 3);
   const exported = join(directory, 'deck.svg'); await json(['projects', 'export', created.id, '--format', 'svg', '--output', exported]);
   const svg = await readFile(exported, 'utf8'); assert.match(svg, /^<svg /); assert.match(svg, /Saved through CLI/);
+  const preview = await json(['preview', created.id]); assert.equal((await fetch(preview.url)).status, 200);
+  await json(['unpreview', created.id]); assert.equal((await fetch(preview.url)).status, 404);
+  const share = await json(['share', created.id]); assert.equal((await fetch(share.url)).status, 200);
+  await json(['unshare', created.id]); assert.equal((await fetch(share.url)).status, 404);
   const invalid = await run(['projects', 'document', 'put', created.id, '--revision', '3', '--file', '-'], { input: '{}' });
   assert.equal(invalid.code, 1); assert.equal(JSON.parse(invalid.stderr).error.code, 'invalid_document');
   const unconfigured = await run(['projects', 'export', created.id, '--format', 'png', '--output', join(directory, 'unavailable.png')]);
