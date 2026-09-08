@@ -35,20 +35,33 @@ export function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
   useEffect(() => {
-    ref.current?.showModal();
+    const dialog = ref.current!;
+    const opener = document.activeElement;
+    dialog.showModal();
+    return () => {
+      dialog.close();
+      if (opener instanceof HTMLElement && opener.isConnected)
+        opener.focus({ preventScroll: true });
+    };
   }, []);
   return (
     <dialog
       ref={ref}
       className={`modal ${wide ? "modal-wide" : ""}`}
-      onCancel={onClose}
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        // The owner may keep a busy dialog open; native Escape must not bypass it.
+        event.preventDefault();
+        onClose();
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
       <div className="modal-head">
-        <h2>{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           className="icon-button"
           aria-label="Close dialog"

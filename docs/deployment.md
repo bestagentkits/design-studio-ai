@@ -61,6 +61,14 @@ Enter the stable encryption key at Wrangler's prompt. Other installations must s
 
 Missing browser configuration returns a capability error for server PNG/PDF/PPTX/video/GLB/glTF; JSON/HTML/SVG and React source ZIP do not require a browser. Verify health, sessions, persisted revisions, authenticated MCP, immutable publication, and actual export bytes after deployment. Release observations belong in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
+### Automatic production deployment
+
+The [GitHub Actions workflow](../.github/workflows/ci.yml) verifies pull requests and pushes to `main`. A successful `main` run deploys to the `production` environment: it downloads the static assets built and tested by the verification job, applies pending D1 migrations, deploys the same commit with Wrangler, and checks public health/OAuth discovery. Pull requests never deploy. Deployments are serialized, and a superseded commit is skipped before deployment starts.
+
+Configure repository or production-environment secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` for the account owning the resources in `wrangler.jsonc`. The token needs deployment access to Workers Scripts, the custom-domain zone/routes, and D1 migrations, with any binding permissions required by Wrangler. Keep its scope restricted to that account and zone. [Cloudflare's GitHub Actions guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) describes CI authentication.
+
+The workflow preserves dashboard variables with `--keep-vars` and does not upload or replace runtime secrets. Keep the existing `ENCRYPTION_KEY` and GitHub OAuth secrets on the Worker. CI's public probes do not create accounts, invoke paid providers, or prove a complete ChatGPT login; browser OAuth behavior is covered by the isolated verification suite.
+
 ## Optional integrations
 
 ### GitHub sign-in

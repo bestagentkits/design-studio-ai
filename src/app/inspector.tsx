@@ -18,6 +18,7 @@ import { resolveColor } from "../shared/render";
 import { Field } from "./ui";
 import { mutateDocument } from '../shared/operations';
 const SceneInspector = lazy(() => import('./scene-inspector').then(module => ({ default: module.SceneInspector })));
+import { navigateButtonGroup } from "./keyboard-navigation";
 
 type Props = {
   doc: DesignDocument;
@@ -61,21 +62,27 @@ export function Inspector({
   return (
     <aside className="inspector">
       {doc.kind === '3d' && <Suspense fallback={null}><SceneInspector doc={doc} page={page} node={storedNode} update={update} pageUpdate={pageUpdate}/></Suspense>}
-      <div className="panel-tabs">
+      <div
+        className="panel-tabs"
+        onKeyDown={(event) => navigateButtonGroup(event)}
+      >
         <button
           className={tab === "design" ? "active" : ""}
+          aria-pressed={tab === "design"}
           onClick={() => setTab("design")}
         >
           Design
         </button>
         <button
           className={tab === "theme" ? "active" : ""}
+          aria-pressed={tab === "theme"}
           onClick={() => setTab("theme")}
         >
           Theme
         </button>
         <button
           className={tab === "page" ? "active" : ""}
+          aria-pressed={tab === "page"}
           onClick={() => setTab("page")}
         >
           Page

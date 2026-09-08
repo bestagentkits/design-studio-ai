@@ -486,7 +486,30 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
           alice,
         );
         assert.equal(consent.status, 200);
+        assert.equal(consent.headers.get("content-security-policy"),
+          "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' http://127.0.0.1:4321; frame-ancestors 'none'; base-uri 'none'");
         assert.match(await consent.text(), /Allow access/);
+        for (const redirectUri of [
+          "https://chatgpt.com/connector/oauth/callback-id",
+          "https://chatgpt.com/connector_platform_oauth_redirect",
+          "https://host;script-src/callback",
+          "https://*.example/callback",
+        ]) {
+          const registered = await request("/oauth/register", "POST", { redirect_uris: [redirectUri] });
+          assert.equal(registered.status, 201);
+          const externalClient = await registered.json() as { client_id: string };
+          const externalConsent = await request(`/oauth/authorize?${new URLSearchParams({
+            ...params, client_id: externalClient.client_id, redirect_uri: redirectUri,
+          })}`, "GET", undefined, alice);
+          if (redirectUri.startsWith("https://chatgpt.com/")) {
+            assert.equal(externalConsent.status, 200);
+            assert.equal(externalConsent.headers.get("content-security-policy"),
+              "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' https://chatgpt.com; frame-ancestors 'none'; base-uri 'none'");
+          } else {
+            assert.equal(externalConsent.status, 400);
+            assert.equal((await externalConsent.json() as { error: string }).error, "invalid_redirect_uri");
+          }
+        }
         const approved = await form(
           "/oauth/authorize",
           { ...params, decision: "allow" },

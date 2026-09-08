@@ -1,5 +1,6 @@
 import { useId, useRef, useState, useSyncExternalStore } from "react";
 import { Check, ChevronDown, Monitor, Moon, Sun } from "lucide-react";
+import { navigateButtonGroup } from "./keyboard-navigation";
 
 type Appearance = "system" | "light" | "dark";
 const storageKey = "design-studio:appearance";
@@ -100,6 +101,7 @@ export function ThemeToggle({ compact = true }: { compact?: boolean }) {
         className="appearance-options"
         role="group"
         aria-label="Appearance preference"
+        onKeyDown={(event) => navigateButtonGroup(event)}
       >
         {choices.map((choice) => (
           <button
@@ -117,7 +119,16 @@ export function ThemeToggle({ compact = true }: { compact?: boolean }) {
       </div>
     );
   return (
-    <div className="appearance-picker">
+    <div
+      className="appearance-picker"
+      onKeyDownCapture={(event) => {
+        if (event.key !== "Escape" || !menu.current?.matches(":popover-open")) return;
+        event.preventDefault();
+        event.stopPropagation();
+        menu.current.hidePopover();
+        trigger.current?.focus();
+      }}
+    >
       <button
         ref={trigger}
         type="button"

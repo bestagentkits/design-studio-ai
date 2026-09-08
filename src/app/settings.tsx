@@ -13,6 +13,7 @@ import {
 import { api, post, put, message, type Provider, type User } from "./api";
 import { Busy, Field, Modal } from "./ui";
 import { ThemeToggle } from "./theme-toggle";
+import { navigateButtonGroup } from "./keyboard-navigation";
 
 const providerOptions = [
   {
@@ -164,21 +165,28 @@ export function Settings({
   return (
     <Modal title="Make the studio yours" onClose={onClose} wide>
       <div className="settings-layout">
-        <nav className="settings-nav" aria-label="Settings">
+        <nav
+          className="settings-nav"
+          aria-label="Settings"
+          onKeyDown={(event) => navigateButtonGroup(event, ":scope > button", "auto")}
+        >
           <button
             className={tab === "providers" ? "selected" : ""}
+            aria-pressed={tab === "providers"}
             onClick={() => setTab("providers")}
           >
             <KeyRound size={17} /> AI providers
           </button>
           <button
             className={tab === "agents" ? "selected" : ""}
+            aria-pressed={tab === "agents"}
             onClick={() => setTab("agents")}
           >
             <Code2 size={17} /> Agent connections
           </button>
           <button
             className={tab === "account" ? "selected" : ""}
+            aria-pressed={tab === "account"}
             onClick={() => setTab("account")}
           >
             <span className="mini-avatar">{user.name.slice(0, 1)}</span> Your
@@ -193,11 +201,15 @@ export function Settings({
                 Connect a provider to generate designs and media. Keys are
                 encrypted on the server and never included in designs.
               </p>
-              <div className="provider-list">
+              <div
+                className="provider-list"
+                onKeyDown={(event) => navigateButtonGroup(event, ":scope > button", "vertical")}
+              >
                 {providerOptions.map((item) => (
                   <button
                     key={item.id}
                     className={selected === item.id ? "selected" : ""}
+                    aria-pressed={selected === item.id}
                     onClick={() => {
                       setSelected(item.id);
                       setKey("");

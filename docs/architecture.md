@@ -6,6 +6,12 @@ Design Studio AI uses a validated document as the boundary between people, agent
 
 The [React application](../src/app/app.tsx) provides the library. Its [editor](../src/app/editor.tsx) coordinates direct editing, proposals, local undo/redo, assets, timeline playback, exports, and feature-detected WebMCP. The [Hono handler](../server/index.ts) owns authentication, persistence, provider requests, publishing, OAuth, and network MCP.
 
+When a page thumbnail has keyboard focus, Left/Right selects and focuses the adjacent page, keeping its thumbnail visible and stopping at the first/last page. Canvas-object arrow nudging and text-field caret controls retain their own behavior.
+
+The same bounded navigation applies to editor/inspector panel choices, mobile panels, and appearance choices. Layers and provider choices use Up/Down; Settings follows its vertical desktop or horizontal mobile layout. Home/End selects the first/last choice. The shared [keyboard navigation helper](../src/app/keyboard-navigation.ts) keeps focus with selection and scrolls only to reveal that choice.
+
+Canvas editing shortcuts respect focused controls, text input, IME composition, dialogs, popovers, preview, and pending operations. Layer-list arrows navigate instead of nudging; canvas object focus supports nudging and layer/canvas focus supports duplicate/delete. Dialogs restore focus to their opener when closed; Escape honors an owner's busy guard. Escape in the appearance menu closes that menu without changing underlying selection or documentation search.
+
 Cloudflare runs that handler with D1, R2, static assets, and Browser Rendering. The [Node adapter](../server/node.ts) supplies SQLite, filesystem assets, static serving, and Chromium for the same routes. Headless export runs the application's bundled renderer against validated data; it is not a general remote browser or user-code execution service.
 
 ## Document and edit contracts
@@ -71,6 +77,8 @@ Prompt-driven projects use a separate, owner-scoped design brief. [Brief routes]
 Network MCP uses stateless Streamable HTTP POST at `/mcp`, with API-token/OAuth authentication and independent Origin validation. The server supports `2025-11-25` and declared SDK legacy compatibility, not the newer 2026 transport. Tools reuse ownership/revision services.
 
 OAuth implements discovery, dynamic registration, authenticated consent, exact registered redirects, S256 PKCE, canonical MCP audience checks, one-use atomic authorization codes, and refresh tokens. Clients receive MCP credentials, never application sessions or provider keys.
+
+The consent page permits form submissions to the studio and the validated callback origin: Chromium applies `form-action` to the subsequent cross-origin redirect too. Keep the exact redirect-URI check on the server; never interpolate wildcard hosts or CSP directives from client registration into the policy. [Browser OAuth tests](../tests/oauth-browser.spec.ts) exercise Allow/Deny callbacks, PKCE exchange, and authenticated MCP initialization against isolated local servers.
 
 Browser WebMCP detects `document.modelContext`, with the legacy navigator surface as a fallback, and cleans up registrations. This capability is experimental; ordinary UI and network MCP work without it. [Agent access](agents.md) covers the stateless CLI and installable skill.
 
