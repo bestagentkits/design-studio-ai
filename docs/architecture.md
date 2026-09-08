@@ -6,6 +6,12 @@ Design Studio AI uses a validated document as the boundary between people, agent
 
 The [React application](../src/app/app.tsx) provides the library. Its [editor](../src/app/editor.tsx) coordinates direct editing, proposals, local undo/redo, assets, timeline playback, exports, and feature-detected WebMCP. The [Hono handler](../server/index.ts) owns authentication, persistence, provider requests, publishing, OAuth, and network MCP.
 
+When a page thumbnail has keyboard focus, Left/Right selects and focuses the adjacent page, keeping its thumbnail visible and stopping at the first/last page. Canvas-object arrow nudging and text-field caret controls retain their own behavior.
+
+The same bounded navigation applies to editor/inspector panel choices, mobile panels, and appearance choices. Layers and provider choices use Up/Down; Settings follows its vertical desktop or horizontal mobile layout. Home/End selects the first/last choice. The shared [keyboard navigation helper](../src/app/keyboard-navigation.ts) keeps focus with selection and scrolls only to reveal that choice.
+
+Canvas editing shortcuts respect focused controls, text input, IME composition, dialogs, popovers, preview, and pending operations. Layer-list arrows navigate instead of nudging; canvas object focus supports nudging and layer/canvas focus supports duplicate/delete. Dialogs restore focus to their opener when closed; Escape honors an owner's busy guard. Escape in the appearance menu closes that menu without changing underlying selection or documentation search.
+
 Cloudflare runs that handler with D1, R2, static assets, and Browser Rendering. The [Node adapter](../server/node.ts) supplies SQLite, filesystem assets, static serving, and Chromium for the same routes. Headless export runs the application's bundled renderer against validated data; it is not a general remote browser or user-code execution service.
 
 ## Document and edit contracts

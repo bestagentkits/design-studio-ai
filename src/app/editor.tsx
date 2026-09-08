@@ -69,6 +69,7 @@ import {
 import { Brand, Busy, Field, Modal } from "./ui";
 import { Inspector } from "./inspector";
 import { ThemeToggle } from "./theme-toggle";
+import { navigateButtonGroup } from "./keyboard-navigation";
 import { DesignBriefWorkspace } from "./design-brief";
 import type { DesignBrief } from "../shared/brief";
 import { inspectDesign } from "../shared/design-checks";
@@ -535,6 +536,12 @@ export function Editor({
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
+      // Local controls and overlays own their keys, even when a canvas node remains selected.
+      if (
+        event.defaultPrevented || event.isComposing ||
+        !document.querySelector(".editor-shell") ||
+        document.querySelector("dialog[open], [popover]:popover-open")
+      ) return;
       if ((event.metaKey || event.ctrlKey) && event.key === "s") {
         event.preventDefault();
         void saveRef.current();
@@ -545,10 +552,19 @@ export function Editor({
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
       )
         return;
+      if (event.key === "Escape") {
+        setSelected(null);
+        setPreview(false);
+        return;
+      }
+      if (busy || preview || proposal || event.altKey) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         event.shiftKey ? redo() : undo();
-      } else if (
+        return;
+      }
+      if (!target.closest(".node-target, .layer-row, .canvas-viewport")) return;
+      if (
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === "d"
       ) {
@@ -557,10 +573,9 @@ export function Editor({
       } else if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
         removeNode();
-      } else if (event.key === "Escape") {
-        setSelected(null);
-        setPreview(false);
       } else if (
+        !target.closest(".layer-row") &&
+        !event.metaKey && !event.ctrlKey &&
         node &&
         !node.locked &&
         ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
@@ -587,7 +602,7 @@ export function Editor({
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [node, selected, pageIndex]);
+  }, [node, selected, pageIndex, busy, preview, proposal]);
   function addNode(type: DesignNode["type"], extra: Partial<DesignNode> = {}) {
     const newNode: DesignNode = {
       id: uid(),
@@ -610,6 +625,7 @@ export function Editor({
       d.pages[pageIndex]!.nodes.push(newNode);
     });
     setSelected(newNode.id);
+    viewport.current?.focus({ preventScroll: true });
     return newNode;
   }
   function pointerDown(
@@ -618,6 +634,8 @@ export function Editor({
     resize = false,
   ) {
     event.stopPropagation();
+    if (event.currentTarget instanceof HTMLElement)
+      event.currentTarget.focus({ preventScroll: true });
     if (target.locked || preview || proposal) {
       setSelected(target.id);
       return;
@@ -1414,21 +1432,27 @@ export function Editor({
           </button>
         </div>
       )}
-      <div className="mobile-editor-nav">
+      <div
+        className="mobile-editor-nav"
+        onKeyDown={(event) => navigateButtonGroup(event)}
+      >
         <button
           className={mobilePanel === "chat" ? "active" : ""}
+          aria-pressed={mobilePanel === "chat"}
           onClick={() => setMobilePanel("chat")}
         >
           <MessageSquare size={16} /> Chat & layers
         </button>
         <button
           className={mobilePanel === "canvas" ? "active" : ""}
+          aria-pressed={mobilePanel === "canvas"}
           onClick={() => setMobilePanel("canvas")}
         >
           <Monitor size={16} /> Canvas
         </button>
         <button
           className={mobilePanel === "inspector" ? "active" : ""}
+          aria-pressed={mobilePanel === "inspector"}
           onClick={() => setMobilePanel("inspector")}
         >
           <SlidersHorizontal size={16} /> Design
@@ -1436,21 +1460,27 @@ export function Editor({
       </div>
       <div className="editor-workspace">
         <aside className="left-panel">
-          <div className="panel-tabs">
+          <div
+            className="panel-tabs"
+            onKeyDown={(event) => navigateButtonGroup(event)}
+          >
             <button
               className={panel === "chat" ? "active" : ""}
+              aria-pressed={panel === "chat"}
               onClick={() => setPanel("chat")}
             >
               Chat
             </button>
             <button
               className={panel === "layers" ? "active" : ""}
+              aria-pressed={panel === "layers"}
               onClick={() => setPanel("layers")}
             >
               Layers
             </button>
             <button
               className={panel === "assets" ? "active" : ""}
+              aria-pressed={panel === "assets"}
               onClick={() => setPanel("assets")}
             >
               Assets
@@ -1548,7 +1578,10 @@ export function Editor({
               </button>
             </>
           ) : panel === "layers" ? (
-            <div className="layers-panel">
+            <div
+              className="layers-panel"
+              onKeyDown={(event) => navigateButtonGroup(event, ".layer-row", "vertical")}
+            >
               <div className="layer-heading">
                 <h3>{page.name}</h3>
                 <span>{page.nodes.length} layers</span>
@@ -1557,6 +1590,7 @@ export function Editor({
                 <button
                   key={layer.id}
                   className={`layer-row ${selected === layer.id ? "selected" : ""}`}
+                  aria-pressed={selected === layer.id}
                   onClick={() => {
                     setSelected(layer.id);
                     setDirectText(null);
@@ -1867,6 +1901,7 @@ export function Editor({
           <div
             className="canvas-viewport"
             ref={viewport}
+            tabIndex={-1}
             onPointerDown={(e) => {
               if (e.target === e.currentTarget) setSelected(null);
             }}
@@ -1877,7 +1912,11 @@ export function Editor({
                   page={page}
                   theme={displayed.theme}
                   selected={selected}
-                  onSelect={setSelected}
+                  onSelect={(id) => {
+                    setSelected(id);
+                    // The renderer recreates its canvas on selection; focus the stable viewport.
+                    viewport.current?.focus({ preventScroll: true });
+                  }}
                 />
               </Suspense>
             ) : (
@@ -2076,11 +2115,15 @@ export function Editor({
             </div>
           )}
           <div className="canvas-bottom">
-            <div className="page-strip">
+            <div
+              className="page-strip"
+              onKeyDown={(event) => navigateButtonGroup(event, ".page-thumbnail")}
+            >
               {displayed.pages.map((p, index) => (
                 <button
                   key={p.id}
                   className={`page-thumbnail ${pageIndex === index ? "selected" : ""}`}
+                  aria-pressed={pageIndex === index}
                   onClick={() => {
                     setPageIndex(index);
                     setSelected(null);
