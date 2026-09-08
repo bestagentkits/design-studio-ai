@@ -1,7 +1,7 @@
 ## End-to-end work summary
 Designs now retain nested layouts, reusable components and editable design systems across human and agent edits. The workspace adds complete presentation navigation, motion tracks, mesh/UV/rig authoring, provider/font discovery and real React/GLB/glTF exports. REST, MCP, WebMCP and CLI use the same validation and revision boundaries.
 
-The implementation was locally reviewed, then integrated with main's keyboard navigation and verified deployment workflow. This PR ships version 0.2.2; the production workflow applies the additive design-system migration before deploying the verified build.
+The implementation was locally reviewed, then integrated with main's keyboard navigation, preview/share aliases and verified deployment workflow. This PR ships version 0.2.2; the production workflow applies the additive design-system migration before deploying the verified build.
 
 ## Subagent delegation
 Implementation verification used completion_review, core_verification and export_parity. Reviews and focused export/browser checks completed; captured-image presets and curl URL findings were resolved. Shipping integration, verification and deployment are handled in the current task.
@@ -18,7 +18,7 @@ No requested feature was removed. Runtime boundaries remain documented: live upd
 
 ## Completion evidence
 - Accepted scope and format boundaries: [implementation status](plans/260908-1632-structured-design-workspace/reports/implementation-status.md).
-- Local typecheck, CLI build, 137 unit/integration tests and production build passed on the integrated branch. Full browser suite is being revalidated after WebGL cleanup.
+- Local typecheck, CLI build, 137 unit/integration tests and production build passed on the integrated branch. Final full browser suite passed: 24 desktop and 23 mobile scenarios; one existing mobile appearance-menu skip. Worker dry-run and CLI packaging also passed.
 - Review: prior implementation findings resolved; integrated keyboard behavior retained.
 - CI: pending PR creation.
 - UI screenshots: [nested layers](plans/260908-1716-keyboard-ux/reports/layers-desktop.png), [mobile layers](plans/260908-1716-keyboard-ux/reports/layers-mobile.png).
@@ -28,7 +28,8 @@ No requested feature was removed. Runtime boundaries remain documented: live upd
 - [x] Shared contracts, editor, renderer and agent clients implemented.
 - [x] Additive migration and existing deployment secret handling preserved.
 - [x] Independent implementation review findings resolved.
-- [ ] Integrated full browser suite and PR CI passed.
+- [x] Integrated full browser suite passed.
+- [ ] PR CI passed.
 - [ ] Main deployment and live runtime verified.
 
 ## Human actions required
