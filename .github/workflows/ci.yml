@@ -1,4 +1,4 @@
-name: Verify
+name: Verify and deploy
 on:
   push:
     branches: [main]
@@ -26,7 +26,72 @@ jobs:
       - run: npm pack
         working-directory: packages/cli
       - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: production-assets
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: browser-test-results
           path: test-results
+  deploy:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: cloudflare-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://studio.agentkit.best
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check this is still the main head
+        id: head
+        run: |
+          if [ "$(git ls-remote origin refs/heads/main | cut -f1)" = "$GITHUB_SHA" ]; then
+            echo 'current=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Skipping superseded main commit.'
+          fi
+      - uses: actions/setup-node@v4
+        if: steps.head.outputs.current == 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.head.outputs.current == 'true'
+      - uses: actions/download-artifact@v4
+        if: steps.head.outputs.current == 'true'
+        with:
+          name: production-assets
+          path: dist
+      - name: Apply migrations and deploy verified revision
+        if: steps.head.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$CLOUDFLARE_API_TOKEN" && test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npm run cf -- d1 migrations apply design-studio-ai --remote
+          npm run cf -- deploy --keep-vars --message "$GITHUB_SHA"
+      - name: Verify public production endpoints
+        if: steps.head.outputs.current == 'true'
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          const origin = 'https://studio.agentkit.best';
+          const read = async path => {
+            const response = await fetch(origin + path, { redirect: 'error', signal: AbortSignal.timeout(15000) });
+            assert.equal(response.status, 200);
+            return response.json();
+          };
+          assert.equal((await read('/api/health')).ok, true);
+          assert.equal((await read('/.well-known/oauth-protected-resource/mcp')).resource, origin + '/mcp');
+          assert.equal((await read('/.well-known/oauth-authorization-server')).authorization_endpoint, origin + '/oauth/authorize');
+          console.log('Production health and OAuth discovery passed.');
+          NODE

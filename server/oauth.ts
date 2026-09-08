@@ -124,6 +124,10 @@ oauthRoutes.on(["GET", "POST"], "/oauth/authorize", async (c) => {
   if (c.get("authMethod") !== "session")
     fail(403, "session_required", "OAuth consent requires a browser session.");
   if (c.req.method === "GET") {
+    const callbackOrigin = new URL(body.redirect_uri).origin;
+    // A URL host can contain CSP delimiters or wildcards; only emit a literal source.
+    if (!/^https?:\/\/(?:[a-z0-9.-]+|\[[0-9a-f:]+\])(?::[0-9]+)?$/i.test(callbackOrigin))
+      fail(400, "invalid_redirect_uri", "Redirect URI must have a literal HTTP(S) host.");
     const fields = Object.entries(body)
       .map(
         ([key, value]) =>
@@ -132,7 +136,8 @@ oauthRoutes.on(["GET", "POST"], "/oauth/authorize", async (c) => {
       .join("");
     c.header(
       "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+      // Chromium checks form-action on the callback redirect as well as the POST.
+      `default-src 'none'; style-src 'unsafe-inline'; form-action 'self' ${callbackOrigin}; frame-ancestors 'none'; base-uri 'none'`,
     );
     return c.html(
       `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Connect ${escapeHtml(client.name)}</title><style>body{font:17px system-ui;background:#18191c;color:#f4f4f5;max-width:520px;margin:80px auto;padding:24px}button{padding:12px 20px;margin:8px;background:#c8ef70;border:0;border-radius:8px}p{line-height:1.7}</style></head><body><h1>Connect ${escapeHtml(client.name)}?</h1><p>Signed in as ${escapeHtml(user.email)}.</p><p>This client will be able to read, create, edit, delete and publish your designs, manage assets, and use your configured AI providers. Provider requests can incur charges on your provider account.</p><p>Redirect: ${escapeHtml(body.redirect_uri)}</p><form method="post">${fields}<button name="decision" value="allow">Allow access</button><button name="decision" value="deny">Deny</button></form></body></html>`,

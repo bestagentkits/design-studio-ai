@@ -60,6 +60,8 @@ Network MCP uses stateless Streamable HTTP POST at `/mcp`, with API-token/OAuth 
 
 OAuth implements discovery, dynamic registration, authenticated consent, exact registered redirects, S256 PKCE, canonical MCP audience checks, one-use atomic authorization codes, and refresh tokens. Clients receive MCP credentials, never application sessions or provider keys.
 
+The consent page permits form submissions to the studio and the validated callback origin: Chromium applies `form-action` to the subsequent cross-origin redirect too. Keep the exact redirect-URI check on the server; never interpolate wildcard hosts or CSP directives from client registration into the policy. [Browser OAuth tests](../tests/oauth-browser.spec.ts) exercise Allow/Deny callbacks, PKCE exchange, and authenticated MCP initialization against isolated local servers.
+
 Browser WebMCP detects `document.modelContext`, with the legacy navigator surface as a fallback, and cleans up registrations. This capability is experimental; ordinary UI and network MCP work without it. [Agent access](agents.md) covers the stateless CLI and installable skill.
 
 ## Rendering and export
