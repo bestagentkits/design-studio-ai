@@ -6,8 +6,14 @@ Use [docs/README.md](docs/README.md) to find the owning guidance before changing
 
 - Deliver the requested scope. Do not substitute mock provider responses, fake exports, or fixture projects for real behavior.
 - Keep browser, REST, MCP, WebMCP and CLI edits on the shared validators and services. When changing a public contract, inspect each affected client and its documentation rather than introducing a second document format.
+- Keep webapp features, API endpoints, CLI commands, MCP tools, WebMCP, official documentation, API documentation, the agent skill, `llms.txt`, and `llms-full.txt` synchronized in the same change. Follow the [documentation source and build ownership](docs/web-documentation.md); update source documents and regenerate derived references rather than editing generated output.
 - Preserve separate brief and document revisions. Keep scope approval explicit; do not interpret unanswered questions as approval or bypass conflicts by retrying with a higher revision.
 - Keep authorization and validation on the server. A UI check must not replace project ownership, OAuth scope, asset isolation, or revision checks.
+
+## Prioritize people and agents
+
+- Treat UX (User Experience) and AX (AI Agent Experience) as the highest product priorities. Evaluate each feature through both the human workflow and the agent workflow, including discoverability, feedback, errors, and recovery.
+- Build mobile-first, responsive layouts and preserve cross-browser compatibility. Feature-detect browser-dependent capabilities and provide usable fallbacks. Verify affected interactions at mobile and desktop sizes, and report which browsers were actually tested; Chromium-only coverage does not establish cross-browser support.
 
 ## Protect data and credentials
 

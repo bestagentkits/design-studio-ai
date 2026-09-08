@@ -15,6 +15,7 @@ This brief records the requested product scope. It is not a claim that every fea
 - Provide authenticated Streamable HTTP MCP with API keys and OAuth, browser WebMCP tools, a complete CLI, and an installable agent skill.
 - Publish the MIT repository at `bestagentkits/design-studio-ai`, deploy on Cloudflare at `studio.agentkit.best`, and provide Docker self-hosting.
 - Follow screenshot references in `screenshots/`; preserve usable touch and keyboard workflows at narrow widths.
+- Prioritize human user experience (UX) and agent experience (AX) together: mobile-first responsive flows, cross-browser usability, discoverable tools, and clear recovery from errors and conflicts. These are product requirements; report tested browsers separately from intended compatibility.
 
 The application does not execute arbitrary user code, shell commands, or backend local runtimes. Rich output is represented as validated data. External provider charges and credentials remain controlled by the user. No simulated success, fixture projects presented as user data, or placeholder exports satisfy acceptance.
 
