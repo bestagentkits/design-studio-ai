@@ -1,6 +1,6 @@
 # Public documentation and beginner guide
 
-The public documentation portal lives at `/docs`; the visual beginner guide lives at `/guide`. Neither surface requests credentials or calls authenticated/paid APIs. API-key management links to the existing signed-in `/?settings=agents` workflow.
+The public documentation portal lives at `/docs`; the visual beginner guide lives at `/guide`. The REST page includes an interactive playground: a user can enter an API key held in page memory, or use their signed-in session, and explicitly execute real API requests. Provider operations may incur usage and writes affect the selected project. Passive page viewing and the build process do not make those requests. The playground accepts query parameters, uploads real files using multipart form data, and downloads binary responses. Its copyable curl example reflects those request formats. API-key management links to the existing signed-in `/?settings=agents` workflow.
 
 ## Owning content and routes
 
@@ -8,7 +8,7 @@ The public documentation portal lives at `/docs`; the visual beginner guide live
 
 Canonical documentation routes are `/docs`, `/docs/revisions`, `/docs/api`, `/docs/cli`, `/docs/mcp`, `/docs/webmcp`, `/docs/api-keys`, and `/docs/self-hosting`. Real links support direct loading and crawler discovery; client navigation also preserves history. Legacy section hashes remain readable. Connection examples use the current browser origin so a self-hosted workspace does not send users to the public service by accident.
 
-The API reference includes public schema/catalog, account/GitHub auth, projects/revisions, persisted interviews/scopes, design preflight, media/assets, conversations, exports/publishing, and credential management. Machine schemas remain authoritative at `/api/schema`; the template/theme/block catalog is at `/api/catalog`. MCP tool names and the eight WebMCP browser tools are checked against their owning server/editor implementations. Copyable examples contain placeholders and environment references, never real secrets.
+The API reference includes public schema/catalog, account/GitHub auth, projects/revisions, persisted interviews/scopes, design preflight, media/assets, conversations, exports/publishing, and credential management. Machine schemas remain authoritative at `/api/schema`; the template/theme/block catalog is at `/api/catalog`. [api-reference.ts](../src/shared/api-reference.ts) owns the playground operations and `/api/openapi` index, including design-system versions, font/model discovery and multipart uploads. WebMCP combines editor tools with [browser-design-tools.ts](../src/app/browser-design-tools.ts); discover supported tools at runtime. Copyable examples contain placeholders and environment references, never real secrets.
 
 ## HTML, Markdown, and agent discovery
 

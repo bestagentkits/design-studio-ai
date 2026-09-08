@@ -36,6 +36,7 @@ for (const name of (await readdir(resolve("migrations")))
 }
 const port = Number(process.env.PORT ?? 8787);
 const env: Bindings = {
+  GOOGLE_FONTS_API_KEY: (() => { const { env: variables } = process; return variables.GOOGLE_FONTS_API_KEY; })(),
   DB: db,
   ASSETS_BUCKET: new FileBucket(resolve(dataDir, "assets")),
   ASSETS: staticAssets(resolve("dist")),

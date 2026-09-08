@@ -19,6 +19,16 @@ Cloudflare runs that handler with D1, R2, static assets, and Browser Rendering. 
 
 One document covers web interfaces, slides, reports, wireframes, 3D, and video. Pages contain ordered flat node arrays with optional parent references; coordinates use pixels, rotation degrees, and timeline time seconds. Validation rejects invalid IDs/references, cycles, non-finite geometry, unsupported versions, and invalid timeline targets. Style/data fields do not authorize arbitrary CSS, DOM properties, or code. Renderers interpret supported values and escape text.
 
+Optional structured capabilities live in [design-capabilities.ts](../src/shared/design-capabilities.ts). A page or container can use flex, grid, or explicit absolute layout, with sizing and transform pivots. Parent references form the editable layer tree; nodes without an explicit parent layout retain legacy page-space coordinates. Explicit absolute containers use local child coordinates. New Web/App templates use structured layout. [DocumentView](../src/app/document-view.tsx) renders real interactive components; [layout.ts](../src/shared/layout.ts) resolves geometry for structural operations and static SVG. Text/component intrinsic sizing requires browser measurement for pixel fidelity.
+
+The component renderer uses Ant Design and themeable Radix/native controls. Structured PowerPoint pages are rasterized to preserve browser layout; legacy text and primitive shapes remain native PowerPoint objects. [React source export](../src/shared/react-export.ts) packages the document, trusted component source, dependencies, and embedded assets into a runnable frontend project. Browser and authenticated GLB/glTF export use the [shared scene runtime](../src/shared/scene-runtime.ts), including sampled animation and skinning. REST, MCP and CLI export also return React ZIP and GLB/glTF bytes. Server exports embed owned assets; React includes portable source assets, while glTF embeds buffers/textures without external sidecars.
+
+Reusable design systems use [shared definitions](../src/shared/design-systems.ts) and [owner-scoped routes](../server/design-systems.ts). Tokens, component presets and page compositions are stored as immutable numbered versions. Updating requires the observed version; applying/inserting requires the project revision. Projects embed their content and pin system identity/version, so library deletion does not break an existing design. Insertion remaps layer/interaction IDs and normalizes legacy coordinates. Library definitions reject private project asset references.
+
+Browser mesh editing runs validated operations in a [geometry worker](../scripts/geometry-worker.ts); vertices, triangles, UVs, bones and weights remain structured document data. Mesh manipulation, UV projection and bone editing do not execute agent-supplied JavaScript. Imported GLB objects can be placed and exported, while direct vertex editing currently operates on document meshes or converted primitives.
+
+Live editing uses [three-way merge](../src/shared/document-merge.ts) through [collaboration routes](../server/collaboration.ts). The editor checks for remote revisions on a 1.2-second interval and merges independent field changes. Overlapping edits return explicit conflicts; the UI preserves its local state and pauses automatic writes. This is polling synchronization, not a WebSocket presence service. Undo snapshots are rebased against remote edits; incompatible snapshots are removed with a notice. Document writes retain the existing atomic owner/revision check and never alter brief approval.
+
 The persisted project revision is distinct from the document schema version. Document PUT accepts `{document,expectedRevision}` and uses an atomic SQL update conditioned on project ID, owner, and revision. Stale writes return 409; clients re-read and reconcile. Provider generation returns a proposal and preserves the saved document until an explicit revision-checked write. Generated media is placed into nodes separately.
 
 ## API owners
@@ -31,6 +41,8 @@ JSON errors use `{error:{code,message,details?}}` without secrets. Routes valida
 | Projects, saves, uploads, clones, publication | [projects.ts](../server/projects.ts) |
 | Project conversations | [conversations.ts](../server/conversations.ts) |
 | Structured generation and typed media jobs/edits | [providers.ts](../server/providers.ts), [capability guide](providers.md) |
+| Design-system versions and project application | [design-systems.ts](../server/design-systems.ts) |
+| Google Fonts and provider model discovery | [discovery.ts](../server/discovery.ts) |
 | Authenticated file export | [exports.ts](../server/exports.ts) |
 | Native Google Slides | [google-slides.ts](../server/google-slides.ts) |
 | OAuth discovery, consent, PKCE, tokens | [oauth.ts](../server/oauth.ts) |
@@ -68,11 +80,11 @@ Interactive 3D uses [scene-view.tsx](../src/app/scene-view.tsx); export browsers
 
 JSON preserves the document. SVG preserves supported static structure; HTML can include the trusted 3D/timeline viewer. PNG renders the selected page; PDF/PowerPoint process all pages. PowerPoint retains editable text/primitives and rasterizes complex nodes. Google Slides creates native text/shapes/HTTPS images and rejects unsupported complex nodes and private image references.
 
-Cloud binary rendering embeds owned assets and blocks external requests: remote media must be imported first. Bounds include 16,777,216 pixels per checked object/page and 67,108,864 pixels across the selected render workload, plus embedded-byte limits. Motion records actual timeline content for up to 60 seconds; unavailable encoders fail explicitly. MP4 depends on runtime support. [exports.ts](../server/exports.ts) owns current enforced limits.
+Cloud binary rendering embeds owned assets and blocks external browser requests: remote media must be imported first. The server separately fetches Google Fonts CSS and font bytes from fixed Google origins with redirect, time and byte limits, then embeds them before isolated rendering. Browser previews load Google stylesheets directly. Catalog configuration and fallback behavior are described in [Providers](providers.md). Bounds include 16,777,216 pixels per checked object/page and 67,108,864 pixels across the selected render workload, plus embedded-byte limits. Motion records actual timeline content for up to 60 seconds; unavailable encoders fail explicitly. MP4 depends on runtime support. [exports.ts](../server/exports.ts) owns current enforced limits.
 
 SVG cannot preserve an interactive WebGL scene as editable geometry. Raster/PDF/video render real WebGL content. Format support does not imply every node remains natively editable in every output.
 
-Cloud motion composition preserves layer order and mixes imported audio/video tracks. The browser fallback records silent motion. Editor camera orbit changes are temporary preview state; serialized geometry, material, and object rotation persist.
+Cloud motion composition preserves layer order and mixes imported audio/video tracks. The browser fallback records silent motion. Camera and light properties, object transforms, materials, mesh/UV data and skinning are serialized scene state; preview playback never writes animated poses into the stored bind pose.
 
 ## Operations and verification
 

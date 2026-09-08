@@ -1,3 +1,8 @@
+import { openApiDocument } from '../src/shared/api-reference';
+import { collaborationRoutes } from './collaboration';
+import { designSystemRoutes } from './design-systems';
+import { discoveryRoutes } from './discovery';
+import { designSystemSchema, systemApplySchema, systemUpdateSchema } from '../src/shared/design-systems';
 import { Hono } from "hono";
 import { getCookie, deleteCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
@@ -130,10 +135,11 @@ app.onError((error, c) => {
     500,
   );
 });
+app.get('/api/openapi', c => c.json(openApiDocument({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "design-studio-ai" }),
 );
-app.get('/api/schema', c => c.json({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema) }));
+app.get('/api/schema', c => c.json({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema) }));
 app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
 app.get("/api/config", (c) =>
   c.json({
@@ -213,6 +219,9 @@ app.use("/api/projects/*", async (c, next) => {
   await next();
 });
 app.route("/api/projects", projectRoutes);
+app.route('/api/design-systems', designSystemRoutes);
+app.route('/api', discoveryRoutes);
+app.route("/api/projects", collaborationRoutes);
 app.route("/api/projects", generationRoutes);
 app.route("/api/projects", googleRoutes);
 app.route('/api/projects', exportRoutes);

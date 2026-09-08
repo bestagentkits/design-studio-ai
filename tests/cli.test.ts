@@ -1,3 +1,4 @@
+import { builtStaticAssets } from './built-static-assets';
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -46,7 +47,7 @@ before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'dsa-cli-test-'));
   database = new SqliteDatabase(join(directory, 'studio.sqlite'));
   for (const name of (await readdir(resolve('migrations'))).filter(name => name.endsWith('.sql')).sort()) await database.exec(await readFile(resolve('migrations', name), 'utf8'));
-  const bindings: Bindings = { DB: database, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret() };
+  const bindings: Bindings = { ASSETS: builtStaticAssets, DB: database, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret() };
   server = serve({ fetch: request => app.fetch(request, bindings), hostname: '127.0.0.1', port: 0 });
   await new Promise<void>(resolveListening => { if (server.listening) resolveListening(); else server.once('listening', resolveListening); });
   const address = server.address(); assert.ok(address && typeof address !== 'string');

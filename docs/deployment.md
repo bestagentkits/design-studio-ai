@@ -59,7 +59,7 @@ npm run deploy
 
 Enter the stable encryption key at Wrangler's prompt. Other installations must substitute their configured database name. Keep `APP_URL` synchronized with the custom domain. Deploy builds the application and trusted renderer; it does not automatically migrate D1. Apply required migrations before the code that uses them.
 
-Missing browser configuration returns a capability error for server PNG/PDF/PPTX/video; JSON/HTML/SVG do not require a browser. Verify health, sessions, persisted revisions, authenticated MCP, immutable publication, and actual export bytes after deployment. Release observations belong in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
+Missing browser configuration returns a capability error for server PNG/PDF/PPTX/video/GLB/glTF; JSON/HTML/SVG and React source ZIP do not require a browser. Verify health, sessions, persisted revisions, authenticated MCP, immutable publication, and actual export bytes after deployment. Release observations belong in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
 ## Optional integrations
 
@@ -76,6 +76,12 @@ Operator reference: [GitHub's web application OAuth flow](https://docs.github.co
 [Providers](providers.md) require per-user BYOK keys and model access. Custom compatible origins require the operator's `PROVIDER_ALLOWED_ORIGINS` HTTPS allowlist. There is no general-purpose URL-fetch proxy.
 
 Google browser authorization needs `GOOGLE_CLIENT_ID`, a Google OAuth web client with the application origin authorized, and the Slides API enabled. The user grants the presentations scope; access tokens are transient. API/CLI clients may supply an independently obtained short-lived token. Native Slides export currently rejects unsupported complex nodes and private image URLs.
+
+### Google Fonts catalog
+
+Optional `GOOGLE_FONTS_API_KEY` is a server-only Google Developer API key for full font catalog discovery. Export it for Node or configure a Cloudflare secret of that name. For Compose, pass it explicitly in the service environment when desired. Missing configuration uses a labeled curated catalog. Browser previews require access to `fonts.googleapis.com` and `fonts.gstatic.com`; cloud exports fetch bounded font assets server-side and embed them into the isolated renderer. Font loading does not expose the catalog key to the browser.
+
+Design-system persistence requires the additive `0007-design-systems.sql` migration. Apply outstanding migrations before serving the new routes; preserve existing project and encryption data.
 
 ## Backups and rollback
 

@@ -32,14 +32,14 @@ export async function rasterize(
     URL.revokeObjectURL(url);
   }
 }
-async function portableDocument(input: DesignDocument) {
+async function portableDocument(input: DesignDocument, allMedia = false) {
   const doc = structuredClone(input);
   await Promise.all(
     doc.pages.flatMap((page) =>
       page.nodes
         .filter(
           (node) =>
-            node.type === "image" && node.src && !node.src.startsWith("data:"),
+            (allMedia || node.type === "image" || node.component) && node.src && !node.src.startsWith("data:"),
         )
         .map(async (node) => {
           const response = await fetch(node.src!, {
@@ -59,6 +59,16 @@ async function portableDocument(input: DesignDocument) {
         }),
     ),
   );
+  if (allMedia) for (const asset of doc.assets) {
+    const matching = input.pages.flatMap(p => p.nodes).find(n => n.src === asset.url);
+    const embedded = matching && doc.pages.flatMap(p => p.nodes).find(n => n.id === matching.id)?.src;
+    if (embedded) { asset.url = embedded; continue; }
+    if (asset.url.startsWith('data:')) continue;
+    const response = await fetch(asset.url, { credentials: 'same-origin' });
+    if (!response.ok) throw new Error(`Could not load asset “${asset.name}”.`);
+    const blob = await response.blob();
+    asset.url = await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result)); reader.onerror = reject; reader.readAsDataURL(blob); });
+  }
   return doc;
 }
 export async function exportDesign(
@@ -75,10 +85,27 @@ export async function exportDesign(
     );
     return;
   }
-  const doc = await portableDocument(input),
+  const doc = await portableDocument(input, ['react', 'glb', 'gltf', 'html'].includes(format)),
     page = doc.pages[pageIndex]!;
+  if (format === 'react') {
+    const [{ createReactArchive }, response] = await Promise.all([import('../shared/react-export'), fetch('/studio-react-runtime.json')]);
+    if (!response.ok) throw new Error('Build the React runtime before exporting source.');
+    download(`${name}-react.zip`, new Blob([new Uint8Array(await createReactArchive(doc, await response.json()))]), 'application/zip'); return;
+  }
+  if (format === 'glb' || format === 'gltf') {
+    const { exportScene } = await import('../shared/scene-runtime');
+    const output = await exportScene(doc, pageIndex, format === 'glb');
+    download(`${name}.${format}`, output instanceof ArrayBuffer ? new Blob([output]) : JSON.stringify(output, null, 2), format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'); return;
+  }
+  const { captureExportPage } = await import('./export-page');
+  const { usesDom } = await import('./document-view');
+  const capture = async (index: number, time = 0) => usesDom(doc.pages[index]) || doc.pages[index].scene || doc.pages[index].nodes.some(n => n.scene)
+    ? captureExportPage(doc, index, time) : rasterize(renderSvg(doc, index, time), doc.pages[index].width, doc.pages[index].height);
   if (format === "html") {
-    download(`${name}.html`, renderHtml(doc), "text/html");
+    const interactive = doc.kind === 'slides' || doc.timeline || doc.pages.some(p => usesDom(p) || p.scene || p.nodes.some(n => n.type === 'model3d'));
+    const response = interactive ? await fetch('/studio-viewer.js') : undefined;
+    if (response && !response.ok) throw new Error('Build the viewer before exporting interactive HTML.');
+    download(`${name}.html`, renderHtml(doc, response ? { script: await response.text() } : undefined), "text/html");
     return;
   }
   if (format === "svg") {
@@ -86,11 +113,7 @@ export async function exportDesign(
     return;
   }
   if (format === "png") {
-    const canvas = await rasterize(
-      renderSvg(doc, pageIndex),
-      page.width,
-      page.height,
-    );
+    const canvas = await capture(pageIndex);
     const blob = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
         (b) =>
@@ -106,7 +129,7 @@ export async function exportDesign(
   if (format === "pdf") {
     const pages = await Promise.all(
       doc.pages.map(async (p, i) =>
-        (await rasterize(renderSvg(doc, i), p.width, p.height)).toDataURL(
+        (await capture(i)).toDataURL(
           "image/png",
         ),
       ),
@@ -141,7 +164,7 @@ export async function exportDesign(
       const p = doc.pages[index]!,
         slide = pptx.addSlide();
       // Browser-generated PNG is the only image format passed to the presentation encoder.
-      const canvas = await rasterize(renderSvg(doc, index), p.width, p.height);
+      const canvas = await capture(index);
       slide.addImage({
         data: canvas.toDataURL("image/png"),
         x: 0,
@@ -187,11 +210,7 @@ export async function exportDesign(
       recorder.onerror = () => reject(new Error("Video encoding failed."));
     });
     try {
-      const first = await rasterize(
-        renderSvg(doc, pageIndex, 0),
-        page.width,
-        page.height,
-      );
+      const first = await capture(pageIndex, 0);
       context.drawImage(first, 0, 0);
       recorder.start();
       const start = performance.now();
@@ -200,11 +219,7 @@ export async function exportDesign(
           doc.timeline.duration,
           (performance.now() - start) / 1000,
         );
-        const frame = await rasterize(
-          renderSvg(doc, pageIndex, time),
-          page.width,
-          page.height,
-        );
+        const frame = await capture(pageIndex, time);
         context.clearRect(0, 0, page.width, page.height);
         context.drawImage(frame, 0, 0);
         await new Promise((resolve) =>

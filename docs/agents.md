@@ -21,11 +21,14 @@ Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying it
 | `catalog`, `themes list/get`, `templates list/get/instantiate`, `blocks list/get` | Bundled design resources; instantiated IDs are unique |
 | `projects list/get/create/rename/delete/clone` | Persisted project management; clone copies owned asset bytes |
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
+| `projects document merge/changes` | Three-way merge using the exact earlier base, and revision polling |
 | `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
 | `projects check` | Read-only preflight hints with exact layer IDs; inspect the actual preview too |
 | `projects import/export`, `render` | Canonical JSON import; authenticated cloud export; offline JSON/HTML/SVG rendering |
 | `assets list/upload/download` | Authenticated asset storage; node placement is a separate document edit |
 | `generate` | Real provider document proposal; no implicit save |
+| `fonts --query`, `providers models PROVIDER --query` | Search catalog metadata with explicit live/cache/fallback provenance |
+| `design-systems schema/list/get/versions/create/update/apply/insert/remove` | Shared reusable libraries, immutable versions and conflict-checked project writes |
 | `providers list/set/remove` | Masked configuration; provider secret from environment/stdin |
 | `tokens list/create/revoke` | Token metadata and lifecycle; new token returned once |
 | `publish`, `unpublish` | Public immutable snapshot creation and removal |
@@ -49,9 +52,21 @@ Run `inspect_design` (CLI `projects check`) after saving: findings point to spec
 
 `generate` follows the same rule: its response is a proposal that can be read by document PUT, and the original revision is required to save it. CLI renames also use revision-checked document writes. Clone is a distinct new project and copies referenced owned assets so source deletion does not break the clone.
 
+For simultaneous human/agent edits, retain the document and revision you actually read. `projects document merge PROJECT_ID --file merge.json` accepts `{base,document,baseRevision}`; network MCP exposes `merge_design` and `get_design_changes`. Independent properties merge, while overlapping edits return conflict paths. Never alter the base or retry with an invented revision to bypass a conflict. The editor's Live mode displays saved changes without a reload and autosaves local edits. Turning Live off leaves explicit Save available.
+
+The shared operation schema includes grouping/reparenting, structured page/node layout, track replacement/removal and keyframe upsert/removal. Component props, mesh/UV data, material settings, bones and weights use the same document validator as the browser. Discover exact fields from `/api/schema` or `dsa schema`; do not invent a separate scene format.
+
+WebMCP adds `studio_capabilities` and `studio_apply_operations` for the open document, plus documented project API operations registered by [browser-design-tools.ts](../src/app/browser-design-tools.ts). API tools accept query parameters; the asset-upload tool converts `{name,mimeType,base64}` into the same multipart file route used by the browser. Credential-management operations remain outside browser tools. Local operations appear immediately and autosave when Live is enabled. Server API tools operate on saved state. Browser support remains feature-detected. The REST documentation includes a real request playground and `/api/openapi`; keys are held only in page memory, and executing a mutation affects the actual selected project.
+
+## Reusable design systems
+
+Discover definitions with `dsa design-systems schema`. Create/update accepts `--file`; update requires `--system-version` with the version actually read. Pinned get/apply/insert also accept `--system-version`. Apply/insert require `--revision` for the target project; insert additionally needs `--page` and `--item`. A stale library or project returns a conflict. Do not replace the observed version with a later one without reconciling the user's changes.
+
+Network MCP exposes the same library operations through [design-system-tools.ts](../server/design-system-tools.ts). Projects embed applied tokens/components and pin the saved version. Library definitions support reusable page compositions with remapped IDs. Private project assets must be embedded or replaced with portable references before library capture. Deleting a library leaves embedded project designs intact.
+
 ## Capability boundaries
 
-The CLI's `projects export` requests real file bytes for JSON, HTML, SVG, PNG, PDF, PPTX, WebM, and MP4 from `/api/projects/:id/export`. Binary formats require `--output` (or `--out`) and a configured Cloudflare/self-host browser renderer; missing configuration and unavailable encoders return errors. Optional `--revision` ensures the server exports the inspected revision, and `--page` selects a zero-based page where supported. Cloud rendering embeds owned assets; remote media must be imported first. Motion exports are capped at 60 seconds and MP4 requires encoder support. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
+The CLI's `projects export` requests real file bytes for JSON, HTML, SVG, PNG, PDF, PPTX, WebM, MP4, React ZIP, GLB, and glTF from `/api/projects/:id/export`. Binary downloads require `--output` (or `--out`). Raster, motion and 3D formats require a configured Cloudflare/self-host browser renderer; missing configuration and unavailable encoders return errors. Optional `--revision` ensures the server exports the inspected revision, and `--page` selects a zero-based page where supported. React packages a runnable frontend prototype without a business backend. GLB/glTF preserve supported geometry, textures, skinning and sampled animation. Cloud rendering embeds owned assets; remote media must be imported first. Motion exports are capped at 60 seconds and MP4 requires encoder support. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
 
 Offline `render` supports JSON/HTML/SVG and preserves asset references without fetching private media. Its 3D representation is static; server HTML export can include the trusted interactive 3D/timeline viewer, while cloud raster export uses real WebGL rendering. Google Slides requires real authorization and supports native text/shapes/HTTPS images, rejecting unsupported complex nodes and private image URLs.
 

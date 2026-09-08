@@ -1,229 +1,105 @@
-import { useEffect, useRef, useState } from "react";
-import * as THREE from "three";
-import { OrbitControls } from "three/addons/controls/OrbitControls.js";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import type { DesignPage, Theme } from "../shared/schema";
-import { resolveColor } from "../shared/render";
+import { useEffect, useRef, useState } from 'react';
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
+import type { DesignDocument, DesignNode, DesignPage, Theme } from '../shared/schema';
+import { animateScene, buildScene, defaultScene, disposeScene, exportScene } from '../shared/scene-runtime';
+import { MeshTools } from './mesh-tools';
+import { download } from './api';
 
-export function SceneView({
-  page,
-  theme,
-  selected,
-  onSelect,
-}: {
-  page: DesignPage;
-  theme: Theme;
-  selected: string | null;
-  onSelect: (id: string) => void;
+export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0, time = 0, onUpdate, onPage }: {
+  page: DesignPage; theme: Theme; selected: string | null; onSelect: (id: string) => void; doc?: DesignDocument; pageIndex?: number; time?: number;
+  onUpdate?: (patch: Partial<DesignNode>) => void; onPage?: (patch: Partial<DesignPage>) => void;
 }) {
-  const host = useRef<HTMLDivElement>(null),
-    [error, setError] = useState("");
+  const host = useRef<HTMLDivElement>(null), [error, setError] = useState(''), [transform, setTransform] = useState<'translate' | 'rotate' | 'scale'>('translate'), [mode, setMode] = useState('object'), [selection, select] = useState<number[]>([]), [tools, showTools] = useState(false);
+  const active = page.nodes.find(n => n.id === selected);
+  const document: DesignDocument = doc ?? { schemaVersion: 1, id: 'scene', name: 'Scene', kind: '3d', pages: [page], assets: [], theme, metadata: { createdAt: '', updatedAt: '' } };
+  const handlers = useRef({ onSelect, onUpdate, onPage, mode, selection, document, time, active }); handlers.current = { onSelect, onUpdate, onPage, mode, selection, document, time, active };
+  useEffect(() => { select([]); }, [selected]);
   useEffect(() => {
-    if (!host.current) return;
-    let renderer: THREE.WebGLRenderer;
-    try {
-      renderer = new THREE.WebGLRenderer({
-        antialias: true,
-        preserveDrawingBuffer: true,
-      });
-    } catch {
-      setError(
-        "WebGL is unavailable. Enable hardware acceleration to preview this 3D scene. You can still edit scene properties.",
-      );
-      return;
-    }
-    setError("");
-    const element = host.current;
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(resolveColor(page.background, theme));
-    const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
-    camera.position.set(5, 4, 7);
-    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
-    element.appendChild(renderer.domElement);
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
-    controls.target.set(0, 0.5, 0);
-    scene.add(new THREE.AmbientLight(0xffffff, 2));
-    const light = new THREE.DirectionalLight(0xffffff, 4);
-    light.position.set(3, 6, 4);
-    light.castShadow = true;
-    scene.add(light);
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(24, 24),
-      new THREE.MeshStandardMaterial({
-        color: resolveColor(page.background, theme),
-        roughness: 0.9,
-      }),
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -1.01;
-    ground.receiveShadow = true;
-    scene.add(ground);
-    const grid = new THREE.GridHelper(20, 20, 0xbab6b0, 0xdedbd5);
-    grid.position.y = -1;
-    scene.add(grid);
-    const objects: THREE.Object3D[] = [];
-    let disposed = false;
-    for (const node of page.nodes.filter(
-      (n) => n.type === "model3d" && n.visible !== false,
-    )) {
-      const color = resolveColor(
-        String(node.style?.fill || node.data?.color || "$accent"),
-        theme,
-      );
-      const material = new THREE.MeshStandardMaterial({
-        color,
-        metalness: Number(node.data?.metalness ?? 0.15),
-        roughness: Number(node.data?.roughness ?? 0.35),
-        transparent: (node.opacity ?? 1) < 1,
-        opacity: node.opacity ?? 1,
-      });
-      const finish = (object: THREE.Object3D) => {
-        if (disposed) {
-          disposeObject(object);
-          return;
+    const element = host.current; if (!element) return;
+    let disposed = false, scene: THREE.Scene | undefined, renderer: THREE.WebGLRenderer | undefined, orbit: OrbitControls | undefined, gizmo: TransformControls | undefined, observer: ResizeObserver | undefined;
+    const cleanup = () => {
+      renderer?.setAnimationLoop(null); observer?.disconnect();
+      if (gizmo) { scene?.remove(gizmo.getHelper()); gizmo.dispose(); gizmo = undefined; }
+      orbit?.dispose(); orbit = undefined;
+      if (scene) { disposeScene(scene); scene = undefined; }
+      if (renderer) { renderer.dispose(); renderer.domElement.remove(); renderer = undefined; }
+    };
+    setError('');
+    void (async () => {
+      try {
+        const built = await buildScene(handlers.current.document, pageIndex, handlers.current.time);
+        if (disposed) { disposeScene(built.scene); return; }
+        scene = built.scene; const { camera, objects, target } = built;
+        renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; element.appendChild(renderer.domElement);
+        orbit = new OrbitControls(camera, renderer.domElement); orbit.target.copy(target); orbit.enableDamping = true; orbit.enabled = mode === 'object';
+        gizmo = new TransformControls(camera, renderer.domElement); gizmo.setMode(transform); scene.add(gizmo.getHelper());
+        const object = selected ? objects.get(selected) : undefined;
+        if (object && mode === 'object' && onUpdate) gizmo.attach(object);
+        let draggedGizmo = false;
+        gizmo.addEventListener('dragging-changed', e => { if (orbit) orbit.enabled = mode === 'object' && !e.value; if (e.value) draggedGizmo = true; });
+        gizmo.addEventListener('mouseUp', () => { if (object && draggedGizmo) handlers.current.onUpdate?.({ scene: { ...handlers.current.active?.scene, position: object.position.toArray(), rotation: [object.rotation.x, object.rotation.y, object.rotation.z].map(v => v * 180 / Math.PI) as [number, number, number], scale: object.scale.toArray() } }); });
+        orbit.addEventListener('end', () => { if (!orbit || gizmo?.dragging || draggedGizmo) return; const old = page.scene ?? defaultScene; if (camera.position.distanceTo(new THREE.Vector3(...old.camera.position)) > .001 || orbit.target.distanceTo(new THREE.Vector3(...old.camera.target)) > .001) handlers.current.onPage?.({ scene: { ...old, camera: { ...old.camera, position: camera.position.toArray(), target: orbit.target.toArray() } } }); });
+        scene.add(new THREE.GridHelper(20, 20, 0x888888, 0xcccccc));
+        const mesh = object instanceof THREE.Mesh ? object : undefined;
+        let vertexPoints: THREE.Points | undefined, selectedPoints: THREE.Points | undefined;
+        if (mesh && mode !== 'object') {
+          const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', mesh.geometry.getAttribute('position').clone());
+          vertexPoints = new THREE.Points(geometry, new THREE.PointsMaterial({ color: '#bbbbbb', size: .025, depthTest: false })); vertexPoints.renderOrder = 100; mesh.add(vertexPoints);
+          selectedPoints = new THREE.Points(new THREE.BufferGeometry(), new THREE.PointsMaterial({ color: '#ff9900', size: .07, depthTest: false })); selectedPoints.renderOrder = 101; mesh.add(selectedPoints);
         }
-        object.position.set(
-          (node.x + node.width / 2 - page.width / 2) / 240,
-          (page.height / 2 - node.y - node.height / 2) / 240,
-          Number(node.data?.z || 0),
-        );
-        object.rotation.set(
-          (Number(node.data?.rotationX || 0) * Math.PI) / 180,
-          (Number(node.data?.rotationY || 0) * Math.PI) / 180,
-          ((node.rotation || 0) * Math.PI) / 180,
-        );
-        object.scale.set(
-          node.width / 400,
-          node.height / 400,
-          Number(node.data?.depth || node.width) / 400,
-        );
-        object.traverse((child) => {
-          child.userData.nodeId = node.id;
-          if (child instanceof THREE.Mesh) {
-            child.castShadow = true;
-            child.receiveShadow = true;
+        if (mesh && active?.scene?.bones?.length) {
+          if (!(mesh instanceof THREE.SkinnedMesh)) {
+            const bones = active.scene.bones.map((b, i) => { const bone = new THREE.Bone(); bone.name = `${active.id}_bone_${i}`; bone.position.fromArray(b.position); bone.rotation.set(...(b.rotation ?? [0, 0, 0]).map(v => v * Math.PI / 180) as [number, number, number]); return bone; });
+            active.scene.bones.forEach((b, i) => (b.parent < 0 ? mesh : bones[b.parent]).add(bones[i]));
+          }
+          const joints: THREE.Bone[] = []; mesh.traverse(child => { if (child instanceof THREE.Bone) joints.push(child); });
+          for (const bone of joints) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)); const marker = new THREE.Points(geometry, new THREE.PointsMaterial({ color: '#55ddff', size: .08, depthTest: false })); marker.renderOrder = 103; bone.add(marker); }
+          const skeleton = new THREE.SkeletonHelper(mesh); for (const material of Array.isArray(skeleton.material) ? skeleton.material : [skeleton.material]) material.depthTest = false; skeleton.renderOrder = 102; scene.add(skeleton);
+        }
+        const ray = new THREE.Raycaster(), pointer = new THREE.Vector2(), local = new THREE.Vector3(), point = new THREE.Vector3();
+        let pointerStart = [0, 0];
+        renderer.domElement.addEventListener('pointerdown', event => { pointerStart = [event.clientX, event.clientY]; draggedGizmo = !!gizmo?.dragging; });
+        renderer.domElement.addEventListener('click', event => {
+          if (!renderer || gizmo?.dragging || draggedGizmo || Math.hypot(event.clientX - pointerStart[0], event.clientY - pointerStart[1]) > 5) return;
+          const rect = renderer.domElement.getBoundingClientRect(); pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); ray.setFromCamera(pointer, camera);
+          const hit = ray.intersectObjects([...objects.values()], true).find(h => h.object instanceof THREE.Mesh); if (!hit) return;
+          const id = String(hit.object.userData.nodeId); if (id !== selected) { handlers.current.onSelect(id); select([]); return; }
+          if (handlers.current.mode !== 'object' && hit.face && hit.object instanceof THREE.Mesh) {
+            hit.object.worldToLocal(local.copy(hit.point)); const hitMesh = hit.object, ids = [hit.face.a, hit.face.b, hit.face.c];
+            let values: number[];
+            if (handlers.current.mode === 'face') values = [hit.faceIndex!];
+            else if (handlers.current.mode === 'edge') {
+              const edges = [[ids[0], ids[1]], [ids[1], ids[2]], [ids[2], ids[0]]];
+              values = edges.sort((a, b) => { const distance = (edge: number[]) => new THREE.Line3(hitMesh.getVertexPosition(edge[0], new THREE.Vector3()), hitMesh.getVertexPosition(edge[1], new THREE.Vector3())).closestPointToPoint(local, true, point).distanceToSquared(local); return distance(a) - distance(b); })[0];
+            } else values = [ids.sort((a, b) => hitMesh.getVertexPosition(a, point).distanceToSquared(local) - hitMesh.getVertexPosition(b, point).distanceToSquared(local))[0]];
+            const previous = handlers.current.selection; select(event.shiftKey ? values.every(v => previous.includes(v)) ? previous.filter(v => !values.includes(v)) : [...new Set([...previous, ...values])] : values);
           }
         });
-        scene.add(object);
-        objects.push(object);
-        if (selected === node.id) {
-          const helper = new THREE.BoxHelper(object, 0xd77654);
-          helper.userData.helper = true;
-          scene.add(helper);
-        }
-      };
-      if (node.src) {
-        new GLTFLoader().load(
-          node.src,
-          (gltf) => {
-            const box = new THREE.Box3().setFromObject(gltf.scene),
-              size = box.getSize(new THREE.Vector3()),
-              center = box.getCenter(new THREE.Vector3());
-            gltf.scene.position.sub(center);
-            const holder = new THREE.Group();
-            holder.add(gltf.scene);
-            holder.scale.setScalar(2 / Math.max(size.x, size.y, size.z, 0.001));
-            const wrapper = new THREE.Group();
-            wrapper.add(holder);
-            finish(wrapper);
-          },
-          undefined,
-          () => {
-            if (!disposed)
-              setError(
-                `Could not load “${node.name}”. Import a self-contained GLB file and try again.`,
-              );
-          },
-        );
-      } else {
-        const geometryName = String(
-          node.data?.geometry || node.data?.shape || "box",
-        );
-        const geometry =
-          geometryName === "sphere"
-            ? new THREE.SphereGeometry(1, 48, 32)
-            : geometryName === "torus"
-              ? new THREE.TorusGeometry(0.8, 0.3, 24, 64)
-              : geometryName === "torusKnot"
-                ? new THREE.TorusKnotGeometry(0.7, 0.23, 100, 20)
-                : geometryName === "cone"
-                  ? new THREE.ConeGeometry(1, 1.7, 48)
-                  : geometryName === "cylinder"
-                    ? new THREE.CylinderGeometry(0.8, 0.8, 1.6, 48)
-                    : new THREE.BoxGeometry(1.6, 1.6, 1.6);
-        finish(new THREE.Mesh(geometry, material));
-      }
-    }
-    const resize = () => {
-      const width = element.clientWidth,
-        height = element.clientHeight;
-      renderer.setSize(width, height);
-      camera.aspect = width / Math.max(height, 1);
-      camera.updateProjectionMatrix();
-    };
-    const observer = new ResizeObserver(resize);
-    observer.observe(element);
-    resize();
-    const raycaster = new THREE.Raycaster();
-    const select = (event: PointerEvent) => {
-      const rect = renderer.domElement.getBoundingClientRect();
-      raycaster.setFromCamera(
-        new THREE.Vector2(
-          ((event.clientX - rect.left) / rect.width) * 2 - 1,
-          (-(event.clientY - rect.top) / rect.height) * 2 + 1,
-        ),
-        camera,
-      );
-      const hit = raycaster.intersectObjects(objects, true)[0];
-      if (hit?.object.userData.nodeId)
-        onSelect(String(hit.object.userData.nodeId));
-    };
-    renderer.domElement.addEventListener("click", select);
-    let frame = 0;
-    const animate = () => {
-      frame = requestAnimationFrame(animate);
-      controls.update();
-      renderer.render(scene, camera);
-    };
-    animate();
-    return () => {
-      disposed = true;
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-      controls.dispose();
-      renderer.domElement.removeEventListener("click", select);
-      disposeObject(scene);
-      renderer.dispose();
-      renderer.domElement.remove();
-    };
-  }, [page, theme, selected]);
-  return (
-    <div className="scene-view" ref={host}>
-      {error && (
-        <p className="scene-error" role="alert">
-          {error}
-        </p>
-      )}
-      <span className="scene-help">
-        Drag to orbit · Scroll to zoom · Click an object to select
-      </span>
-    </div>
-  );
-}
-function disposeObject(object: THREE.Object3D) {
-  object.traverse((child) => {
-    if (child instanceof THREE.Mesh || child instanceof THREE.LineSegments) {
-      child.geometry.dispose();
-      const materials = Array.isArray(child.material)
-        ? child.material
-        : [child.material];
-      for (const material of materials) {
-        for (const value of Object.values(material))
-          if (value instanceof THREE.Texture) value.dispose();
-        material.dispose();
-      }
-    }
-  });
+        const resize = () => { renderer?.setSize(element.clientWidth, element.clientHeight); camera.aspect = element.clientWidth / Math.max(1, element.clientHeight); camera.updateProjectionMatrix(); };
+        observer = new ResizeObserver(resize); observer.observe(element); resize();
+        let renderedTime = NaN, previousSelection: number[] | undefined;
+        renderer.setAnimationLoop(() => {
+          if (!scene || !renderer || !orbit) return;
+          const current = handlers.current, timeChanged = renderedTime !== current.time;
+          if (timeChanged && !gizmo?.dragging) { animateScene(scene, current.document, pageIndex, current.time); renderedTime = current.time; }
+          scene.updateMatrixWorld(true);
+          if (mesh && selectedPoints && (timeChanged || previousSelection !== current.selection)) {
+            const index = mesh.geometry.index, count = mesh.geometry.getAttribute('position').count;
+            const ids = [...new Set(current.mode === 'face' && index ? current.selection.flatMap(i => i * 3 + 2 < index.count ? [index.getX(i * 3), index.getX(i * 3 + 1), index.getX(i * 3 + 2)] : []) : current.selection)].filter(i => i < count);
+            const points = ids.flatMap(i => mesh.getVertexPosition(i, point).toArray()); selectedPoints.geometry.dispose(); selectedPoints.geometry = new THREE.BufferGeometry(); selectedPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+            if (vertexPoints && mesh instanceof THREE.SkinnedMesh) { const position = vertexPoints.geometry.getAttribute('position'); for (let i = 0; i < count; i++) { mesh.getVertexPosition(i, point); position.setXYZ(i, point.x, point.y, point.z); } position.needsUpdate = true; vertexPoints.geometry.computeBoundingSphere(); }
+            previousSelection = current.selection;
+          }
+          orbit.update(); renderer.render(scene, camera);
+        });
+      } catch (e) { cleanup(); if (!disposed) setError(e instanceof Error ? e.message : 'WebGL unavailable'); }
+    })();
+    return () => { disposed = true; cleanup(); };
+  }, [page, theme, selected, transform, mode, pageIndex, doc?.assets, doc?.timeline]);
+  return <div className="scene-workspace"><div className="scene-toolbar">{(['translate', 'rotate', 'scale'] as const).map(value => <button key={value} aria-pressed={transform === value} onClick={() => setTransform(value)}>{value}</button>)}<button aria-pressed={tools} onClick={() => showTools(!tools)}>Mesh / UV / Rig</button>{mode !== 'object' && <button onClick={() => { setMode('object'); select([]); }}>Orbit / object mode</button>}{doc && ['glb', 'gltf'].map(format => <button key={format} onClick={async () => { try { const output = await exportScene(doc, pageIndex, format === 'glb'); download(`${doc.name}.${format}`, output instanceof ArrayBuffer ? output : JSON.stringify(output), format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'); } catch (e) { setError(e instanceof Error ? e.message : 'Export failed'); } }}>Export {format.toUpperCase()}</button>)}</div>
+    <div className="scene-view" ref={host}/>{error && <p className="scene-error" role="alert">{error}</p>}{tools && active?.type === 'model3d' && onUpdate && <MeshTools node={active} update={onUpdate} mode={mode} setMode={setMode} selection={selection} select={select} animatedBones={(doc?.timeline?.tracks ?? []).filter(t => t.nodeId === active.id).flatMap(t => t.keyframes.flatMap(k => Object.keys(k.values).flatMap(p => { const match = /^scene\.bones\.(\d+)\./.exec(p); return match ? [+match[1]] : []; })))}/>}
+  </div>;
 }

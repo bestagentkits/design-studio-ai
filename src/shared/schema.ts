@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { layoutSchema, sizingSchema, componentSchema, interactionSchema, timelineSchema, sceneObjectSchema, sceneSchema } from './design-capabilities';
 
 export const kinds = ['web', 'slides', 'report', 'wireframe', '3d', 'video'] as const;
 export type ProjectKind = typeof kinds[number];
@@ -19,19 +20,25 @@ export const themeSchema = z.object({
   spacing: z.array(finite.min(0).max(1000)).max(32), radius: finite.min(0).max(1000)
 });
 export const nodeSchema = z.object({
-  id, type: z.enum(['frame', 'text', 'image', 'shape', 'icon', 'chart', 'model3d', 'video', 'audio']),
+  id, type: z.enum(['frame', 'group', 'component', 'text', 'image', 'shape', 'icon', 'chart', 'model3d', 'video', 'audio']),
   name: z.string().max(200), x: coordinate, y: coordinate, width: dimension, height: dimension,
   rotation: finite.min(-36000).max(36000).optional(), opacity: finite.min(0).max(1).optional(),
+  layout: layoutSchema.optional(), sizing: sizingSchema.optional(), position: z.enum(['flow', 'absolute']).optional(),
+  pivot: z.tuple([finite.min(0).max(1), finite.min(0).max(1)]).optional(),
+  component: componentSchema.optional(), interactions: z.array(interactionSchema).max(20).optional(),
+  scene: sceneObjectSchema.optional(),
   parentId: id.optional(), locked: z.boolean().optional(), visible: z.boolean().optional(),
   text: z.string().max(50000).optional(), src: z.string().max(2000000).refine(isSafeUrl, 'Only HTTPS, owned assets, or raster image data URLs are allowed').optional(),
   style: primitiveStyle.optional(), data: z.record(z.string().max(80), z.unknown()).optional()
 });
-export const pageSchema = z.object({ id, name: z.string().max(200), width: dimension.min(1), height: dimension.min(1), background: z.string().max(80), nodes: z.array(nodeSchema).max(2000) });
+export const pageSchema = z.object({ id, name: z.string().max(200), width: dimension.min(1), height: dimension.min(1), background: z.string().max(80), layout: layoutSchema.optional(), notes: z.string().max(20000).optional(), scene: sceneSchema.optional(), nodes: z.array(nodeSchema).max(2000) });
 export const documentSchema = z.object({
   schemaVersion: z.literal(1), id, name: z.string().min(1).max(200), kind: z.enum(kinds), theme: themeSchema,
   pages: z.array(pageSchema).min(1).max(200),
   assets: z.array(z.object({ id, name: z.string().max(300), type: z.string().max(80), mimeType: z.string().max(100), url: z.string().max(2000000).refine(isSafeUrl), size: finite.min(0).optional() })).max(2000),
-  timeline: z.object({ duration: finite.min(0.1).max(3600), fps: finite.min(1).max(60), tracks: z.array(z.object({ id, nodeId: id, keyframes: z.array(z.object({ time: finite.min(0).max(3600), values: primitiveStyle })).max(2000) })).max(2000) }).optional(),
+  designSystem: z.object({ id, version: z.number().int().positive(), name: z.string().max(200) }).optional(),
+  presentation: z.object({ interval: finite.min(1).max(600), loop: z.boolean() }).optional(),
+  timeline: timelineSchema.optional(),
   metadata: z.object({ createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
 }).superRefine((doc, ctx) => {
   const allIds = new Set<string>();
@@ -44,6 +51,13 @@ export const documentSchema = z.object({
     total += page.nodes.length;
     for (const node of page.nodes) {
       unique(node.id); nodeIds.add(node.id);
+      if (node.scene?.bones) node.scene.bones.forEach((bone, index) => { if (bone.parent >= index) ctx.addIssue({ code: 'custom', message: 'Bone parents must precede their children' }); });
+      if (node.scene?.mesh?.skinIndices && node.scene.mesh.skinIndices.some(i => i >= (node.scene?.bones?.length ?? 0))) ctx.addIssue({ code: 'custom', message: 'Skin references an unknown bone' });
+      if (node.scene?.material?.textureAssetId && !doc.assets.some(a => a.id === node.scene!.material!.textureAssetId)) ctx.addIssue({ code: 'custom', message: 'Texture references an unknown asset' });
+      for (const interaction of node.interactions ?? []) {
+        if (interaction.action === 'navigate' && !doc.pages.some(p => p.id === interaction.target)) ctx.addIssue({ code: 'custom', message: 'Navigation target must be an existing page' });
+        if (interaction.action === 'url' && !isSafeUrl(interaction.target)) ctx.addIssue({ code: 'custom', message: 'Interaction URL must be safe' });
+      }
       const visited = new Set([node.id]); let parent = node.parentId;
       while (parent) {
         if (!nodes.has(parent) || visited.has(parent)) { ctx.addIssue({ code: 'custom', message: 'Invalid or cyclic node parent' }); break; }
