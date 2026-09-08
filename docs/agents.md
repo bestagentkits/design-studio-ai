@@ -31,7 +31,7 @@ Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying it
 | `design-systems schema/list/get/versions/create/update/apply/insert/remove` | Shared reusable libraries, immutable versions and conflict-checked project writes |
 | `providers list/set/remove` | Masked configuration; provider secret from environment/stdin |
 | `tokens list/create/revoke` | Token metadata and lifecycle; new token returned once |
-| `publish`, `unpublish` | Public immutable snapshot creation and removal |
+| `publish`, `unpublish`, `preview`, `unpreview`, `share`, `unshare` | Public immutable snapshot creation and removal; preview/share are naming-specific aliases for the same public snapshot contract, and each removal alias removes all public snapshots |
 | `media generate/status` | OpenAI image/edit/speech; fal image, video/edit, music/effects, and source-audio jobs |
 | `google-slides` | Server export using a short-lived Google OAuth token |
 | `api METHOD /api/path` | Same-origin REST escape hatch; JSON input from file/stdin |
@@ -48,7 +48,7 @@ Run `inspect_design` (CLI `projects check`) after saving: findings point to spec
 2. Inspect `schema --operations`, page/node IDs, and the relevant catalog entry.
 3. Apply a short operation array with `projects document patch PROJECT_ID --revision N --file edits.json`.
 4. If a conflict occurs, read the current project and reconcile the requested change. Do not blindly retry with a higher revision.
-5. Inspect output at the intended viewport, then export or publish within the user's requested scope.
+5. Inspect output at the intended viewport, then export, preview, publish, or share within the user's requested scope. `preview` and `share` return a public immutable snapshot URL; `unpreview`, `unshare`, and `unpublish` all remove the project's public snapshots.
 
 `generate` follows the same rule: its response is a proposal that can be read by document PUT, and the original revision is required to save it. CLI renames also use revision-checked document writes. Clone is a distinct new project and copies referenced owned assets so source deletion does not break the clone.
 
@@ -72,7 +72,7 @@ Offline `render` supports JSON/HTML/SVG and preserves asset references without f
 
 Media generation accepts `--source-asset ID`, `--duration SECONDS`, and `--strength NUMBER` for the modes described in [providers](providers.md). For example, `dsa media generate PROJECT_ID --kind image --provider openai --source-asset ASSET_ID --prompt-file edit.txt` edits an owned source image. `dsa media generate PROJECT_ID --kind audio --provider fal --duration 30 --prompt-file music.txt` queues music/effects generation. Poll a returned job with `dsa media status PROJECT_ID JOB_ID`; placing the resulting asset in the document remains a separate revision-safe edit. Provider secrets should come from `--key-env` or `--key-stdin`, and Google access tokens use the same secret-input pattern.
 
-Network MCP lives at `/mcp` with the server's advertised protocol versions, API-token or OAuth authentication, and the same ownership/revision protections. Clients should discover actual schemas and tools rather than guess names. WebMCP registers through the available browser model-context API and uses the current authenticated user. Unsupported browsers continue to use the ordinary application and network MCP.
+Network MCP lives at `/mcp` with the server's advertised protocol versions, API-token or OAuth authentication, and the same ownership/revision protections. Delivery tools include `publish_project`/`unpublish_project`, `preview_project`/`unpreview_project`, `share_project`/`unshare_project`, and `export_project`. Preview/share tools return public immutable snapshot URLs; clients should discover actual schemas and tools rather than guess names. WebMCP registers through the available browser model-context API and uses the current authenticated user. Unsupported browsers continue to use the ordinary application and network MCP.
 
 ## Implementation decisions and verification
 

@@ -39,11 +39,13 @@ Replace the example token using your shell's secret injection mechanism. `--api-
 
 Commands print JSON except `--help`, `--version`, and export/document/template content sent to stdout. Use `--output` to write artifacts and receive JSON file metadata. Errors are JSON on stderr. Exit codes: 0 success, 1 invalid input/API rejection/conflict, 2 authentication/authorization, 3 network or invalid server response, 4 local runtime/file error.
 
-Run `dsa <command> --help` for every option. Available families are `health`, `config`, `schema`, `catalog`, `themes`, `templates`, `blocks`, `projects`, `brief`, `render`, `assets`, `generate`, `providers`, `tokens`, `publish`, `unpublish`, `media`, `google-slides`, and `api`.
+Run `dsa <command> --help` for every option. Available families are `health`, `config`, `schema`, `catalog`, `themes`, `templates`, `blocks`, `projects`, `brief`, `render`, `assets`, `generate`, `providers`, `tokens`, `publish`, `unpublish`, `preview`, `unpreview`, `share`, `unshare`, `media`, `google-slides`, and `api`.
 
 `brief get/put/interview/approve` manages saved interactive questions, answers, and design scope. A first `brief put PROJECT_ID --revision 0 --file brief.json` requires a `request`; subsequent writes use the brief revision from `brief get`, independently of the document revision. Agents may supply their own `interview` questions and scope without a server provider key, or use `brief interview --provider NAME --revision N` with BYOK. Every change invalidates approval. `brief approve` requires explicit human approval of the current scope and complete required answers. An unapproved brief blocks provider design generation.
 
 `projects check PROJECT_ID` returns deterministic preflight findings with page/node IDs and suggestions for text fitting, estimated contrast, missing media, bounds and export limitations. It reads the saved revision, makes no changes, and does not certify accessibility or visual quality.
+
+`preview PROJECT_ID` and `share PROJECT_ID` create a public immutable snapshot and return its URL. `unpreview` and `unshare` remove all public snapshots for the project. These commands are aliases for the same publication storage and ownership checks as `publish`/`unpublish`; they do not expose unsaved private editor state.
 
 `projects export` requests actual JSON, HTML, SVG, PNG, PDF, PPTX, WebM, or MP4 bytes from the authenticated server. Binary formats require `--output FILE` (or `--out FILE`) and a configured cloud/self-host browser renderer. Unsupported encoders and missing bindings return explicit errors. `--revision` binds export to the inspected revision. Motion is capped at 60 seconds; cloud rendering mixes imported audio/video. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
 

@@ -44,7 +44,7 @@ JSON errors use `{error:{code,message,details?}}` without secrets. Routes valida
 | Surface | Implementation |
 | --- | --- |
 | Health/config, sessions, provider settings, API tokens | [index.ts](../server/index.ts), [security.ts](../server/security.ts) |
-| Projects, saves, uploads, clones, publication | [projects.ts](../server/projects.ts) |
+| Projects, saves, uploads, clones, publication, preview/share aliases | [projects.ts](../server/projects.ts) |
 | Project conversations | [conversations.ts](../server/conversations.ts) |
 | Structured generation and typed media jobs/edits | [providers.ts](../server/providers.ts), [capability guide](providers.md) |
 | Design-system versions and project application | [design-systems.ts](../server/design-systems.ts) |
@@ -54,7 +54,7 @@ JSON errors use `{error:{code,message,details?}}` without secrets. Routes valida
 | OAuth discovery, consent, PKCE, tokens | [oauth.ts](../server/oauth.ts) |
 | Streamable HTTP tools/resources | [mcp.ts](../server/mcp.ts) |
 
-Export POST `/api/projects/:id/export` accepts `{format,pageIndex?,expectedRevision?}`. Media POST `/api/projects/:id/media` accepts the [typed provider payload](providers.md); fal jobs are polled through the project media-job route. Clients should discover tool schemas/CLI help instead of maintaining separate document adapters.
+Export POST `/api/projects/:id/export` accepts `{format,pageIndex?,expectedRevision?}`. POST/DELETE `/api/projects/:id/preview` and `/share` are naming-specific aliases for the immutable public snapshot workflow; they return `{url,revision}` on creation and `{ok:true}` on removal. Media POST `/api/projects/:id/media` accepts the [typed provider payload](providers.md); fal jobs are polled through the project media-job route. Clients should discover tool schemas/CLI help instead of maintaining separate document adapters.
 
 ## Ownership, secrets, and publication
 

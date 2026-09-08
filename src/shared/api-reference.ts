@@ -35,6 +35,10 @@ export const apiEndpoints = [
   { method: 'POST', path: '/api/projects/{id}/export', summary: 'Export saved design', body: { format: 'html' } },
   { method: 'POST', path: '/api/projects/{id}/publish', summary: 'Publish an immutable snapshot', body: {} },
   { method: 'DELETE', path: '/api/projects/{id}/publish', summary: 'Unpublish the current public snapshot', body: undefined },
+  { method: 'POST', path: '/api/projects/{id}/preview', summary: 'Create a public immutable preview snapshot', body: {} },
+  { method: 'DELETE', path: '/api/projects/{id}/preview', summary: 'Remove all public snapshots (preview alias)', body: undefined },
+  { method: 'POST', path: '/api/projects/{id}/share', summary: 'Create a public immutable share snapshot', body: {} },
+  { method: 'DELETE', path: '/api/projects/{id}/share', summary: 'Remove all public snapshots (share alias)', body: undefined },
   { method: 'DELETE', path: '/api/projects/{id}', summary: 'Delete project and assets', body: undefined },
   { method: 'GET', path: '/api/providers', summary: 'Read provider configuration metadata', body: undefined },
 ] as const;

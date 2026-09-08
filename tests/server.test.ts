@@ -247,6 +247,22 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
         assert.equal(published.status, 200);
         const snapshot = (await published.json()) as any;
         const publicPath = new URL(snapshot.url).pathname;
+        const preview = await request(
+          `/api/projects/${project.id}/preview`,
+          "POST",
+          undefined,
+          alice,
+        );
+        assert.equal(preview.status, 200);
+        const previewPath = new URL((await preview.json() as any).url).pathname;
+        const shared = await request(
+          `/api/projects/${project.id}/share`,
+          "POST",
+          undefined,
+          alice,
+        );
+        assert.equal(shared.status, 200);
+        const sharePath = new URL((await shared.json() as any).url).pathname;
         assert.equal(
           (await request(`${publicPath}/assets/${asset.id}`)).status,
           200,
@@ -274,6 +290,8 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
           200,
         );
         assert.equal((await request(publicPath)).status, 404);
+        assert.equal((await request(previewPath)).status, 404);
+        assert.equal((await request(sharePath)).status, 404);
       },
     );
     await t.test(
@@ -419,11 +437,27 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
         headers,
       );
       assert.equal(listed.status, 200);
-      assert.ok(
-        ((await listed.json()) as any).result.tools.some(
-          (t: any) => t.name === "patch_document",
-        ),
+      const listedTools = ((await listed.json()) as any).result.tools as Array<{ name: string }>;
+      for (const name of [
+        "patch_document",
+        "preview_project",
+        "unpreview_project",
+        "share_project",
+        "unshare_project",
+        "export_project",
+      ]) assert.ok(listedTools.some(tool => tool.name === name), name);
+      const callTool = (id: number, name: string) => request(
+        "/mcp",
+        "POST",
+        { jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: { projectId: project.id } } },
+        undefined,
+        token,
+        headers,
       );
+      for (const [id, name] of [[4, "preview_project"], [5, "unpreview_project"], [6, "share_project"], [7, "unshare_project"]] as const) {
+        const response = await callTool(id, name);
+        assert.equal(response.status, 200, name);
+      }
       const invoked = await request(
         "/mcp",
         "POST",

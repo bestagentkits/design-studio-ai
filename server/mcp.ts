@@ -332,6 +332,28 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       callApi("POST", `/api/projects/${encodeURIComponent(projectId)}/publish`),
   );
   server.registerTool(
+    "preview_project",
+    {
+      description:
+        "Create a public immutable preview snapshot and return its URL. Makes content public.",
+      inputSchema: { projectId: z.string() },
+      annotations: { destructiveHint: false },
+    },
+    async ({ projectId }) =>
+      callApi("POST", `/api/projects/${encodeURIComponent(projectId)}/preview`),
+  );
+  server.registerTool(
+    "share_project",
+    {
+      description:
+        "Create a public immutable share snapshot and return its URL. Makes content public.",
+      inputSchema: { projectId: z.string() },
+      annotations: { destructiveHint: false },
+    },
+    async ({ projectId }) =>
+      callApi("POST", `/api/projects/${encodeURIComponent(projectId)}/share`),
+  );
+  server.registerTool(
     "unpublish_project",
     {
       description: "Remove all public snapshots of a project.",
@@ -342,6 +364,32 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       callApi(
         "DELETE",
         `/api/projects/${encodeURIComponent(projectId)}/publish`,
+      ),
+  );
+  server.registerTool(
+    "unpreview_project",
+    {
+      description: "Remove all public snapshots of a project through the preview alias.",
+      inputSchema: { projectId: z.string() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ projectId }) =>
+      callApi(
+        "DELETE",
+        `/api/projects/${encodeURIComponent(projectId)}/preview`,
+      ),
+  );
+  server.registerTool(
+    "unshare_project",
+    {
+      description: "Remove all public snapshots of a project through the share alias.",
+      inputSchema: { projectId: z.string() },
+      annotations: { destructiveHint: true },
+    },
+    async ({ projectId }) =>
+      callApi(
+        "DELETE",
+        `/api/projects/${encodeURIComponent(projectId)}/share`,
       ),
   );
   server.registerTool(
