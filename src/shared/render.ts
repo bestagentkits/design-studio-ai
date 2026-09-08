@@ -1,3 +1,6 @@
+import { resolveLayout } from './layout';
+import { ease } from './easing';
+import { documentFontFamilies, googleFontsStylesheetUrl } from './font-loading';
 import { isSafeUrl, type DesignDocument, type DesignNode, type Theme } from './schema';
 
 export const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
@@ -12,8 +15,8 @@ export function resolveFont(value: unknown, theme: Theme): string {
   return String(raw ?? theme.fonts.body).replace(/[^a-zA-Z0-9 ,_-]/g, '') || 'Arial';
 }
 export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0): DesignNode {
-  const result = { ...node, style: { ...node.style } };
-  for (const track of doc.timeline?.tracks.filter(track => track.nodeId === node.id) ?? []) {
+  const result = { ...node, style: { ...node.style }, ...(node.scene ? { scene: structuredClone(node.scene) } : {}) };
+  for (const track of doc.timeline?.tracks.filter(track => track.nodeId === node.id && !track.muted) ?? []) {
     const frames = [...track.keyframes].sort((a, b) => a.time - b.time);
     const keys = new Set(frames.flatMap(f => Object.keys(f.values)));
     for (const key of keys) {
@@ -23,9 +26,32 @@ export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0)
       const after = keyed.find(f => f.time >= time) ?? keyed[keyed.length - 1];
       const mix = before.time === after.time ? 0 : Math.max(0, Math.min(1, (time - before.time) / (after.time - before.time)));
       const a = before.values[key], b = after.values[key];
-      const value = typeof a === 'number' && typeof b === 'number' ? a + (b - a) * mix : a;
+      const value = typeof a === 'number' && typeof b === 'number' ? a + (b - a) * ease(mix, before.easing) : a;
       if (['x', 'y', 'width', 'height', 'rotation', 'opacity'].includes(key) && typeof value === 'number') Object.assign(result, { [key]: value });
       else if (['fill', 'fontSize', 'borderRadius', 'strokeWidth', 'stroke'].includes(key)) result.style[key] = value;
+      else if (typeof value === 'number') {
+        const transform = /^scene\.(position|rotation|scale)\.([xyz])$/.exec(key);
+        const bone = /^scene\.bones\.(\d+)\.(position|rotation)\.([xyz])$/.exec(key);
+        if (transform) {
+          const field = transform[1] as 'position' | 'rotation' | 'scale';
+          result.scene ??= {};
+          const page = doc.pages.find(p => p.nodes.some(n => n.id === node.id));
+          const fallback = field === 'scale' ? [node.width / 400, node.height / 400, Number(node.data?.depth ?? node.width) / 400]
+            : field === 'position' ? [(node.x + node.width / 2 - (page?.width ?? 0) / 2) / 240, ((page?.height ?? 0) / 2 - node.y - node.height / 2) / 240, Number(node.data?.z ?? 0)]
+              : [Number(node.data?.rotationX ?? 0), Number(node.data?.rotationY ?? 0), node.rotation ?? 0];
+          const vector = result.scene[field] ?? fallback;
+          vector['xyz'.indexOf(transform[2])] = value;
+          result.scene[field] = vector as [number, number, number];
+        } else if (bone) {
+          const target = result.scene?.bones?.[Number(bone[1])];
+          if (target) {
+            const field = bone[2] as 'position' | 'rotation';
+            const vector = target[field] ?? [0, 0, 0];
+            vector['xyz'.indexOf(bone[3])] = value;
+            target[field] = vector as [number, number, number];
+          }
+        }
+      }
     }
   }
   return result;
@@ -50,8 +76,7 @@ export function wrappedLines(value: string, width: number, size: number): string
   }
   return lines;
 }
-function nodeSvg(raw: DesignNode, doc: DesignDocument, time: number): string {
-  const n = interpolateNode(raw, doc, time);
+function nodeSvg(n: DesignNode, doc: DesignDocument): string {
   if (n.visible === false) return '';
   const s = n.style ?? {}, theme = doc.theme;
   const fill = escapeHtml(resolveColor(s.fill ?? (n.type === 'text' ? '$text' : '$surface'), theme));
@@ -77,24 +102,30 @@ function nodeSvg(raw: DesignNode, doc: DesignDocument, time: number): string {
     markup = `<ellipse cx="${n.width / 2}" cy="${n.height * 0.86}" rx="${n.width * 0.3}" ry="${n.height * 0.055}" fill="#000000" opacity="0.12"/><ellipse cx="${n.width / 2}" cy="${n.height * 0.46}" rx="${n.width * 0.29}" ry="${n.height * 0.31}" fill="none" stroke="${color}" stroke-width="${n.width * 0.14}" transform="rotate(-28 ${n.width / 2} ${n.height / 2})"/><text x="${n.width / 2}" y="${n.height - 3}" text-anchor="middle" font-size="12" fill="${escapeHtml(resolveColor('$muted', theme))}">3D scene · Open editor for interactive rendering</text>`;
   } else if (n.type === 'video' || n.type === 'audio' || n.type === 'image') {
     markup = `<rect width="${n.width}" height="${n.height}" rx="${radius}" fill="${fill}"/><text x="${n.width / 2}" y="${n.height / 2}" text-anchor="middle" font-family="Arial" font-size="18" fill="${escapeHtml(resolveColor('$muted', theme))}">${escapeHtml(n.name || n.type)}</text>`;
+  } else if (n.type === 'group') {
+    markup = '';
   } else if (s.shape === 'ellipse' || n.data?.shape === 'ellipse') {
     markup = `<ellipse cx="${n.width / 2}" cy="${n.height / 2}" rx="${n.width / 2}" ry="${n.height / 2}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
   } else {
     markup = `<rect width="${n.width}" height="${n.height}" rx="${radius}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
   }
-  return `<g data-node-id="${escapeHtml(n.id)}" transform="translate(${num(n.x, 0)} ${num(n.y, 0)}) rotate(${num(n.rotation, 0)} ${num(n.width, 0) / 2} ${num(n.height, 0) / 2})" opacity="${num(n.opacity, 1, 0, 1)}">${markup}</g>`;
+  return `<g data-node-id="${escapeHtml(n.id)}" transform="translate(${num(n.x, 0)} ${num(n.y, 0)}) rotate(${num(n.rotation, 0)} ${num(n.width, 0) * (n.pivot?.[0] ?? .5)} ${num(n.height, 0) * (n.pivot?.[1] ?? .5)})" opacity="${num(n.opacity, 1, 0, 1)}">${markup}</g>`;
 }
 export function renderSvg(doc: DesignDocument, pageIndex = 0, time = 0): string {
-  const page = doc.pages[pageIndex];
+  const sourcePage = doc.pages[pageIndex];
+  // Animation is expressed in each node's original coordinate system; resolve
+  // parent offsets only after evaluating the animated pose.
+  const page = sourcePage ? resolveLayout({ ...sourcePage, nodes: sourcePage.nodes.map(node => interpolateNode(node, doc, time)) }) : undefined;
   if (!page) throw new Error('Page does not exist');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}" role="img" aria-label="${escapeHtml(page.name)}"><rect width="100%" height="100%" fill="${escapeHtml(resolveColor(page.background, doc.theme, '#ffffff'))}"/>${page.nodes.map(n => nodeSvg(n, doc, time)).join('')}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}" role="img" aria-label="${escapeHtml(page.name)}"><rect width="100%" height="100%" fill="${escapeHtml(resolveColor(page.background, doc.theme, '#ffffff'))}"/>${page.nodes.map(n => nodeSvg(n, doc)).join('')}</svg>`;
 }
 export function renderHtml(doc: DesignDocument, viewer?: { script: string; nonce?: string }): string {
+  const fontUrl = googleFontsStylesheetUrl(documentFontFamilies(doc));
   const sections = doc.pages.map((page, i) => {
     const media = page.nodes.filter(n => n.visible !== false && (n.type === 'video' || n.type === 'audio') && n.src && isSafeUrl(n.src)).map(n => `<${n.type} controls src="${escapeHtml(n.src)}" style="position:absolute;left:${n.x / page.width * 100}%;top:${n.y / page.height * 100}%;width:${n.width / page.width * 100}%;height:${n.height / page.height * 100}%" preload="metadata"></${n.type}>`).join('');
     return `<section data-studio-page="${i}" aria-label="${escapeHtml(page.name)}" style="max-width:${page.width}px">${renderSvg(doc, i)}${media}</section>`;
   }).join('\n');
-  const interactive = viewer && (doc.timeline || doc.pages.some(p => p.nodes.some(n => n.type === 'model3d')))
+  const interactive = viewer
     ? `<script id="studio-document" type="application/json">${JSON.stringify(doc).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026')}</script><script${viewer.nonce ? ` nonce="${escapeHtml(viewer.nonce)}"` : ''}>${viewer.script.replace(/<\/script/gi, '<\\/script')}</script>` : '';
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(doc.name)}</title><style>body{margin:0;background:${resolveColor('$background', doc.theme, '#fff')};font-family:Arial}section{position:relative;margin:0 auto 24px;break-after:page}svg{display:block;width:100%;height:auto}@media print{section{margin:0;break-inside:avoid}video,audio{display:none}}</style></head><body>${sections}${interactive}</body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(doc.name)}</title>${fontUrl ? `<link rel="stylesheet" href="${escapeHtml(fontUrl)}" data-studio-fonts>` : ''}<style>body{margin:0;background:${resolveColor('$background', doc.theme, '#fff')};font-family:Arial}section{position:relative;margin:0 auto 24px;break-after:page}svg{display:block;width:100%;height:auto}@media print{section{margin:0;break-inside:avoid}video,audio{display:none}}</style></head><body>${sections}${interactive}</body></html>`;
 }

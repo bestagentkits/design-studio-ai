@@ -1,3 +1,14 @@
+import { loadDocumentFonts } from '../shared/font-loading';
+import { mergeDocuments } from '../shared/document-merge';
+import { DocumentView, usesDom } from './document-view';
+import { ModelPicker } from './model-picker';
+import { SlidePlayer } from './slide-player';
+import { useCanvasGestures } from './canvas-gestures';
+import { LayerTree } from './layer-tree';
+import { TimelineEditor } from './timeline-editor';
+import { resolveLayout, subtree } from '../shared/layout';
+import { transformNode, type Handle } from '../shared/transform';
+import { componentNames } from '../shared/design-capabilities';
 import {
   lazy,
   Suspense,
@@ -75,6 +86,8 @@ import type { DesignBrief } from "../shared/brief";
 import { inspectDesign } from "../shared/design-checks";
 
 import { exportDesign } from "./file-formats";
+import { registerDesignTools } from './browser-design-tools';
+import { mutateDocument } from '../shared/operations';
 const SceneView = lazy(() =>
   import("./scene-view").then((module) => ({ default: module.SceneView })),
 );
@@ -233,7 +246,7 @@ export function Editor({
   const [project, setProject] = useState(initial),
     [doc, setDoc] = useState<DesignDocument>(() => clone(initial.document));
   const [saved, setSaved] = useState(JSON.stringify(initial.document)),
-    [pageIndex, setPageIndex] = useState(0),
+    [requestedPageIndex, setPageIndex] = useState(0),
     [selected, setSelected] = useState<string | null>(null);
   const [panel, setPanel] = useState("chat"),
     [mobilePanel, setMobilePanel] = useState("canvas"),
@@ -250,6 +263,16 @@ export function Editor({
     [shareUrl, setShareUrl] = useState("");
   const [showChecks, setShowChecks] = useState(false);
   const designChecks = showChecks ? inspectDesign(doc) : null;
+  const [live, setLive] = useState(true);
+  const [syncStatus, setSyncStatus] = useState("Live");
+  const syncing = useRef(false);
+  const syncBlocked = useRef(false);
+  syncBlocked.current = !!busy || !!proposal;
+  const [presenting, setPresenting] = useState(false);
+  const [domBounds, setDomBounds] = useState<DesignNode[]>([]);
+  const [domOverlayBounds, setDomOverlayBounds] = useState<DesignNode[]>([]);
+  const measureDom = useCallback((nodes: DesignNode[]) => setDomBounds(previous => JSON.stringify(previous) === JSON.stringify(nodes) ? previous : nodes), []);
+  const measureOverlay = useCallback((nodes: DesignNode[]) => setDomOverlayBounds(previous => JSON.stringify(previous) === JSON.stringify(nodes) ? previous : nodes), []);
   const [showCode, setShowCode] = useState(false),
     [preview, setPreview] = useState(false),
     [zoom, setZoom] = useState(1),
@@ -282,14 +305,25 @@ export function Editor({
       x: number;
       y: number;
       original: DesignNode;
-      resize: boolean;
+      parentRotation: number;
+      resize: Handle;
     } | null>(null);
   const dirty = JSON.stringify(doc) !== saved,
     displayed = proposal || doc,
+    pageIndex = Math.max(0, Math.min(requestedPageIndex, displayed.pages.length - 1)),
     page = displayed.pages[Math.min(pageIndex, displayed.pages.length - 1)]!,
     baseNode = doc.pages[pageIndex]?.nodes.find((n) => n.id === selected),
     node = baseNode ? interpolateNode(baseNode, doc, time) : undefined,
     scale = fitted * zoom;
+  const viewportReady = (briefLoaded || !!briefError) && (!brief || briefManual);
+  const { pan, resetPan } = useCanvasGestures(viewport, scale, setZoom, displayed.kind === '3d', viewportReady, () => { drag.current = null; });
+  useEffect(() => {
+    let active = true;
+    void loadDocumentFonts(displayed).catch(error => {
+      if (active && viewport.current) viewport.current.dataset.fontError = error instanceof Error ? error.message : 'Font loading failed';
+    });
+    return () => { active = false; };
+  }, [displayed.theme.fonts, displayed.pages]);
   docRef.current = doc;
   projectRef.current = project;
   function remember() {
@@ -300,14 +334,13 @@ export function Editor({
     setRedoCount(0);
   }
   const change = useCallback((recipe: (doc: DesignDocument) => void) => {
-    remember();
-    setDoc((current) => {
-      const next = clone(current);
+    try {
+      const next = clone(docRef.current);
       recipe(next);
       next.metadata.updatedAt = new Date().toISOString();
-      return next;
-    });
-    setProposal(null);
+      const validated = documentSchema.parse(next);
+      remember(); docRef.current = validated; setDoc(validated); setProposal(null);
+    } catch (error) { setError(`Edit rejected: ${message(error)}`); }
   }, []);
   function setNodePatch(
     d: DesignDocument,
@@ -316,7 +349,7 @@ export function Editor({
   ) {
     Object.assign(target, patch);
     const track = d.timeline?.tracks.find((t) => t.nodeId === target.id);
-    if (!track) return;
+    if (!track || track.locked || track.muted) return;
     const animated = Object.fromEntries(
       Object.entries(patch).filter(
         ([key, value]) =>
@@ -337,6 +370,7 @@ export function Editor({
   function update(patch: Partial<DesignNode>) {
     if (!selected) return;
     change((d) => {
+      if (patch.layout) { Object.assign(d, mutateDocument(d, [{ op: 'update-node', nodeId: selected, changes: patch }])); return; }
       const target = d.pages[pageIndex]!.nodes.find((n) => n.id === selected);
       if (target) setNodePatch(d, target, patch);
     });
@@ -362,23 +396,66 @@ export function Editor({
     if (busy) return;
     setBusy("Saving");
     setError("");
-    const sending = clone(docRef.current);
     try {
-      const response = await put<{ project: Project }>(
+      while (syncing.current) await new Promise(resolve => setTimeout(resolve, 50));
+      syncing.current = true;
+      const sending = clone(docRef.current), base = clone(projectRef.current.document);
+      const response = live ? await post<{ project: Project }>(`/api/projects/${project.id}/merge`, {
+        base, document: sending, baseRevision: projectRef.current.revision,
+      }) : await put<{ project: Project }>(
         `/api/projects/${project.id}/document`,
         { document: sending, expectedRevision: projectRef.current.revision },
       );
+      const merged = mergeDocuments(sending, docRef.current, response.project.document);
+      let excluded = 0;
+      const rebase = (entries: DesignDocument[]) => entries.flatMap(entry => { try { return [mergeDocuments(sending, entry, response.project.document)]; } catch { excluded++; return []; } });
+      history.current = rebase(history.current); future.current = rebase(future.current);
+      setHistoryCount(history.current.length); setRedoCount(future.current.length);
+      projectRef.current = response.project; docRef.current = merged;
+      setDoc(merged);
       setProject(response.project);
       onProject(response.project);
-      setSaved(JSON.stringify(sending));
-      notify("All changes saved.");
+      setSaved(JSON.stringify(response.project.document));
+      notify(excluded ? `Saved. ${excluded} undo states overlapping remote edits were removed.` : "All changes saved.");
     } catch (e) {
       setError(message(e));
     } finally {
+      syncing.current = false;
       setBusy("");
     }
   }
   saveRef.current = save;
+  useEffect(() => {
+    if (!live) return;
+    let stopped = false;
+    const synchronize = async () => {
+      if (syncing.current || drag.current || syncBlocked.current || stopped) return;
+      syncing.current = true;
+      const base = clone(projectRef.current.document), sending = clone(docRef.current);
+      try {
+        const changed = JSON.stringify(sending) !== JSON.stringify(base);
+        const result = changed
+          ? await post<{ project?: Project }>(`/api/projects/${project.id}/merge`, { base, document: sending, baseRevision: projectRef.current.revision })
+          : await api<{ project?: Project }>(`/api/projects/${project.id}/changes?since=${projectRef.current.revision}`);
+        if (stopped || !result.project) return;
+        const remote = result.project;
+        // Edits typed during the request are reconciled, never replaced by its response.
+        const merged = mergeDocuments(changed ? sending : base, docRef.current, remote.document);
+        let excluded = 0;
+        const rebaseHistory = (entries: DesignDocument[]) => entries.flatMap(entry => { try { return [mergeDocuments(changed ? sending : base, entry, remote.document)]; } catch { excluded++; return []; } });
+        history.current = rebaseHistory(history.current); future.current = rebaseHistory(future.current);
+        setHistoryCount(history.current.length); setRedoCount(future.current.length);
+        projectRef.current = remote; docRef.current = merged;
+        setProject(remote); setDoc(merged); setSaved(JSON.stringify(remote.document)); onProject(remote); setSyncStatus('Live · synced');
+        if (excluded) notify(`${excluded} undo states overlap a remote edit and were removed to protect that edit.`);
+      } catch (e) {
+        setSyncStatus(message(e));
+        if (e instanceof Error && /conflict/i.test(e.message)) { setLive(false); setError(`Live sync paused. ${e.message} Your local edits are preserved. Export JSON before reconciling.`); }
+      } finally { syncing.current = false; }
+    };
+    const timer = window.setInterval(() => { void synchronize(); }, 1200);
+    return () => { stopped = true; clearInterval(timer); };
+  }, [live, project.id]);
   useEffect(() => {
     api<{ providers: Provider[] }>("/api/providers")
       .then((result) => {
@@ -430,7 +507,7 @@ export function Editor({
     observer.observe(viewport.current);
     fit();
     return () => observer.disconnect();
-  }, [page.width, page.height, mobilePanel]);
+  }, [page.width, page.height, mobilePanel, viewportReady]);
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty) e.preventDefault();
@@ -475,17 +552,11 @@ export function Editor({
   }
   function duplicateNode() {
     if (!node) return;
-    const copy = {
-      ...clone(node),
-      id: uid(),
-      name: `${node.name} copy`,
-      x: node.x + 24,
-      y: node.y + 24,
-    };
+    const duplicateId = uid();
     change((d) => {
-      d.pages[pageIndex]!.nodes.push(copy);
+      Object.assign(d, mutateDocument(d, [{ op: 'duplicate-node', nodeId: node.id, duplicateId }]));
     });
-    setSelected(copy.id);
+    setSelected(duplicateId);
   }
   function reorder(direction: number) {
     change((d) => {
@@ -506,6 +577,9 @@ export function Editor({
       copy.nodes.forEach((n) => {
         n.id = ids.get(n.id)!;
         if (n.parentId) n.parentId = ids.get(n.parentId);
+        n.interactions = n.interactions?.map(action => ({ ...action, target:
+          action.action === 'toggle' ? ids.get(action.target) ?? action.target :
+          action.action === 'navigate' && action.target === original.id ? copy.id : action.target }));
       });
       d.pages.splice(pageIndex + 1, 0, copy);
       if (d.timeline)
@@ -546,6 +620,12 @@ export function Editor({
         event.preventDefault();
         void saveRef.current();
         return;
+      }
+      if (target instanceof HTMLInputElement && target.type === 'number' && event.shiftKey && ['ArrowUp', 'ArrowDown'].includes(event.key)) {
+        event.preventDefault();
+        const value = Math.max(target.min === '' ? -Infinity : Number(target.min), Math.min(target.max === '' ? Infinity : Number(target.max), (Number(target.value) || 0) + (event.key === 'ArrowUp' ? 10 : -10)));
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(target, String(value));
+        target.dispatchEvent(new Event('input', { bubbles: true })); return;
       }
       if (
         target.isContentEditable ||
@@ -631,7 +711,7 @@ export function Editor({
   function pointerDown(
     event: PointerEvent,
     target: DesignNode,
-    resize = false,
+    resize: Handle = 'move',
   ) {
     event.stopPropagation();
     if (event.currentTarget instanceof HTMLElement)
@@ -643,11 +723,19 @@ export function Editor({
     event.preventDefault();
     setSelected(target.id);
     remember();
+    let parentRotation = 0, parentId = target.parentId;
+    while (parentId) {
+      const parent = docRef.current.pages[pageIndex].nodes.find(n => n.id === parentId);
+      if (!parent) break;
+      parentRotation += interpolateNode(parent, docRef.current, time).rotation ?? 0;
+      parentId = parent.parentId;
+    }
     drag.current = {
       id: target.id,
       x: event.clientX,
       y: event.clientY,
-      original: clone(target),
+      original: clone(docRef.current.pages[pageIndex].nodes.find(n => n.id === target.id) ?? target),
+      parentRotation,
       resize,
     };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -660,15 +748,15 @@ export function Editor({
     setDoc((current) => {
       const next = clone(current),
         target = next.pages[pageIndex]!.nodes.find((n) => n.id === active.id)!;
-      const patch = active.resize
-        ? {
-            width: Math.max(8, Math.round(active.original.width + dx)),
-            height: Math.max(8, Math.round(active.original.height + dy)),
-          }
-        : {
-            x: Math.round(active.original.x + dx),
-            y: Math.round(active.original.y + dy),
-          };
+      const angle = active.parentRotation * Math.PI / 180;
+      const patch = transformNode(active.original, dx * Math.cos(angle) + dy * Math.sin(angle), -dx * Math.sin(angle) + dy * Math.cos(angle), active.resize, event.shiftKey);
+      if (active.resize === 'move') {
+        const parent = next.pages[pageIndex].nodes.find(n => n.id === target.parentId);
+        const layout = parent?.layout ?? (!target.parentId ? next.pages[pageIndex].layout : undefined);
+        if (layout && layout.mode !== 'absolute' && target.position !== 'absolute') return current;
+        const ids = subtree(next.pages[pageIndex], target.id);
+        if (!target.layout) next.pages[pageIndex].nodes.filter(n => ids.has(n.id) && n.id !== target.id).forEach(n => { n.x += (patch.x ?? target.x) - target.x; n.y += (patch.y ?? target.y) - target.y; });
+      }
       setNodePatch(next, target, patch);
       return next;
     });
@@ -849,6 +937,7 @@ export function Editor({
     }
   }
   async function exportFile(format: string, local = false) {
+    local ||= ['react', 'glb', 'gltf'].includes(format);
     setBusy(`Exporting ${format.toUpperCase()}`);
     setError("");
     setFailedExport("");
@@ -926,6 +1015,7 @@ export function Editor({
       notify("Select a layer to add a keyframe.");
       return;
     }
+    if (doc.timeline.tracks.some(t => t.nodeId === node.id && t.locked)) { notify('Unlock the track before adding a keyframe.'); return; }
     change((d) => {
       let track = d.timeline!.tracks.find((t) => t.nodeId === node.id);
       if (!track) {
@@ -933,10 +1023,13 @@ export function Editor({
         d.timeline!.tracks.push(track);
       }
       const at = Math.round(time * 100) / 100;
+      const previous = track.keyframes.find(k => k.time === at);
       track.keyframes = track.keyframes.filter((k) => k.time !== at);
       track.keyframes.push({
+        ...previous,
         time: at,
         values: {
+          ...previous?.values,
           x: node.x,
           y: node.y,
           width: node.width,
@@ -967,7 +1060,9 @@ export function Editor({
       "studio_approve_brief",
       "studio_inspect_design",
     ];
+    let unregisterAdditional: (() => void) | undefined;
     try {
+      unregisterAdditional = registerDesignTools(context, () => docRef.current, next => change(d => Object.assign(d, next)));
       context.registerTool({
         name: toolNames[0]!,
         description:
@@ -982,7 +1077,7 @@ export function Editor({
       context.registerTool({
         name: toolNames[1]!,
         description:
-          "Update one existing node in the open editor. This is a local edit; save explicitly afterwards.",
+          "Update one existing node in the open editor. This updates the editor immediately; live mode autosaves.",
         inputSchema: {
           type: "object",
           properties: {
@@ -1181,6 +1276,7 @@ export function Editor({
       setError(`Browser tool registration failed: ${message(e)}`);
     }
     return () => {
+      unregisterAdditional?.();
       toolNames.forEach((name) => context.unregisterTool?.(name));
     };
   }, [project.id]);
@@ -1561,11 +1657,12 @@ export function Editor({
                 </div>
                 <details className="model-override">
                   <summary>Model options</summary>
-                  <input
-                    aria-label="Model override"
+                  <ModelPicker
+                    provider={provider}
+                    label="Model override"
                     placeholder="Use provider default"
                     value={model}
-                    onChange={(e) => setModel(e.target.value)}
+                    onChange={setModel}
                   />
                 </details>
               </div>
@@ -1578,47 +1675,12 @@ export function Editor({
               </button>
             </>
           ) : panel === "layers" ? (
-            <div
-              className="layers-panel"
-              onKeyDown={(event) => navigateButtonGroup(event, ".layer-row", "vertical")}
-            >
-              <div className="layer-heading">
-                <h3>{page.name}</h3>
-                <span>{page.nodes.length} layers</span>
-              </div>
-              {[...page.nodes].reverse().map((layer) => (
-                <button
-                  key={layer.id}
-                  className={`layer-row ${selected === layer.id ? "selected" : ""}`}
-                  aria-pressed={selected === layer.id}
-                  onClick={() => {
-                    setSelected(layer.id);
-                    setDirectText(null);
-                  }}
-                >
-                  <span className="layer-type">
-                    {layer.type === "text" ? (
-                      <Type size={15} />
-                    ) : layer.type === "model3d" ? (
-                      <Box size={15} />
-                    ) : layer.type === "image" ? (
-                      <ImagePlus size={15} />
-                    ) : (
-                      <Square size={15} />
-                    )}
-                  </span>
-                  <span>{layer.name}</span>
-                  {layer.locked && <LockKeyhole size={12} />}{" "}
-                  {layer.visible === false && <Eye size={12} />}
-                </button>
-              ))}
-              <div className="layer-tip">
-                Drag layers on the canvas. Use the Design panel to change their
-                order.
-              </div>
-            </div>
+            <LayerTree doc={doc} page={page} measured={usesDom(page) ? domBounds : undefined} selected={selected} select={id => { setSelected(id); setDirectText(null); }} change={change} />
+
           ) : (
             <div className="assets-panel">
+              <h3>Components</h3><div className="component-catalog">{componentNames.map(name => <button key={name} onClick={() => addNode('component', { name, width: ['Table', 'Chart', 'List'].includes(name) ? 420 : 240, height: ['Table', 'Chart', 'List'].includes(name) ? 260 : 48, component: { name, system: 'shadcn', props: { label: name } } })}>{name}</button>)}</div>
+              <button className="button" onClick={() => addNode('frame', { name: 'Auto layout', width: 480, height: 320, layout: { mode: 'flex', direction: 'column', gap: 16, padding: 24 } })}>Add layout container</button>
               <label className="asset-upload">
                 <Upload size={24} />
                 <strong>Bring something in</strong>
@@ -1856,7 +1918,7 @@ export function Editor({
                 className="icon-button"
                 title="Fit canvas"
                 aria-label="Fit canvas"
-                onClick={() => setZoom(1)}
+                onClick={() => { setZoom(1); resetPan(); }}
               >
                 <Maximize2 size={16} />
               </button>
@@ -1912,9 +1974,10 @@ export function Editor({
                   page={page}
                   theme={displayed.theme}
                   selected={selected}
+                  doc={displayed} pageIndex={pageIndex} time={time} onUpdate={update}
+                  onPage={patch => change(d => Object.assign(d.pages[pageIndex], patch))}
                   onSelect={(id) => {
                     setSelected(id);
-                    // The renderer recreates its canvas on selection; focus the stable viewport.
                     viewport.current?.focus({ preventScroll: true });
                   }}
                 />
@@ -1923,6 +1986,7 @@ export function Editor({
               <div
                 className="canvas-paper"
                 style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px)`,
                   width: page.width * scale,
                   height: page.height * scale,
                 }}
@@ -1935,12 +1999,7 @@ export function Editor({
                     transform: `scale(${scale})`,
                   }}
                 >
-                  <div
-                    className="canvas-svg"
-                    dangerouslySetInnerHTML={{
-                      __html: renderSvg(displayed, pageIndex, time),
-                    }}
-                  />
+                  {usesDom(page) ? <DocumentView doc={displayed} pageIndex={pageIndex} time={time} onBounds={measureDom} onOverlayBounds={measureOverlay} navigate={id => { const next = displayed.pages.findIndex(p => p.id === id); if (next >= 0) setPageIndex(next); }}/> : <div className="canvas-svg" dangerouslySetInnerHTML={{ __html: renderSvg(displayed, pageIndex, time) }}/>}
                   {preview &&
                     page.nodes
                       .filter(
@@ -1983,9 +2042,8 @@ export function Editor({
                       ))}
                   {!preview &&
                     !proposal &&
-                    page.nodes
+                    (usesDom(page) && domOverlayBounds.length ? domOverlayBounds : resolveLayout({ ...page, nodes: page.nodes.map(n => interpolateNode(n, displayed, time)) }).nodes)
                       .filter((n) => n.visible !== false)
-                      .map((n) => interpolateNode(n, displayed, time))
                       .map((target) => (
                         <div
                           key={target.id}
@@ -1997,6 +2055,7 @@ export function Editor({
                               width: target.width,
                               height: target.height,
                               transform: `rotate(${target.rotation || 0}deg)`,
+                              transformOrigin: `${(target.pivot?.[0] ?? .5) * 100}% ${(target.pivot?.[1] ?? .5) * 100}%`,
                               "--inverse-scale": 1 / scale,
                             } as React.CSSProperties
                           }
@@ -2021,17 +2080,7 @@ export function Editor({
                             {target.name}
                           </span>
                           {selected === target.id && !target.locked && (
-                            <button
-                              className="resize-handle"
-                              aria-label="Resize selected layer"
-                              onPointerDown={(e) =>
-                                pointerDown(e, target, true)
-                              }
-                              onPointerMove={pointerMove}
-                              onPointerUp={() => {
-                                drag.current = null;
-                              }}
-                            />
+                            <>{(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w', 'rotate'] as Handle[]).map(handle => <button key={handle} className={`resize-handle handle-${handle}`} aria-label={`Transform ${handle}`} onPointerDown={e => pointerDown(e, target, handle)} onPointerMove={pointerMove} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}/>)}</>
                           )}
                         </div>
                       ))}
@@ -2056,6 +2105,7 @@ export function Editor({
               </div>
             )}
           </div>
+          {doc.timeline && <TimelineEditor doc={doc} time={time} seek={value => { setTime(value); setPlaying(false); }} change={change} />}
           {doc.timeline && (
             <div className="timeline">
               <button
@@ -2163,7 +2213,7 @@ export function Editor({
                 <Plus size={19} />
               </button>
             </div>
-            <div className="zoom-controls">
+            <div className="zoom-controls"><label title={syncStatus}><input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)}/>Live</label>{doc.kind === 'slides' && <button onClick={() => setPresenting(true)}>Present</button>}<button onClick={() => { setZoom(1 / fitted); resetPan(); }} title="Actual size">100%</button><button onClick={() => { setZoom(1); resetPan(); }}>Fit</button>
               <button
                 className="icon-button"
                 aria-label="Zoom out"
@@ -2171,7 +2221,7 @@ export function Editor({
               >
                 <Minus size={15} />
               </button>
-              <button className="zoom-value" onClick={() => setZoom(1)}>
+              <button className="zoom-value" onClick={() => { setZoom(1); resetPan(); }}>
                 {Math.round(scale * 100)}%
               </button>
               <button
@@ -2197,6 +2247,7 @@ export function Editor({
           removePage={removePage}
         />
       </div>
+      {presenting && <SlidePlayer doc={doc} close={() => setPresenting(false)} notes/>}
       {exportOpen && (
         <Modal
           title="Ready to leave the canvas?"
@@ -2204,11 +2255,12 @@ export function Editor({
         >
           <div className="modal-body">
             <p className="modal-description">
-              Exports save your latest edits, then render your design in the
-              cloud.
+              Export the current design as a document, interactive prototype, or editable source.
             </p>
             <div className="export-grid">
               {[
+                ...(['web', 'wireframe'].includes(doc.kind) ? [{ id: 'react', name: 'React prototype', detail: 'Runnable source + assets' }] : []),
+                ...(doc.kind === '3d' ? [{ id: 'glb', name: 'GLB model', detail: 'Scene, materials & animation' }, { id: 'gltf', name: 'glTF scene', detail: 'Portable 3D source' }] : []),
                 { id: "png", name: "PNG image", detail: "Current page" },
                 { id: "svg", name: "SVG vector", detail: "Current page" },
                 {

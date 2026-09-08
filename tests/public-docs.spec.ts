@@ -36,7 +36,14 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['document', 'interview', 'operations', 'scope']);
+  expect(Object.keys(schema).sort()).toEqual(['designSystem', 'document', 'interview', 'operations', 'scope']);
+  expect(schema.designSystem.properties.components.items.properties.src).toBeDefined();
+  const openapi = await (await request.get('/api/openapi')).json();
+  expect(Object.keys(openapi.components.schemas).every(name => /^[\w.-]+$/.test(name))).toBe(true);
+  expect(openapi.paths['/api/projects/{id}/assets'].post.requestBody.content['multipart/form-data'].schema.properties.file.format).toBe('binary');
+  expect(openapi.paths['/api/fonts'].get.parameters).toContainEqual(expect.objectContaining({ name: 'q', in: 'query' }));
+  expect(openapi.paths['/api/design-systems/{id}'].get.parameters).toContainEqual(expect.objectContaining({ name: 'version', in: 'query' }));
+  expect(apiMarkdown).toContain('## POST /api/design-systems');
   const sitemap = await request.get('/sitemap.xml');
   expect(sitemap.headers()['content-type']).toContain('application/xml');
   const locations = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => new URL(match[1]).pathname);

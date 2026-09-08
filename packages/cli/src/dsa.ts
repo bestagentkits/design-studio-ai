@@ -7,15 +7,18 @@ import { blocks, createBlock, createDocument, templates, themes } from '../../..
 import { duplicateDocument, mutateDocument, operationsSchema } from '../../../src/shared/operations';
 import { renderHtml, renderSvg } from '../../../src/shared/render';
 import { interviewSchema, answerSchema, scopeSchema } from '../../../src/shared/brief';
+import { mergeRequestSchema } from '../../../src/shared/collaboration-contract';
+import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.2.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.2.2').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
 program.configureOutput({ writeErr: () => {} });
 const client = () => new Client(program.opts());
+registerDesignSystemCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;
 const wrap = (handler: (...args: any[]) => Promise<unknown> | unknown) => async (...args: any[]) => { const value = await handler(...args); if (value !== undefined) output(value); };
@@ -101,6 +104,8 @@ projects.command('clone <id>').option('--name <name>', 'Name for the new project
   return client().json('/api/projects', 'POST', { name: options.name ?? `${source.name} copy`, description: source.description, kind: source.kind, document: duplicateDocument(source.document, options.name) });
 }));
 const documents = projects.command('document').description('Read and write the canonical design document');
+documents.command('merge <id>').description('Merge edits against the actual base you read; overlapping changes return conflict').requiredOption('--file <path>', 'JSON {base,document,baseRevision}, or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/merge`, 'POST', mergeRequestSchema.parse(await inputJson(options.file)))));
+documents.command('changes <id>').option('--since <revision>', 'Last observed revision', '0').action(wrap((id, options) => client().json(`${projectPath(id)}/changes?since=${nonnegativeNumber(options.since)}`)));
 documents.command('get <id>').option('--output <file>', 'Save document JSON to a file').action(async (id, options) => { await outputFile(options.output, JSON.stringify((await project(id)).document, null, 2)); });
 documents.command('put <id>').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => save(id, await documentInput(options.file), revision(options.revision))));
 documents.command('patch <id>').description('Apply shared targeted operations; reuses atomic revision-checked save').requiredOption('--file <path>', 'Operations array JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => {
@@ -113,10 +118,10 @@ projects.command('import').description('Create a new project from canonical JSON
   return client().json('/api/projects', 'POST', { name: options.name ?? document.name, kind: document.kind, document });
 }));
 
-projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, or mp4').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
-  if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4. Use google-slides for Google Slides.');
+projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, mp4, react (ZIP), glb, or gltf').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
+  if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4, react, glb, gltf. Use google-slides for Google Slides.');
   const destination = options.output ?? options.out;
-  const binary = !['json', 'html', 'svg'].includes(options.format);
+  const binary = !['json', 'html', 'svg', 'gltf'].includes(options.format);
   if (binary && (!destination || destination === '-')) throw new CliError('file_required', 'Binary exports require --output FILE.');
   const page = nonnegativeNumber(options.page);
   if (!Number.isInteger(page)) throw new CliError('invalid_page', 'Page must be a zero-based integer.');
@@ -156,6 +161,7 @@ program.command('generate <project-id>').description('Generate a document propos
   if (options.output) await outputFile(options.output, JSON.stringify(response, null, 2)); else output(response);
 });
 const providers = program.command('providers').description('Configure BYOK providers; raw secrets never returned by list');
+providers.command('models <provider>').option('--query <text>', 'Model search').action(wrap((provider, options) => client().json(`/api/providers/${part(provider)}/models` + (options.query ? `?q=${encodeURIComponent(options.query)}` : ''))));
 providers.command('list').action(wrap(() => client().json('/api/providers')));
 providers.command('set <provider>').option('--key-env <variable>', 'Environment variable containing provider key').option('--key-stdin', 'Read provider key from stdin').option('--base-url <url>', 'Operator-allowlisted endpoint').option('--model <id>', 'Default model').action(wrap(async (provider, options) => client().json(`/api/providers/${part(provider)}`, 'PUT', { apiKey: await secretInput(options, `${provider.toUpperCase()}_API_KEY`), baseUrl: options.baseUrl, model: options.model })));
 providers.command('remove <provider>').action(wrap(provider => client().json(`/api/providers/${part(provider)}`, 'DELETE')));

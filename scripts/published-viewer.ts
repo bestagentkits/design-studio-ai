@@ -1,3 +1,8 @@
+import { createElement } from 'react';
+import { createRoot, type Root } from 'react-dom/client';
+import { buildScene, disposeScene, animateScene } from '../src/shared/scene-runtime';
+import { SlidePlayer } from '../src/app/slide-player';
+import { DocumentView, usesDom } from '../src/app/document-view';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -7,9 +12,32 @@ import type { DesignDocument } from '../src/shared/schema';
 const source = document.getElementById('studio-document');
 if (source?.textContent) {
   const doc = JSON.parse(source.textContent) as DesignDocument;
+  const roots = new Map<number, Root>(), scenePaint = new Map<number, (time: number) => void>();
   const sections = Array.from(document.querySelectorAll<HTMLElement>('section[data-studio-page]'));
-  for (const [index, page] of doc.pages.entries()) {
+  if (doc.kind === 'slides') {
+    const host = document.createElement('div'); document.body.replaceChildren(host); createRoot(host).render(createElement(SlidePlayer, { doc }));
+  } else for (const [index, page] of doc.pages.entries()) {
     const section = sections[index]; if (!section) continue;
+    if (usesDom(page)) {
+      section.replaceChildren();
+      const root = createRoot(section); roots.set(index, root); root.render(createElement(DocumentView, { doc, pageIndex: index, navigate: (id: string) => { const next = doc.pages.findIndex(p => p.id === id); sections.forEach((el, i) => { el.hidden = i !== next; }); } }));
+    }
+    if (page.scene || page.nodes.some(n => n.scene)) {
+      section.replaceChildren();
+      void (async () => {
+        try {
+          const { scene, camera, target } = await buildScene(doc, index);
+          const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); section.append(renderer.domElement);
+          const controls = new OrbitControls(camera, renderer.domElement); controls.target.copy(target); controls.enableDamping = true;
+          const resize = () => { const width = section.clientWidth || page.width, height = width * page.height / page.width; renderer.setSize(width, height); camera.aspect = width / height; camera.updateProjectionMatrix(); };
+          const observer = new ResizeObserver(resize); observer.observe(section); resize();
+          scenePaint.set(index, time => animateScene(scene, doc, index, time));
+          renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+          window.addEventListener('pagehide', () => { observer.disconnect(); controls.dispose(); disposeScene(scene); renderer.setAnimationLoop(null); renderer.dispose(); renderer.forceContextLoss(); }, { once: true });
+        } catch { section.textContent = 'The 3D scene could not load. Open in a browser with WebGL enabled.'; }
+      })();
+      continue;
+    }
     for (const node of page.nodes.filter(n => n.type === 'model3d' && n.visible !== false)) {
       const host = document.createElement('div');
       host.style.cssText = `position:absolute;left:${node.x / page.width * 100}%;top:${node.y / page.height * 100}%;width:${node.width / page.width * 100}%;height:${node.height / page.height * 100}%;touch-action:none`;
@@ -44,7 +72,7 @@ if (source?.textContent) {
     const scrub = document.createElement('input'); scrub.type = 'range'; scrub.min = '0'; scrub.max = String(doc.timeline.duration); scrub.step = '0.01'; scrub.value = '0'; scrub.setAttribute('aria-label', 'Animation time'); scrub.style.flex = '1';
     controls.appendChild(play); controls.appendChild(scrub); document.body.appendChild(controls);
     let running = false, time = 0, frame = 0;
-    const paint = () => { sections.forEach((section, index) => { const svg = section.querySelector('svg'); if (svg) svg.outerHTML = renderSvg(doc, index, time); for (const node of doc.pages[index].nodes.filter(n => n.type === 'model3d' && n.visible !== false)) { section.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`)?.setAttribute('visibility', 'hidden'); const host = section.querySelector<HTMLElement>(`[data-studio-object="${CSS.escape(node.id)}"]`); if (host) { const animated = interpolateNode(node, doc, time), page = doc.pages[index]; host.style.left = `${animated.x / page.width * 100}%`; host.style.top = `${animated.y / page.height * 100}%`; host.style.width = `${animated.width / page.width * 100}%`; host.style.height = `${animated.height / page.height * 100}%`; host.style.opacity = String(animated.opacity ?? 1); } } }); scrub.value = String(time); };
+    const paint = () => { sections.forEach((section, index) => { scenePaint.get(index)?.(time); const root = roots.get(index); if (root) root.render(createElement(DocumentView, { doc, pageIndex: index, time })); else { const svg = section.querySelector('svg'); if (svg) svg.outerHTML = renderSvg(doc, index, time); } for (const node of doc.pages[index].nodes.filter(n => n.type === 'model3d' && n.visible !== false)) { section.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`)?.setAttribute('visibility', 'hidden'); const host = section.querySelector<HTMLElement>(`[data-studio-object="${CSS.escape(node.id)}"]`); if (host) { const animated = interpolateNode(node, doc, time), page = doc.pages[index]; host.style.left = `${animated.x / page.width * 100}%`; host.style.top = `${animated.y / page.height * 100}%`; host.style.width = `${animated.width / page.width * 100}%`; host.style.height = `${animated.height / page.height * 100}%`; host.style.opacity = String(animated.opacity ?? 1); } } }); scrub.value = String(time); };
     play.onclick = () => { running = !running; play.textContent = running ? 'Pause' : 'Play animation'; cancelAnimationFrame(frame); if (!running) return; if (time >= doc.timeline!.duration) time = 0; const start = performance.now() - time * 1000; const tick = () => { time = Math.min(doc.timeline!.duration, (performance.now() - start) / 1000); paint(); if (time < doc.timeline!.duration && running) frame = requestAnimationFrame(tick); else { running = false; play.textContent = 'Play animation'; } }; tick(); };
     scrub.oninput = () => { time = Number(scrub.value); running = false; cancelAnimationFrame(frame); play.textContent = 'Play animation'; paint(); };
     paint();

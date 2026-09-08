@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ModelPicker } from './model-picker';
 import {
   ArrowLeft,
   ArrowRight,
@@ -334,15 +335,16 @@ export function DesignBriefWorkspace({
             </Field>
             <details className="model-override">
               <summary>Model options</summary>
-              <input
-                aria-label="Interview model"
+              <ModelPicker
+                provider={provider}
+                label="Interview model"
                 disabled={!!busy}
                 placeholder={
                   providers.find((p) => p.provider === provider)?.model ||
                   "Use provider default"
                 }
                 value={model}
-                onChange={(e) => setModel(e.target.value)}
+                onChange={setModel}
               />
             </details>
             <button className="text-button" onClick={onSettings}>

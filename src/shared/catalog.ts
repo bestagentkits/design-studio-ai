@@ -1,4 +1,5 @@
 import { uid, type DesignDocument, type DesignNode, type DesignPage, type ProjectKind, type Theme } from './schema';
+import { structuredPage } from './structured-templates';
 
 export const themes: Theme[] = [
   { id: 'atelier', name: 'Atelier', colors: { background: '#F6F3EC', surface: '#EAE5D9', text: '#282B25', muted: '#73776B', accent: '#BE4B36', primary: '#BE4B36', secondary: '#C3CDA6', border: '#D7D6CA' }, fonts: { heading: 'Georgia', body: 'Arial' }, spacing: [4, 8, 16, 24, 32, 48, 64, 96], radius: 12 },
@@ -73,6 +74,7 @@ export function createDocument(kind: ProjectKind = 'web', name = 'Untitled desig
       text('Make it clear. Make it honest. Make it memorable.', 64, 1038, 872, 100, 35, true)])];
   }
   for (const page of pages) for (const node of page.nodes) node.id = uid();
+  if (kind === 'web' || kind === 'wireframe') pages = [structuredPage(kind === 'wireframe')];
   const doc: DesignDocument = { schemaVersion: 1, id: uid(), name, kind, theme, pages, assets: [], metadata: { createdAt: now, updatedAt: now } };
   if (kind === 'video') doc.timeline = { duration: 6, fps: 30, tracks: [{ id: uid(), nodeId: pages[0].nodes[1].id, keyframes: [{ time: 0, values: { opacity: 0, y: 275 } }, { time: 1.5, values: { opacity: 1, y: 215 } }, { time: 5, values: { opacity: 1, y: 215 } }, { time: 6, values: { opacity: 0, y: 190 } }] }, { id: uid(), nodeId: pages[0].nodes[0].id, keyframes: [{ time: 0, values: { x: 1040, rotation: 0 } }, { time: 6, values: { x: 940, rotation: 180 } }] }] };
   return doc;

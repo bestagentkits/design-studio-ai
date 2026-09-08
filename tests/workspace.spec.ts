@@ -52,6 +52,8 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     ownedProjects.add(project.id);
     expect(project.document.pages[0].nodes.length).toBeGreaterThan(3);
     await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
+    // This workflow verifies the explicit Save response; live autosave has its own coverage.
+    await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
     await fitsViewport(page);
     await page.getByRole('button', { name: 'Add text', exact: true }).click();
     if (mobile) await page.locator('.mobile-editor-nav').getByRole('button', { name: 'Design', exact: true }).click();
@@ -108,10 +110,9 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
       const published = await publicPage.goto(publicUrl);
       expect(published?.status()).toBe(200);
       const textNode = savedProject.document.pages[0].nodes.find(node => node.text === text)!;
-      const publishedText = publicPage.locator(`[data-node-id="${textNode.id}"] text`);
+      const publishedText = publicPage.locator(`[data-design-node="${textNode.id}"]`);
       await expect(publishedText).toBeVisible();
-      // SVG lays wrapped lines in separate tspans without DOM whitespace.
-      expect((await publishedText.locator('tspan').allTextContents()).join(' ')).toBe(text);
+      await expect(publishedText).toHaveText(text);
     } finally { await publicContext.close(); }
     await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
     await page.getByRole('button', { name: 'Export', exact: true }).click();

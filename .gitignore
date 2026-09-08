@@ -15,3 +15,6 @@ tmp/
 public/studio-renderer.js
 public/studio-viewer.js
 data/
+
+public/studio-geometry-worker.js
+public/studio-react-runtime.json

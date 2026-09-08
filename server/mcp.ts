@@ -14,6 +14,8 @@ import { fail, origin, owner, unb64 } from "./security";
 import { projectRow, saveDocument, storeAsset } from "./projects";
 import { mediaInputSchema } from './providers';
 import { interviewSchema, answerSchema, scopeSchema } from '../src/shared/brief';
+import { mergeRequestSchema } from '../src/shared/collaboration-contract';
+import { registerDesignSystemTools } from './design-system-tools';
 export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   if (c.req.header("Origin") && c.req.header("Origin") !== origin(c))
     fail(403, "invalid_origin", "MCP origin is not allowed.");
@@ -53,7 +55,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.2.0" },
+    { name: "design-studio-ai", version: "0.2.2" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -79,6 +81,17 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     if (!response.ok) return { isError: true, ...result(value) };
     return result(value);
   };
+  registerDesignSystemTools(server, callApi);
+  server.registerTool(
+    'merge_design',
+    { description: 'Merge your edited document against the exact base read earlier. Independent changes are retained; same-field conflicts require reconciliation. Never change the base to bypass a conflict.', inputSchema: { projectId: z.string(), ...mergeRequestSchema.shape } },
+    async ({ projectId, ...body }) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/merge`, body),
+  );
+  server.registerTool(
+    'get_design_changes',
+    { description: 'Read changes since a known revision. Useful for observing human edits before applying new agent operations.', inputSchema: { projectId: z.string(), since: z.number().int().min(0).optional() }, annotations: { readOnlyHint: true } },
+    async ({ projectId, since }) => callApi('GET', `/api/projects/${encodeURIComponent(projectId)}/changes?since=${since ?? 0}`),
+  );
   server.registerTool(
     'inspect_design',
     {description:'Run read-only deterministic design preflight on the saved revision: text fitting, estimated contrast, page bounds, media, chart data and export limits. Returns exact node IDs and suggestions. These hints do not replace visual inspection or certify accessibility.', inputSchema:{projectId:z.string()}, annotations:{readOnlyHint:true}},
@@ -383,23 +396,24 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     "export_project",
     {
       description:
-        "Render the saved design on the cloud and return actual file bytes. PNG is a visual preview. PPTX preserves editable text/shapes. Video supports up to 60 seconds. Import external media into the project first.",
+        "Render the saved design on the cloud and return actual file bytes. PNG is a visual preview. PPTX preserves legacy editable text/shapes and rasterizes structured layouts. React returns runnable frontend source ZIP; GLB/glTF return scene geometry and animation. Video supports up to 60 seconds. Import external media into the project first.",
       inputSchema: {
         projectId: z.string(),
-        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4"]),
+        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf"]),
         pageIndex: z.number().int().min(0).default(0),
+        expectedRevision: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ projectId, format, pageIndex }) => {
-      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex }) }, c.env);
+    async ({ projectId, format, pageIndex, expectedRevision }) => {
+      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision }) }, c.env);
       if (!response.ok) return { isError: true, ...result(await response.json()) };
       if (['json', 'html', 'svg'].includes(format)) return result({ format, content: await response.text() });
       const bytes = await response.arrayBuffer();
       if (bytes.byteLength > 20 * 1024 * 1024) return { isError: true, ...result({ error: { message: 'This export exceeds the MCP response limit. Download it with the CLI export command.' } }) };
       const data = Buffer.from(bytes).toString('base64');
       if (format === 'png') return { content: [{ type: 'image' as const, mimeType: 'image/png', data }] };
-      return { content: [{ type: 'resource' as const, resource: { uri: `studio://exports/${projectId}/${pageIndex}.${format}`, mimeType: response.headers.get('Content-Type')!, blob: data } }] };
+      return { content: [{ type: 'resource' as const, resource: { uri: `studio://exports/${projectId}/${pageIndex}.${format === 'react' ? 'zip' : format}`, mimeType: response.headers.get('Content-Type')!, blob: data } }] };
     },
   );
   server.registerTool(

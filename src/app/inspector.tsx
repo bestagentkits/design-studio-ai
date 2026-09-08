@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { LayoutInspector, InteractionInspector } from './layout-inspector';
+import { DesignSystemLibrary } from './design-system-library';
+import { FontPicker } from './font-picker';
+import { lazy, Suspense, useState } from "react";
 import {
   ArrowDown,
   ArrowUp,
@@ -13,6 +16,8 @@ import type { DesignDocument, DesignNode, DesignPage } from "../shared/schema";
 import { themes } from "../shared/catalog";
 import { resolveColor } from "../shared/render";
 import { Field } from "./ui";
+import { mutateDocument } from '../shared/operations';
+const SceneInspector = lazy(() => import('./scene-inspector').then(module => ({ default: module.SceneInspector })));
 import { navigateButtonGroup } from "./keyboard-navigation";
 
 type Props = {
@@ -40,22 +45,23 @@ export function Inspector({
   removePage,
 }: Props) {
   const [tab, setTab] = useState("design");
+  // The selection may show an interpolated pose; durable edits must preserve
+  // the stored scene/bind pose and unrelated animated style properties.
+  const storedNode = node && doc.pages.flatMap(p => p.nodes).find(n => n.id === node.id);
   function style(key: string, value: string | number) {
-    if (node) update({ style: { ...node.style, [key]: value } });
+    if (storedNode) update({ style: { ...storedNode.style, [key]: value } });
   }
   function data(key: string, value: string | number) {
-    if (node) update({ data: { ...node.data, [key]: value } });
+    if (storedNode) update({ data: { ...storedNode.data, [key]: value } });
   }
   function pageUpdate(patch: Partial<DesignPage>) {
     change((d) => {
-      Object.assign(
-        d.pages.find((p) => p.id === page.id)!,
-        patch,
-      );
+      Object.assign(d, mutateDocument(d, [{ op: 'update-page', pageId: page.id, changes: patch }]));
     });
   }
   return (
     <aside className="inspector">
+      {doc.kind === '3d' && <Suspense fallback={null}><SceneInspector doc={doc} page={page} node={storedNode} update={update} pageUpdate={pageUpdate}/></Suspense>}
       <div
         className="panel-tabs"
         onKeyDown={(event) => navigateButtonGroup(event)}
@@ -86,6 +92,7 @@ export function Inspector({
         <div className="inspector-body">
           <section>
             <h3>Design system</h3>
+            <DesignSystemLibrary doc={doc} page={page} node={storedNode} change={change}/>
             <Field label="Preset">
               <select
                 value={
@@ -137,21 +144,23 @@ export function Inspector({
           <section>
             <h3>Typography</h3>
             <Field label="Heading font">
-              <input
+              <FontPicker
                 value={doc.theme.fonts.heading}
-                onChange={(e) =>
+                label="Heading font"
+                onChange={(value) =>
                   change((d) => {
-                    d.theme.fonts.heading = e.target.value;
+                    d.theme.fonts.heading = value;
                   })
                 }
               />
             </Field>
             <Field label="Body font">
-              <input
+              <FontPicker
                 value={doc.theme.fonts.body}
-                onChange={(e) =>
+                label="Body font"
+                onChange={(value) =>
                   change((d) => {
-                    d.theme.fonts.body = e.target.value;
+                    d.theme.fonts.body = value;
                   })
                 }
               />
@@ -186,6 +195,7 @@ export function Inspector({
       ) : tab === "page" ? (
         <div className="inspector-body">
           <section>
+            <LayoutInspector page={page} update={pageUpdate}/>
             <h3>Canvas</h3>
             <Field label="Page name">
               <input
@@ -242,6 +252,7 @@ export function Inspector({
               </button>
             </div>
           </section>
+          {doc.kind === 'slides' && <section><Field label="Speaker notes"><textarea value={page.notes ?? ''} onChange={e => pageUpdate({ notes: e.target.value })}/></Field></section>}
           {doc.timeline && (
             <section>
               <h3>Motion settings</h3>
@@ -373,6 +384,8 @@ export function Inspector({
               </button>
             </div>
           </section>
+          <LayoutInspector node={node} page={page} update={update}/>
+          <InteractionInspector node={node} doc={doc} update={update}/>
           {node.type === "text" && (
             <section>
               <h3>Content</h3>
@@ -407,9 +420,10 @@ export function Inspector({
                 </Field>
               </div>
               <Field label="Font family">
-                <input
+                <FontPicker
+                  label="Font family"
                   value={String(node.style?.fontFamily || "$body")}
-                  onChange={(e) => style("fontFamily", e.target.value)}
+                  onChange={(value) => style("fontFamily", value)}
                 />
               </Field>
               <Field label="Alignment">

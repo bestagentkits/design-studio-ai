@@ -9,9 +9,10 @@ An agent-first design workspace for web interfaces, slides, reports, wireframes,
 ## Capabilities
 
 - Responsive project library with search, filters, sorting, duplication, and saved designs.
-- Chat-assisted design, direct object editing, layers, pages, themes, reusable blocks, assets, 3D controls, and timeline playback.
+- Structured flex/grid layouts, nested groups, Ant and shadcn-style components, versioned reusable design systems, and live human/agent editing.
+- Mesh/UV/rigging tools, textured animated 3D scenes, multi-layer keyframe editing, presentation modes, font/model discovery and interactive API docs.
 - BYOK text, image, speech, music/effects, and video generation, plus supported source-media edits. See [providers](docs/providers.md).
-- JSON, HTML, SVG, PNG, PDF, PowerPoint, WebM, supported MP4 recording, and authorized Google Slides export.
+- JSON, HTML, SVG, PNG, PDF, PowerPoint, WebM, supported MP4 recording, React prototype ZIP, GLB/glTF, and authorized Google Slides export.
 - Immutable public snapshots, REST, authenticated Streamable HTTP MCP with OAuth/API keys, experimental browser WebMCP, and the `dsa` CLI with an [agent skill](skills/design-studio-ai/SKILL.md).
 - Cloudflare hosting or Docker self-hosting with persistent SQLite/files.
 - Email/password and optional GitHub sign-in, with explicit account linking in Settings.
@@ -68,7 +69,7 @@ The package is **not published to the npm registry**. To build and install from 
 cd packages/cli
 npm pack
 cd ../..
-npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.0.tgz
+npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.2.tgz
 dsa --help
 dsa schema
 dsa projects list
@@ -87,7 +88,7 @@ Run `npm run typecheck`, `npm test`, and `npm run build`. `npm run test:e2e` sta
 - Provider/Google success needs external credentials and was not live-verified in the initial delivery environment. Missing configuration returns useful errors.
 - Google Slides accepts native text/shapes and HTTPS images; unsupported complex nodes fail explicitly. PowerPoint keeps editable text/primitives and rasterizes complex content.
 - Cloud binary export requires imported project assets for remote media, enforces render-size bounds, and limits motion to 60 seconds. MP4 depends on an available encoder. SVG is static; HTML can include the trusted interactive scene/timeline viewer. See [export behavior](docs/architecture.md#rendering-and-export).
-- Cloud motion mixes imported audio/video; browser fallback recordings are silent. 3D object properties persist, while orbit-camera adjustments are temporary preview state.
+- Cloud motion mixes imported audio/video; browser fallback recordings are silent. Serialized camera, lights, mesh/UV data, materials and rigs persist. Live synchronization polls saved revisions every 1.2 seconds.
 - WebMCP is experimental and feature-detected; other browsers retain the human UI and network MCP.
 - Upstream dependency audit findings remain; see [security notes](docs/deployment.md#dependency-security).
 

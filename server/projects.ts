@@ -461,13 +461,16 @@ export async function published(c: Context<Env>, slug: string) {
     .first<{ document: string }>();
   if (!row) fail(404, "not_found", "Publication not found.");
   const nonce = secret();
+  const document = documentSchema.parse(JSON.parse(row.document));
+  // Speaker notes remain owner-only even for previously saved public snapshots.
+  for (const page of document.pages) delete page.notes;
   return new Response(
-    await interactiveHtml(c, documentSchema.parse(JSON.parse(row.document)), nonce),
+    await interactiveHtml(c, document, nonce),
     {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Security-Policy":
-          `default-src 'none'; script-src 'nonce-${nonce}'; connect-src ${origin(c)} data: blob:; img-src 'self' https: data: blob:; media-src 'self' https: data: blob:; style-src 'unsafe-inline'; font-src https:; sandbox allow-scripts; base-uri 'none'; form-action 'none'`,
+          `default-src 'none'; script-src 'nonce-${nonce}'; connect-src ${origin(c)} data: blob:; img-src 'self' https: data: blob:; media-src 'self' https: data: blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; sandbox allow-scripts; base-uri 'none'; form-action 'none'`,
         "X-Content-Type-Options": "nosniff",
         "Cache-Control": "public,max-age=60",
       },

@@ -1,3 +1,4 @@
+import { builtStaticAssets } from './built-static-assets';
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
@@ -22,7 +23,7 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
       ),
     );
   }
-  const env: Bindings = {
+  const env: Bindings = { ASSETS: builtStaticAssets,
     DB: db,
     ASSETS_BUCKET: new FileBucket(join(dir, "assets")),
     APP_URL: "https://studio.example",
@@ -274,7 +275,9 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
           { name: "Private renamed" },
           alice,
         );
-        assert.equal(await (await request(publicPath)).text(), before);
+        // The immutable document is identical; a fresh CSP nonce is issued per response.
+        const normalizeNonce = (html: string) => html.replace(/<script nonce="[^"]+">/g, '<script nonce="CSP_NONCE">');
+        assert.equal(normalizeNonce(await (await request(publicPath)).text()), normalizeNonce(before));
         assert.equal(
           (
             await request(

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ModelPicker } from './model-picker';
 import {
   Check,
   ChevronRight,
@@ -91,6 +92,7 @@ export function Settings({
     [model, setModel] = useState(""),
     [tokenName, setTokenName] = useState(""),
     [newToken, setNewToken] = useState("");
+  const [modelRefresh, setModelRefresh] = useState(0);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [success, setSuccess] = useState("");
@@ -126,6 +128,7 @@ export function Settings({
       api<{ tokens: Token[] }>("/api/tokens"),
     ]);
     setProviders(p.providers);
+    setModelRefresh(value => value + 1);
     onProviders(p.providers);
     setTokens(t.tokens);
   }
@@ -264,10 +267,14 @@ export function Settings({
                   label="Default model"
                   hint="Optional. Leave blank to use the server default."
                 >
-                  <input
+                  <ModelPicker
+                    provider={selected}
+                    label="Default model"
                     value={model}
                     placeholder={current.model}
-                    onChange={(e) => setModel(e.target.value)}
+                    disabled={busy}
+                    refreshKey={modelRefresh}
+                    onChange={setModel}
                   />
                 </Field>
                 <div className="button-row">

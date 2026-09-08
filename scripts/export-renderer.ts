@@ -3,6 +3,9 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import PptxGenJS from 'pptxgenjs';
 import { interpolateNode, renderHtml, renderSvg, resolveColor, resolveFont } from '../src/shared/render';
 import type { DesignDocument, DesignNode } from '../src/shared/schema';
+import { mountExportPage, captureExportPage } from '../src/app/export-page';
+import { usesDom } from '../src/app/document-view';
+import { exportScene } from '../src/shared/scene-runtime';
 
 async function imageOf(svg: string) {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
@@ -42,19 +45,26 @@ async function prepare(input: DesignDocument) {
   }
   return doc;
 }
+const pageDisposers: Array<() => void> = [];
 async function present(input: DesignDocument, pageIndex = 0, all = false) {
-  const doc = await prepare(all ? input : { ...input, pages: [input.pages[pageIndex]] });
-  document.body.innerHTML = all ? renderHtml(doc).split('<body>')[1].split('</body>')[0] : renderSvg(doc, 0);
-  document.body.style.cssText = 'margin:0;background:transparent';
-  const style = document.createElement('style'); style.textContent = `svg{display:block;max-width:100%;height:auto}section{position:relative;break-after:page;margin:0} @page{size:${doc.pages[0].width}px ${doc.pages[0].height}px;margin:0}`; document.head.append(style);
-  await document.fonts.ready;
+  pageDisposers.splice(0).forEach(dispose => dispose());
+  document.body.replaceChildren(); document.body.style.cssText = 'margin:0;background:transparent';
+  const scene = input.pages.some(p => p.scene || p.nodes.some(n => n.scene));
+  const doc = scene ? input : await prepare(input);
+  const style = document.createElement('style'); style.textContent = `svg{display:block;max-width:100%;height:auto}@page{size:${doc.pages[0].width}px ${doc.pages[0].height}px;margin:0}`; document.head.append(style);
+  for (const index of all ? doc.pages.map((_, i) => i) : [pageIndex]) pageDisposers.push((await mountExportPage(doc, index)).dispose);
   return true;
 }
 async function pptx(input: DesignDocument) {
-  const doc = await prepare(input), deck = new PptxGenJS(), first = doc.pages[0];
+  const doc = input.pages.some(p => p.scene || p.nodes.some(n => n.scene)) ? input : await prepare(input), deck = new PptxGenJS(), first = doc.pages[0];
   deck.defineLayout({ name: 'STUDIO', width: first.width / 96, height: first.height / 96 }); deck.layout = 'STUDIO'; deck.title = doc.name;
-  for (const page of doc.pages) {
+  for (const [pageIndex, page] of doc.pages.entries()) {
     const slide = deck.addSlide(); slide.background = { color: resolveColor(page.background, doc.theme).replace('#', '') };
+    if (usesDom(page) || page.scene || page.nodes.some(n => n.scene)) {
+      const canvas = await captureExportPage(doc, pageIndex);
+      slide.addImage({ x: 0, y: 0, w: first.width / 96, h: first.height / 96, data: canvas.toDataURL('image/png') });
+      slide.addNotes(page.notes ?? `Design Studio AI: ${page.name}. Structured components rendered as an image.`); continue;
+    }
     const sx = first.width / page.width / 96, sy = first.height / page.height / 96;
     for (const node of page.nodes) {
       if (node.visible === false) continue;
@@ -75,7 +85,9 @@ async function pptx(input: DesignDocument) {
   return await deck.write({ outputType: 'base64' });
 }
 async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 'mp4') {
-  const doc = await prepare({ ...input, pages: [input.pages[pageIndex]] }), page = doc.pages[0], timeline = doc.timeline;
+  const selected = { ...input, pages: [input.pages[pageIndex]] };
+  const hasScene = !!selected.pages[0].scene || selected.pages[0].nodes.some(n => n.scene);
+  const doc = hasScene ? selected : await prepare(selected), page = doc.pages[0], timeline = doc.timeline;
   if (!timeline) throw new Error('This document needs a timeline.');
   if (timeline.duration > 60) throw new Error('Cloud video exports currently support up to 60 seconds per clip.');
   const candidates = format === 'mp4' ? ['video/mp4;codecs=avc1.42001E', 'video/mp4'] : ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'];
@@ -84,7 +96,9 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
   const canvas = document.createElement('canvas'); canvas.width = page.width; canvas.height = page.height;
   document.body.appendChild(canvas);
   const context = canvas.getContext('2d')!;
-  context.drawImage(await imageOf(renderSvg(doc, 0, 0)), 0, 0);
+  const mounted = hasScene ? await mountExportPage(doc, 0) : undefined;
+  const sceneCanvas = mounted?.host.querySelector('canvas');
+  context.drawImage(sceneCanvas ?? (usesDom(page) ? await captureExportPage(doc) : await imageOf(renderSvg(doc, 0, 0))), 0, 0);
   const stream = canvas.captureStream(0), videoTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
   const media = new Map<string, HTMLMediaElement>(), audio = new AudioContext(), destination = audio.createMediaStreamDestination();
   try {
@@ -102,6 +116,10 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
     do {
       const time = Math.min(timeline.duration, (performance.now() - start) / 1000);
       context.clearRect(0, 0, page.width, page.height);
+      if (sceneCanvas || usesDom(page)) {
+        mounted?.draw(time); context.drawImage(sceneCanvas ?? await captureExportPage(doc, 0, time), 0, 0); videoTrack.requestFrame();
+        await new Promise(resolve => setTimeout(resolve, 1000 / timeline.fps)); continue;
+      }
       let layers: typeof page.nodes = [], background = page.background;
       const paintLayers = async () => {
         const frame = await imageOf(renderSvg({ ...doc, pages: [{ ...page, background, nodes: layers }] }, 0, time));
@@ -125,6 +143,11 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
     const blob = new Blob(chunks, { type: mime });
     if (blob.size < 32) throw new Error('The video encoder returned no frames.');
     return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(blob); });
-  } finally { for (const el of media.values()) el.pause(); stream.getTracks().forEach(t => t.stop()); await audio.close(); canvas.remove(); }
+  } finally { for (const el of media.values()) el.pause(); stream.getTracks().forEach(t => t.stop()); await audio.close(); canvas.remove(); mounted?.dispose(); }
 }
-Object.assign(globalThis, { studioRenderer: { present, pptx, video } });
+async function scene(input: DesignDocument, pageIndex: number, format: 'glb' | 'gltf') {
+  const result = await exportScene(input, pageIndex, format === 'glb');
+  const bytes = result instanceof ArrayBuffer ? new Uint8Array(result) : new TextEncoder().encode(JSON.stringify(result));
+  return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(new Blob([bytes])); });
+}
+Object.assign(globalThis, { studioRenderer: { present, pptx, video, scene } });

@@ -1,3 +1,4 @@
+import { builtStaticAssets } from './built-static-assets';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -14,7 +15,7 @@ test('design lifecycle and delegated authorization regressions with real storage
   const dir = await mkdtemp(join(tmpdir(), 'studio-regressions-'));
   const db = new SqliteDatabase(join(dir, 'studio.sqlite'));
   const base = 'https://studio.example';
-  const env: Bindings = { DB: db, ASSETS_BUCKET: new FileBucket(join(dir, 'assets')), APP_URL: base, ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret() };
+  const env: Bindings = { ASSETS: builtStaticAssets, DB: db, ASSETS_BUCKET: new FileBucket(join(dir, 'assets')), APP_URL: base, ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret() };
   let cookie = '';
   const request = (path: string, method = 'GET', body?: unknown, bearer?: string, anonymous = false) => app.request(base + path, {
     method,

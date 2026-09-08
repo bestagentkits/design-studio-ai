@@ -2,6 +2,14 @@
 
 Provider keys are saved per user through Settings or `/api/providers/:provider`. They are encrypted at rest and returned only as masked configuration. A key, model access, and sufficient provider quota are required for generation. These integrations call real provider APIs; they do not generate sample media when configuration is missing.
 
+## Model and font discovery
+
+Settings, the brief and the editor offer searchable model IDs through authenticated `GET /api/providers/:provider/models?q=...`. [Discovery](../server/discovery.ts) calls each provider's official catalog with the account's saved credential, bounds pagination, and caches results for ten minutes. Responses identify live, cached or fallback provenance. Missing credentials, custom proxy configuration or upstream failure use labeled starter suggestions and the saved model ID. Custom IDs remain accepted; catalog membership does not guarantee task compatibility or account quota. Custom proxy credentials are never forwarded to an official provider origin. OAuth agent tokens cannot access provider credential-backed discovery.
+
+Google Fonts selection uses `GET /api/fonts?q=...`. Operators can configure server-only `GOOGLE_FONTS_API_KEY` to enable the full official catalog, cached for 24 hours. Without it, or when Google is unavailable, the picker identifies its curated Google-family fallback. Browser previews load selected families from Google's CSS2 service; isolated server exports embed bounded Google font responses before rendering. Regular faces are requested to support families without weight/italic axes; browsers synthesize those styles. Local system fonts are not fetched.
+
+The shared response schemas, normalization, limits and fallback entries are owned by [discovery.ts](../src/shared/discovery.ts) and the server route, rather than an independently maintained model list here. Tests validate account separation, query filtering, pagination, credential transport and explicit fallback behavior. Live credential-backed catalog access remains a separate integration check.
+
 ## Supported operations
 
 | Provider | Operation | Default model and source |
