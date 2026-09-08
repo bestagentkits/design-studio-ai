@@ -32,9 +32,22 @@ test('real headless renderer creates PNG, PDF, editable PowerPoint, 3D and video
     });
     await t.test('timeline records an actual WebM container', async () => {
       const motion = createDocument('video', 'Motion'); motion.timeline!.duration = 0.4;
-      motion.timeline!.tracks = motion.timeline!.tracks.map(track => ({ ...track, keyframes: track.keyframes.filter(f => f.time === 0) }));
-      const base64 = await page.evaluate(doc => (globalThis as any).studioRenderer.video(doc, 0, 'webm'), motion);
-      const bytes = Buffer.from(base64, 'base64'); assert.equal(bytes.subarray(0, 4).toString('hex'), '1a45dfa3'); assert.ok(bytes.length > 500);
+      motion.timeline!.tracks = [{ id: 'moving-shape', nodeId: motion.pages[0].nodes[0].id, keyframes: [{ time: 0, values: { x: 100 } }, { time: 0.4, values: { x: 700 } }] }];
+      const recorded = await page.evaluate(async doc => {
+        const NativeRecorder = MediaRecorder;
+        let startedAt = 0, stoppedAt = 0;
+        // Observe the real encoder lifecycle; stopping before startup can discard queued frames.
+        globalThis.MediaRecorder = class extends NativeRecorder {
+          constructor(stream: MediaStream, options?: MediaRecorderOptions) {
+            super(stream, options); this.addEventListener('start', () => { startedAt = performance.now(); });
+          }
+          stop() { stoppedAt = performance.now(); super.stop(); }
+        };
+        try { return { base64: await (globalThis as any).studioRenderer.video(doc, 0, 'webm'), startedAt, stoppedAt }; }
+        finally { globalThis.MediaRecorder = NativeRecorder; }
+      }, motion);
+      const bytes = Buffer.from(recorded.base64, 'base64'); assert.equal(bytes.subarray(0, 4).toString('hex'), '1a45dfa3'); assert.ok(bytes.length > 500);
+      assert.ok(recorded.startedAt > 0 && recorded.stoppedAt - recorded.startedAt >= 90, 'queued frames need a drain interval after encoder startup');
     });
   } finally { await browser.close(); }
 });
