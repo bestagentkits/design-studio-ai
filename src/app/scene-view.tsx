@@ -24,7 +24,7 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
       if (gizmo) { scene?.remove(gizmo.getHelper()); gizmo.dispose(); gizmo = undefined; }
       orbit?.dispose(); orbit = undefined;
       if (scene) { disposeScene(scene); scene = undefined; }
-      if (renderer) { renderer.dispose(); renderer.domElement.remove(); renderer = undefined; }
+      if (renderer) { renderer.dispose(); renderer.forceContextLoss(); renderer.domElement.remove(); renderer = undefined; }
     };
     setError('');
     void (async () => {
@@ -35,7 +35,9 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
         renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
         renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; element.appendChild(renderer.domElement);
         orbit = new OrbitControls(camera, renderer.domElement); orbit.target.copy(target); orbit.enableDamping = true; orbit.enabled = mode === 'object';
+        let needsRender = true;
         gizmo = new TransformControls(camera, renderer.domElement); gizmo.setMode(transform); scene.add(gizmo.getHelper());
+        gizmo.addEventListener('change', () => { needsRender = true; });
         const object = selected ? objects.get(selected) : undefined;
         if (object && mode === 'object' && onUpdate) gizmo.attach(object);
         let draggedGizmo = false;
@@ -78,7 +80,7 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
             const previous = handlers.current.selection; select(event.shiftKey ? values.every(v => previous.includes(v)) ? previous.filter(v => !values.includes(v)) : [...new Set([...previous, ...values])] : values);
           }
         });
-        const resize = () => { renderer?.setSize(element.clientWidth, element.clientHeight); camera.aspect = element.clientWidth / Math.max(1, element.clientHeight); camera.updateProjectionMatrix(); };
+        const resize = () => { renderer?.setSize(element.clientWidth, element.clientHeight); camera.aspect = element.clientWidth / Math.max(1, element.clientHeight); camera.updateProjectionMatrix(); needsRender = true; };
         observer = new ResizeObserver(resize); observer.observe(element); resize();
         let renderedTime = NaN, previousSelection: number[] | undefined;
         renderer.setAnimationLoop(() => {
@@ -86,14 +88,19 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
           const current = handlers.current, timeChanged = renderedTime !== current.time;
           if (timeChanged && !gizmo?.dragging) { animateScene(scene, current.document, pageIndex, current.time); renderedTime = current.time; }
           scene.updateMatrixWorld(true);
-          if (mesh && selectedPoints && (timeChanged || previousSelection !== current.selection)) {
+          const selectionChanged = previousSelection !== current.selection;
+          if (mesh && selectedPoints && (timeChanged || selectionChanged)) {
             const index = mesh.geometry.index, count = mesh.geometry.getAttribute('position').count;
             const ids = [...new Set(current.mode === 'face' && index ? current.selection.flatMap(i => i * 3 + 2 < index.count ? [index.getX(i * 3), index.getX(i * 3 + 1), index.getX(i * 3 + 2)] : []) : current.selection)].filter(i => i < count);
             const points = ids.flatMap(i => mesh.getVertexPosition(i, point).toArray()); selectedPoints.geometry.dispose(); selectedPoints.geometry = new THREE.BufferGeometry(); selectedPoints.geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
             if (vertexPoints && mesh instanceof THREE.SkinnedMesh) { const position = vertexPoints.geometry.getAttribute('position'); for (let i = 0; i < count; i++) { mesh.getVertexPosition(i, point); position.setXYZ(i, point.x, point.y, point.z); } position.needsUpdate = true; vertexPoints.geometry.computeBoundingSphere(); }
             previousSelection = current.selection;
           }
-          orbit.update(); renderer.render(scene, camera);
+          // Static authoring should not continuously redraw shadows and skinned meshes.
+          // Orbit damping, transforms, selection, resize and playback still invalidate the view.
+          const cameraChanged = orbit.update();
+          if (needsRender || timeChanged || selectionChanged || cameraChanged) { renderer.render(scene, camera); needsRender = false; }
+          previousSelection = current.selection;
         });
       } catch (e) { cleanup(); if (!disposed) setError(e instanceof Error ? e.message : 'WebGL unavailable'); }
     })();

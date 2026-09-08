@@ -14,7 +14,7 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.0.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.2.tgz`, or install the published release directly:
 
 ```sh
 npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz

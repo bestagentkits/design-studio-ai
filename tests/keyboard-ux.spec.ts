@@ -10,6 +10,7 @@ test.beforeEach(async ({ page, baseURL }) => {
   const { project } = await response.json();
   await page.goto(`/?project=${project.id}`);
   await expect(page.locator('.node-target').first()).toBeVisible();
+  await page.getByRole('checkbox', { name: 'Live', exact: true }).uncheck();
 });
 
 async function mobilePanel(page: Page, name: string) {
@@ -116,8 +117,10 @@ test('ordinary controls and preview do not inherit destructive canvas shortcuts'
   await page.getByRole('button', { name: 'Edit', exact: true }).click();
   await expect(page.locator('.node-target')).toHaveCount(count);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
-  // The actual canvas remains an editing context.
-  await target.click();
+  // Click the body away from the new middle-edge transform handles, which
+  // overlap the center of short text nodes at the mobile fit scale.
+  const bounds = (await target.boundingBox())!;
+  await target.click({ position: { x: bounds.width / 4, y: bounds.height / 2 } });
   await expect(target).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeEnabled();

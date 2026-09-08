@@ -40,7 +40,7 @@ test('MCP, CLI and browser tools share versioned libraries, discovery and multip
       return JSON.parse(output.stdout) as T;
     };
     const rootVersion = await promisify(execFile)(process.execPath, ['packages/cli/dist/dsa.js', '--version'], { timeout: 20000 });
-    assert.equal(rootVersion.stdout.trim(), '0.2.0');
+    assert.equal(rootVersion.stdout.trim(), '0.2.2');
     let rpcId = 0;
     const mcpRaw = async (name: string, args: Record<string, unknown>) => {
       const response = await fetch(baseUrl + '/mcp', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-11-25' }, body: JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method: 'tools/call', params: { name, arguments: args } }) });

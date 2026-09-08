@@ -1,12 +1,11 @@
-import { test, expect, type Page, type TestInfo } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
+import { test, expect } from './authenticated-browser';
+import type { Page, TestInfo } from '@playwright/test';
 import { createDocument } from '../src/shared/catalog';
 import type { DesignDocument, Project } from '../src/shared/schema';
 import type { DesignSystem } from '../src/shared/design-systems';
 
 async function setup(page: Page, baseURL: string, document: DesignDocument) {
   const headers = { Origin: new URL(baseURL).origin };
-  expect((await page.request.post('/api/auth/register', { headers, data: { email: `advanced-${randomUUID()}@studio.test`, password: randomUUID() + randomUUID() } })).status()).toBe(201);
   const response = await page.request.post('/api/projects', { headers, data: { name: document.name, kind: document.kind, document } });
   expect(response.status()).toBe(201);
   const project = (await response.json() as { project: Project }).project;

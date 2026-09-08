@@ -12,7 +12,7 @@ import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.2.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.2.2').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();

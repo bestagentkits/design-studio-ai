@@ -1,6 +1,6 @@
 # Structured design workspace
 
-Status: Complete — implemented, reviewed and locally verified; not committed or deployed
+Status: Implementation complete — reviewed and committed; main shipping and deployment in progress.
 
 ## Accepted contract
 
@@ -22,4 +22,4 @@ React 19/TypeScript, Hono, Zod, Three.js, Cloudflare D1/R2 or Node SQLite. Exist
 
 ## Completion evidence
 
-Completion evidence and format/runtime boundaries: [implementation status](reports/implementation-status.md). Local checks, remote CI and deployment are separate states.
+Completion evidence and format/runtime boundaries: [implementation status](reports/implementation-status.md). Local checks, remote CI and deployment are separate states. Current shipping evidence: [delivery journal](../reports/ship-260908-1814-structured-workspace.md).

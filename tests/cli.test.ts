@@ -89,7 +89,7 @@ test('standalone built executable prints help and version without checkout depen
   const standalone = join(directory, 'standalone.mjs'); await copyFile(executable, standalone);
   const help = await run(['--help'], { executable: standalone });
   assert.equal(help.code, 0); assert.match(help.stdout, /projects/); assert.match(help.stdout, /google-slides/);
-  const version = await run(['--version'], { executable: standalone }); assert.equal(version.code, 0); assert.equal(version.stdout.trim(), '0.2.0');
+  const version = await run(['--version'], { executable: standalone }); assert.equal(version.code, 0); assert.equal(version.stdout.trim(), '0.2.2');
 });
 
 test('schema and templates use the actual shared document format', async () => {

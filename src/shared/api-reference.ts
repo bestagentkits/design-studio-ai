@@ -54,6 +54,6 @@ export function openApiDocument(schemas: Record<string, unknown>) {
       responses: { '2XX': { description: 'Success; exports return file bytes with Content-Type and Content-Disposition' }, '400': { description: 'Invalid request' }, '401': { description: 'Authentication required' }, '403': { description: 'Insufficient scope' }, '404': { description: 'Resource not found' }, '409': { description: 'Revision or merge conflict' } },
     };
   }
-  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.2.0' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
+  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.2.2' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }, schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => /^[\w.-]+$/.test(name))) }, paths };
 }
