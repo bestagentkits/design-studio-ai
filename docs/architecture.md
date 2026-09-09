@@ -50,6 +50,7 @@ JSON errors use `{error:{code,message,details?}}` without secrets. Routes valida
 | Design-system versions and project application | [design-systems.ts](../server/design-systems.ts) |
 | Google Fonts and provider model discovery | [discovery.ts](../server/discovery.ts) |
 | Authenticated file export | [exports.ts](../server/exports.ts) |
+| Activity summaries, events, traces, and sanitized client events | [observability.ts](../server/observability.ts), [queries](../server/observability-queries.ts), [shared contract](../src/shared/observability.ts) |
 | Native Google Slides | [google-slides.ts](../server/google-slides.ts) |
 | OAuth discovery, consent, PKCE, tokens | [oauth.ts](../server/oauth.ts) |
 | Streamable HTTP tools/resources | [mcp.ts](../server/mcp.ts) |
@@ -93,6 +94,14 @@ Cloud binary rendering embeds owned assets and blocks external browser requests:
 SVG cannot preserve an interactive WebGL scene as editable geometry. Raster/PDF/video render real WebGL content. Format support does not imply every node remains natively editable in every output.
 
 Cloud motion composition preserves layer order and mixes imported audio/video tracks. The browser fallback records silent motion. Camera and light properties, object transforms, materials, mesh/UV data and skinning are serialized scene state; preview playback never writes animated poses into the stored bind pose.
+
+## Activity and instrumentation boundaries
+
+[Request/span instrumentation](../server/observability.ts) and the [event store](../server/observability-store.ts) record bounded metadata for correlation, duration, outcome, and provider-reported usage. A started record precedes completion; unfinished records remain distinguishable from successful work and can be marked interrupted during maintenance. Trace parentage ties supported nested work together without storing request bodies, prompts, response content, or credentials. Instrumentation failure is reported through coverage indicators and must not fail the underlying product request.
+
+[Activity queries](../server/observability-queries.ts) enforce owner scope by default. Global reads require an explicitly configured operator using a session or API key; an OAuth token cannot inherit global operator authority. The [shared schema](../src/shared/observability.ts) owns filters and nullable usage fields. Summaries separate root HTTP requests from nested spans to avoid presenting every internal step as another request. Missing cost remains unknown, and measured-call counts describe partial coverage. Last activity does not establish live presence or automatic retries.
+
+Sanitized client events use a strict allowlist and remain distinguishable from server-observed outcomes. Optional [PostHog forwarding](../server/observability-posthog.ts) sends those approved event fields server-side; it is not a session replay or arbitrary browser capture channel. The [deployment guide](deployment.md#activity-retention-and-optional-posthog) owns configuration and retention. These operational records do not replace project revisions, explicit brief approval, or artifact inspection.
 
 ## Operations and verification
 

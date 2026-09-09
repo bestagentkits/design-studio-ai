@@ -1,4 +1,5 @@
 import React from "react";
+import { trackClient } from "./app/analytics";
 import { createRoot } from "react-dom/client";
 import { initializeTheme } from "./app/theme-toggle";
 import "./styles.css";
@@ -15,6 +16,7 @@ class ErrorBoundary extends React.Component<
   static getDerivedStateFromError(error: Error) {
     return { error: error.message };
   }
+  componentDidCatch() { void trackClient({ event: "client_error", errorCode: "unexpected_error", outcome: "error" }); }
   render() {
     return this.state.error ? (
       <main className="fatal-error">

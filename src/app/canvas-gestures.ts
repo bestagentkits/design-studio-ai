@@ -14,12 +14,13 @@ export function useCanvasGestures(viewport: RefObject<HTMLDivElement | null>, sc
       setZoom(value => { const next = Math.max(.1, Math.min(8, value * factor)); const actual = next / value; setPan(p => ({ x: p.x - (x - paper.left - paper.width / 2) * (actual - 1), y: p.y - (y - paper.top - paper.height / 2) * (actual - 1) })); return next; });
     };
     const wheel = (event: WheelEvent) => {
-      if ((event.target as HTMLElement).closest('input,textarea,select')) return;
+      if ((event.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) return;
       event.preventDefault();
       if (event.ctrlKey || event.metaKey || event.altKey) zoomAt(Math.exp(-event.deltaY * .008), event.clientX, event.clientY);
       else setPan(p => ({ x: p.x - event.deltaX, y: p.y - event.deltaY }));
     };
     const down = (e: PointerEvent) => {
+      if ((e.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) return;
       if (e.pointerType === 'touch') pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pointers.size === 2) { cancel.current?.(); e.preventDefault(); e.stopPropagation(); const [a, b] = [...pointers.values()]; previousDistance = Math.hypot(a.x - b.x, a.y - b.y); }
       if (space || e.button === 1) { pointers.set(e.pointerId, { x: e.clientX, y: e.clientY }); host.setPointerCapture(e.pointerId); e.preventDefault(); e.stopPropagation(); }
@@ -34,7 +35,7 @@ export function useCanvasGestures(viewport: RefObject<HTMLDivElement | null>, sc
       } else if (space || e.buttons === 4) { e.preventDefault(); e.stopPropagation(); setPan(p => ({ x: p.x + e.clientX - previous.x, y: p.y + e.clientY - previous.y })); }
     };
     const up = (e: PointerEvent) => { pointers.delete(e.pointerId); previousDistance = 0; };
-    const keydown = (e: KeyboardEvent) => { if (e.code === 'Space' && !(e.target as HTMLElement).closest('input,textarea,select,[contenteditable]')) { space = true; e.preventDefault(); } };
+    const keydown = (e: KeyboardEvent) => { if (e.code === 'Space' && !e.defaultPrevented && !e.isComposing && !document.querySelector('dialog[open], [popover]:popover-open') && host.contains(e.target as Node) && !(e.target as HTMLElement).closest('input,textarea,select,[contenteditable],button,[role=combobox]')) { space = true; e.preventDefault(); } };
     const keyup = (e: KeyboardEvent) => { if (e.code === 'Space') space = false; };
     const blur = () => { space = false; pointers.clear(); };
     host.addEventListener('wheel', wheel, { passive: false });

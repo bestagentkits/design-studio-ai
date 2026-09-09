@@ -1,3 +1,5 @@
+import { updateEvent } from './observability-store';
+import { withSpan } from './observability';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import puppeteer from '@cloudflare/puppeteer';
@@ -57,17 +59,19 @@ export async function embeddedDocumentFonts(doc: DesignDocument) {
   } catch { fail(502, 'font_load_failed', 'The selected Google Fonts could not be loaded. Choose a local font or retry the export.'); }
 }
 
-exportRoutes.post('/:id/export', async c => {
+exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action: 'export.render' }, async span => {
   const { env: bindings } = c;
   const row = await projectRow(c, c.req.param('id')), options = optionsSchema.parse(await c.req.json());
   if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
+  span.event.projectId = row.id; span.event.action = `export.${options.format}`;
+  await updateEvent(c.env, span.event);
   const doc = documentSchema.parse(JSON.parse(row.document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
   if (options.format === 'react' && !['web', 'wireframe'].includes(doc.kind)) fail(400, 'unsupported_export', 'React source export is available for Web/App and wireframe projects.');
   if (['glb', 'gltf'].includes(options.format) && !doc.pages[options.pageIndex].nodes.some(node => node.type === 'model3d')) fail(400, 'unsupported_export', 'Scene export requires a 3D object on the selected page.');
   const extension = options.format === 'react' ? 'zip' : options.format;
   const headers = { 'Content-Type': mimeTypes[options.format], 'Content-Disposition': `attachment; filename="${row.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}"`, 'Cache-Control': 'private,no-store', 'X-Content-Type-Options': 'nosniff' };
-  if (options.format === 'json') return new Response(JSON.stringify(doc, null, 2), { headers });
+  if (options.format === 'json') { const output = JSON.stringify(doc, null, 2); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
   await validateAssets(c, doc, row.id);
   if (!['html', 'svg', 'react'].includes(options.format)) {
     const selectedPages = options.format === 'pdf' || options.format === 'pptx' ? doc.pages : [doc.pages[options.pageIndex]];
@@ -93,13 +97,14 @@ exportRoutes.post('/:id/export', async c => {
   };
   for (const page of doc.pages) for (const node of page.nodes) if (node.src) node.src = await embed(node.src);
   for (const asset of doc.assets) asset.url = await embed(asset.url);
-  if (options.format === 'svg') return new Response(renderSvg(doc, options.pageIndex), { headers });
-  if (options.format === 'html') return new Response(await interactiveHtml(c, doc), { headers });
+  if (options.format === 'svg') { const output = renderSvg(doc, options.pageIndex); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
+  if (options.format === 'html') { const output = await interactiveHtml(c, doc); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
   if (options.format === 'react') {
     await rateLimit(c, `export:${owner(c)}`, 20);
     const runtime = await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-react-runtime.json`));
     if (!runtime?.ok) fail(503, 'renderer_not_built', 'Build the React runtime manifest before exporting.');
     const output = await createReactArchive(doc, await runtime.json() as ReactRuntimeManifest);
+    span.set({ outputBytes: output.byteLength });
     return new Response(new Uint8Array(output).buffer, { headers });
   }
   if (!bindings.BROWSER && !bindings.EXPORT_BROWSER) fail(503, 'renderer_not_configured', 'Enable the Cloudflare Browser Rendering binding or install Chromium for self-hosting.');
@@ -140,10 +145,11 @@ exportRoutes.post('/:id/export', async c => {
       output = options.format === 'png' ? await page.screenshot({ type: 'png' }) : await page.pdf({ printBackground: true, preferCSSPageSize: true });
     }
     if (output.byteLength < 32) fail(502, 'empty_render', 'The renderer produced no usable file. Retry the export.');
+    span.set({ outputBytes: output.byteLength });
     return new Response(new Uint8Array(output).buffer, { headers });
   } catch (error) {
     if (error instanceof ApiError) throw error;
     // Browser errors can include URLs. Avoid leaking provider/asset credentials.
     fail(502, 'render_failed', 'Cloud rendering failed. Check that media files decode and external assets permit cross-origin access; try PNG or WebM.');
   } finally { await browser?.close(); }
-});
+}));

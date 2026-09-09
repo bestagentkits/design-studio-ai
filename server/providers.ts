@@ -1,3 +1,4 @@
+import { withSpan, providerUsage, completeMediaSpan, errorCode } from './observability';
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Context } from "hono";
@@ -194,8 +195,10 @@ export const textProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'open
 export async function completeText(c: Context<Env>, body: {
   provider: z.infer<typeof textProviderSchema>; model?: string; system: string; prompt: string; maxTokens?: number;
 }) {
+  return withSpan(c, { kind: 'provider', action: 'provider.text', provider: body.provider, model: body.model, projectId: c.get('telemetrySpan')?.event.projectId ?? undefined }, async span => {
   const config = await providerConfig(c, body.provider);
   const model = body.model ?? config.model;
+  span.set({ model });
   const system = body.system;
   let result: any;
   let output: string = "";
@@ -263,8 +266,11 @@ export async function completeText(c: Context<Env>, body: {
     );
     output = result.choices?.[0]?.message?.content ?? "";
   }
+  span.set(providerUsage(result.usage ?? result.usageMetadata, body.provider));
+  if (typeof output === 'string') span.set({ outputBytes: new TextEncoder().encode(output).length });
   if (typeof output !== 'string') fail(502, 'invalid_provider_response', 'Provider did not return text content.');
   return { output, usage: result.usage ?? result.usageMetadata };
+  });
 }
 
 export const generationRoutes = new Hono<Env>();
@@ -416,6 +422,7 @@ generationRoutes.post("/:id/media", async c => {
   const body = mediaInputSchema.parse(await c.req.json());
   const source = await sourceAsset(c, project.id, body.sourceAssetId);
   const request = buildMediaRequest(body, source);
+  return withSpan(c, { kind: 'provider', action: body.provider === 'fal' ? 'provider.media.job' : `provider.media.${body.kind}`, projectId: project.id, provider: body.provider, model: request.model }, async span => {
   const config = await providerConfig(c, body.provider);
   await rateLimit(c, `media:${owner(c)}`, 30);
   const multipart = request.payload instanceof FormData;
@@ -428,16 +435,20 @@ generationRoutes.post("/:id/media", async c => {
     const result = await jsonResponse(response);
     if (typeof result.request_id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(result.request_id)) fail(502, "invalid_provider_response", "Provider returned no valid request ID.");
     const jobId = id();
-    await c.env.DB.prepare('INSERT INTO media_jobs(id,user_id,project_id,provider,remote_id,model,kind,created_at) VALUES(?,?,?,?,?,?,?,?)')
-      .bind(jobId, owner(c), project.id, 'fal', result.request_id, request.model, body.kind, now()).run();
+    await c.env.DB.prepare('INSERT INTO media_jobs(id,user_id,project_id,provider,remote_id,model,kind,created_at,observability_span_id) VALUES(?,?,?,?,?,?,?,?,?)')
+      .bind(jobId, owner(c), project.id, 'fal', result.request_id, request.model, body.kind, now(), span.event.id).run();
+    span.pending = true;
     return c.json({ job: { id: jobId, status: 'queued' } }, 202);
   }
-  if (body.kind === 'audio') return c.json({ asset: await storeAsset(c, project.id, 'Generated speech.mp3', 'audio/mpeg', await limitedBytes(response, 20 * 1024 * 1024)) });
+  if (body.kind === 'audio') { const bytes = await limitedBytes(response, 20 * 1024 * 1024); span.set({ outputBytes: bytes.byteLength }); return c.json({ asset: await storeAsset(c, project.id, 'Generated speech.mp3', 'audio/mpeg', bytes) }); }
   const result = await jsonResponse(response), encoded = result.data?.[0]?.b64_json;
+  span.set(providerUsage(result.usage));
   if (typeof encoded !== 'string' || encoded.length > 28 * 1024 * 1024) fail(502, 'invalid_provider_response', 'Image provider did not return bounded image bytes. Choose a model supporting base64 output.');
   let bytes: ArrayBuffer;
   try { bytes = unb64(encoded).buffer as ArrayBuffer; } catch { fail(502, 'invalid_provider_response', 'Image provider returned invalid base64.'); }
+  span.set({ outputBytes: bytes.byteLength });
   return c.json({ asset: await storeAsset(c, project.id, source ? 'Edited image.png' : 'Generated image.png', 'image/png', bytes) });
+  });
 });
 
 export function falResultFile(result: unknown, kind: MediaInput['kind']): { url: string; mimeType?: string } {
@@ -455,16 +466,17 @@ export function falResultFile(result: unknown, kind: MediaInput['kind']): { url:
 generationRoutes.get("/:id/media/:jobId", async c => {
   await projectRow(c, c.req.param('id'));
   const job = await c.env.DB.prepare('SELECT * FROM media_jobs WHERE id=? AND user_id=? AND project_id=?')
-    .bind(c.req.param('jobId'), owner(c), c.req.param('id')).first<{model:string;remote_id:string;kind:MediaInput['kind'];result_asset:string|null}>();
+    .bind(c.req.param('jobId'), owner(c), c.req.param('id')).first<{model:string;remote_id:string;kind:MediaInput['kind'];result_asset:string|null;observability_span_id:string|null}>();
   if (!job) fail(404, 'not_found', 'Media job not found.');
-  if (job.result_asset) return c.json({ status: 'completed', asset: JSON.parse(job.result_asset) });
+  if (job.result_asset) { const asset = JSON.parse(job.result_asset); await completeMediaSpan(c, job.observability_span_id, { outputBytes: asset.size }); return c.json({ status: 'completed', asset }); }
   const config = await providerConfig(c, 'fal');
   const endpoint = job.model.split('/').slice(0, 2).join('/');
   const headers = { Authorization: `Key ${config.key}` };
   const status = await jsonResponse(await upstream(`${config.base_url}/${endpoint}/requests/${job.remote_id}/status`, { headers }));
   if (status.status === 'IN_QUEUE' || status.status === 'IN_PROGRESS') return c.json({ status: status.status === 'IN_PROGRESS' ? 'processing' : 'queued' });
-  if (status.status !== 'COMPLETED') fail(502, 'media_generation_failed', 'Provider job failed or returned an unknown status. Check source requirements and retry generation if appropriate.');
+  if (status.status !== 'COMPLETED') { await completeMediaSpan(c, job.observability_span_id, { errorCode: 'media_generation_failed' }); fail(502, 'media_generation_failed', 'Provider job failed or returned an unknown status. Check source requirements and retry generation if appropriate.'); }
   const result = await jsonResponse(await upstream(`${config.base_url}/${endpoint}/requests/${job.remote_id}`, { headers }));
+  try {
   const file = falResultFile(result, job.kind ?? 'video');
   const response = await upstream(file.url, {});
   const headerMime = response.headers.get('Content-Type')?.split(';')[0];
@@ -480,7 +492,14 @@ generationRoutes.get("/:id/media/:jobId", async c => {
     if (duplicate) await c.env.ASSETS_BUCKET.delete(duplicate.storage_key);
     const current = await c.env.DB.prepare('SELECT result_asset FROM media_jobs WHERE id=? AND user_id=?').bind(c.req.param('jobId'), owner(c)).first<{result_asset:string|null}>();
     if (!current?.result_asset) fail(404, 'not_found', 'Media job was deleted.');
-    return c.json({ status: 'completed', asset: JSON.parse(current.result_asset) });
+    const retainedAsset = JSON.parse(current.result_asset);
+    await completeMediaSpan(c, job.observability_span_id, { outputBytes: retainedAsset.size, usage: result.usage });
+    return c.json({ status: 'completed', asset: retainedAsset });
   }
+  await completeMediaSpan(c, job.observability_span_id, { outputBytes: asset.size, usage: result.usage });
   return c.json({ status: 'completed', asset });
+  } catch (error) {
+    await completeMediaSpan(c, job.observability_span_id, { usage: result.usage, errorCode: errorCode(error) });
+    throw error;
+  }
 });

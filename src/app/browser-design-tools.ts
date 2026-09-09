@@ -19,7 +19,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     execute: async () => result({ componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
   }];
   // Only first-party documented endpoints are callable; the browser supplies its own session.
-  for (const endpoint of apiEndpoints.filter(e => !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
+  for (const endpoint of apiEndpoints.filter(e => !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
     const operation = `${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
     tools.push({ name: `studio_api_${operation}`, description: endpoint.summary + '. Operates on the saved server state; pass current revisions for writes. Publications are public snapshots.',
       annotations: { readOnlyHint: endpoint.method === 'GET' },
@@ -29,7 +29,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
         const path = endpoint.path.replace(/\{(\w+)\}/g, (_, key: string) => { if (!parameters?.[key]) throw new Error(`Missing path parameter: ${key}`); return encodeURIComponent(parameters[key]); });
         const query = new URLSearchParams(args.query as Record<string, string> ?? {});
         const upload = endpoint.method === 'POST' && endpoint.path.endsWith('/assets');
-        const response = await fetch(path + (query.size ? `?${query}` : ''), { method: endpoint.method, credentials: 'same-origin', headers: upload ? {} : { 'Content-Type': 'application/json' }, ...(endpoint.body ? { body: upload ? assetUploadBody(args.body as Record<string, unknown>) : JSON.stringify(args.body) } : {}) });
+        const response = await fetch(path + (query.size ? `?${query}` : ''), { method: endpoint.method, credentials: 'same-origin', headers: { 'X-Studio-Client': 'webmcp', ...(!upload ? { 'Content-Type': 'application/json' } : {}) }, ...(endpoint.body ? { body: upload ? assetUploadBody(args.body as Record<string, unknown>) : JSON.stringify(args.body) } : {}) });
         if ((response.headers.get('Content-Type') ?? '').includes('json')) { const data = await response.json(); return { ...result(data), ...(!response.ok ? { isError: true } : {}) }; }
         if (!response.ok) throw new Error(`Request failed: ${response.status}`);
         const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'studio-export'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);

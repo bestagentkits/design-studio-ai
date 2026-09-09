@@ -8,17 +8,19 @@ import { duplicateDocument, mutateDocument, operationsSchema } from '../../../sr
 import { renderHtml, renderSvg } from '../../../src/shared/render';
 import { interviewSchema, answerSchema, scopeSchema } from '../../../src/shared/brief';
 import { mergeRequestSchema } from '../../../src/shared/collaboration-contract';
+import { registerObservabilityCommands } from './observability-commands';
 import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.2.3').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.3.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
 program.configureOutput({ writeErr: () => {} });
 const client = () => new Client(program.opts());
 registerDesignSystemCommands(program, client);
+registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;
 const wrap = (handler: (...args: any[]) => Promise<unknown> | unknown) => async (...args: any[]) => { const value = await handler(...args); if (value !== undefined) output(value); };

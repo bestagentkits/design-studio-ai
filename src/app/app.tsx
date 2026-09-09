@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  Activity,
   ArrowDownUp,
   ArrowRight,
   ArrowUp,
@@ -35,6 +36,9 @@ import { Editor } from "./editor";
 import { Settings, GitHubMark } from "./settings";
 import { importDesign } from "./file-formats";
 import { ThemeToggle } from "./theme-toggle";
+import { workspaceTab, workspacePaths, navigateWorkspace, type WorkspaceTab } from "./workspace-navigation";
+import { trackClient, resetAnalyticsIdentity } from "./analytics";
+import { ObservabilityDashboard } from "./observability-dashboard";
 
 type Kind = DesignDocument["kind"];
 const kinds: {
@@ -130,6 +134,7 @@ function githubReturn() {
     imported: boolean;
     agents: boolean;
     interview: boolean;
+    workspace?: WorkspaceTab;
   } | null = null;
   try {
     const raw = sessionStorage.getItem(oauthBriefKey);
@@ -155,6 +160,7 @@ function githubReturn() {
             ? (source.kind as Kind)
             : kind;
         saved = {
+          workspace: typeof data.workspace === 'string' && Object.hasOwn(workspacePaths, data.workspace) ? data.workspace as WorkspaceTab : undefined,
           prompt: text(data.prompt),
           kind,
           theme: text(data.theme, 120),
@@ -213,7 +219,21 @@ export function App() {
   const [filter, setFilter] = useState("all"),
     [sort, setSort] = useState("updated"),
     [view, setView] = useState<"grid" | "list">("grid"),
-    [tab, setTab] = useState("projects");
+    [tab, setTabState] = useState<WorkspaceTab>(() => workspaceTab(location.pathname));
+  function setTab(next: WorkspaceTab) {
+    navigateWorkspace(next);
+    setTabState(next);
+    setProject(null);
+  }
+  useEffect(() => {
+    const restore = () => { setTabState(workspaceTab(location.pathname)); setProject(null); };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => document.querySelector('.main-header nav [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+    return () => cancelAnimationFrame(frame);
+  }, [tab, project?.id]);
   const [draft, setDraft] = useState<Draft | null>(null),
     [providers, setProviders] = useState<Provider[]>([]),
     [provider, setProvider] = useState("openai");
@@ -224,6 +244,13 @@ export function App() {
   const creationRunning = useRef(false),
     resumeStarted = useRef(false);
   const [remove, setRemove] = useState<Summary | null>(null);
+  useEffect(() => { resetAnalyticsIdentity(); }, [user?.id]);
+  useEffect(() => {
+    if (!ready) return;
+    void trackClient({ event: 'page_view', page: project ? 'editor' : tab === 'themes' ? 'design-systems' : tab === 'activity' ? 'observability' : tab, ...(project ? { projectId: project.id } : {}) });
+    if (tab === 'templates' && !project) void trackClient({ event: 'template_open', page: 'templates' });
+    if (tab === 'themes' && !project) void trackClient({ event: 'design_system_open', page: 'design-systems' });
+  }, [ready, user?.id, tab, project?.id]);
   async function refresh() {
     const data = await api<{ projects: Summary[] }>("/api/projects");
     setProjects(data.projects);
@@ -253,6 +280,11 @@ export function App() {
       /* Recovery is optional. */
     }
     if (oauthReturn.saved) {
+      if (oauthReturn.saved.workspace && location.pathname === '/') {
+        setTabState(oauthReturn.saved.workspace);
+        const target = new URL(location.href); target.pathname = workspacePaths[oauthReturn.saved.workspace];
+        history.replaceState(history.state, '', target.pathname + target.search + target.hash);
+      }
       setPrompt(oauthReturn.saved.prompt);
       setKind(oauthReturn.saved.kind);
       setTheme(oauthReturn.saved.theme);
@@ -275,6 +307,7 @@ export function App() {
         JSON.stringify({
           version: 1,
           createdAt: Date.now(),
+          workspace: tab,
           prompt,
           kind,
           theme,
@@ -389,6 +422,7 @@ export function App() {
   }
   function showProject(next: Project) {
     setProject(next);
+    void trackClient({ event: 'project_open', page: 'editor', projectId: next.id });
     const url = new URL(location.href);
     url.searchParams.set("project", next.id);
     history.replaceState(
@@ -597,24 +631,16 @@ export function App() {
               <Brand />
             </a>
             <nav aria-label="Main navigation">
-              <button
-                className={tab === "projects" ? "active" : ""}
-                onClick={() => setTab("projects")}
-              >
-                Workspace
-              </button>
-              <button
-                className={tab === "templates" ? "active" : ""}
-                onClick={() => setTab("templates")}
-              >
-                Templates
-              </button>
-              <button
-                className={tab === "themes" ? "active" : ""}
-                onClick={() => setTab("themes")}
-              >
-                Design systems
-              </button>
+              {([['projects', 'Workspace'], ['templates', 'Templates'], ['themes', 'Design systems']] as const).map(([key, label]) => (
+                <a key={key} href={workspacePaths[key]} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined}
+                  onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); setTab(key); } }}>
+                  {label}
+                </a>
+              ))}
+              <a href="/activity" className={tab === 'activity' ? 'active' : ''} aria-current={tab === 'activity' ? 'page' : undefined}
+                onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); setTab('activity'); } }}>
+                <Activity size={16} aria-hidden="true" /> Activity
+              </a>
               <a className="header-docs-link" href="/docs">
                 Documentation
               </a>
@@ -657,7 +683,7 @@ export function App() {
             </div>
           </header>
           <main className="home-main">
-            {tab !== "themes" && (
+            {tab !== "themes" && tab !== "activity" && (
               <section className="creation-section">
                 <div className="intro-label">
                   <span className="tiny-star">✳</span> A space for your next
@@ -748,7 +774,9 @@ export function App() {
                 </div>
               </section>
             )}
-            {tab === "themes" ? (
+            {tab === "activity" ? (
+              <ObservabilityDashboard key={user?.id ?? "anonymous"} user={user} onSignIn={() => setAuth(true)} />
+            ) : tab === "themes" ? (
               <section className="systems-section">
                 <div className="section-title">
                   <div>
