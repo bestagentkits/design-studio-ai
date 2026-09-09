@@ -22,6 +22,8 @@ npm install -g https://github.com/bestagentkits/design-studio-ai/releases/downlo
 
 The [v0.2.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) includes CLI and skill archives. The package is not published to the npm registry.
 
+The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
+
 Use an API token created in workspace Settings. The client writes no credential files:
 
 ```sh
@@ -39,7 +41,9 @@ Replace the example token using your shell's secret injection mechanism. `--api-
 
 Commands print JSON except `--help`, `--version`, and export/document/template content sent to stdout. Use `--output` to write artifacts and receive JSON file metadata. Errors are JSON on stderr. Exit codes: 0 success, 1 invalid input/API rejection/conflict, 2 authentication/authorization, 3 network or invalid server response, 4 local runtime/file error.
 
-Run `dsa <command> --help` for every option. Available families are `health`, `config`, `schema`, `catalog`, `themes`, `templates`, `blocks`, `projects`, `brief`, `render`, `assets`, `generate`, `providers`, `tokens`, `publish`, `unpublish`, `preview`, `unpreview`, `share`, `unshare`, `media`, `google-slides`, and `api`.
+Run `dsa --help` to discover command families and `dsa <command> --help` for their options. [Command registration](src/dsa.ts) and [design-system/discovery commands](src/design-system-commands.ts) own the current inventory.
+
+Use `design-systems schema` to inspect reusable library definitions before creating or updating them. Library updates use the observed `--system-version`; apply/insert use the target project's observed `--revision` and optionally a pinned library version. Read and reconcile either conflict before retrying. Use `fonts --query` and `providers models PROVIDER --query` for discovery; live/cache/fallback provenance is not proof of model access or successful generation.
 
 `brief get/put/interview/approve` manages saved interactive questions, answers, and design scope. A first `brief put PROJECT_ID --revision 0 --file brief.json` requires a `request`; subsequent writes use the brief revision from `brief get`, independently of the document revision. Agents may supply their own `interview` questions and scope without a server provider key, or use `brief interview --provider NAME --revision N` with BYOK. Every change invalidates approval. `brief approve` requires explicit human approval of the current scope and complete required answers. An unapproved brief blocks provider design generation.
 
@@ -47,7 +51,7 @@ Run `dsa <command> --help` for every option. Available families are `health`, `c
 
 `preview PROJECT_ID` and `share PROJECT_ID` create a public immutable snapshot and return its URL. `unpreview` and `unshare` remove all public snapshots for the project. These commands are aliases for the same publication storage and ownership checks as `publish`/`unpublish`; they do not expose unsaved private editor state.
 
-`projects export` requests actual JSON, HTML, SVG, PNG, PDF, PPTX, WebM, or MP4 bytes from the authenticated server. Binary formats require `--output FILE` (or `--out FILE`) and a configured cloud/self-host browser renderer. Unsupported encoders and missing bindings return explicit errors. `--revision` binds export to the inspected revision. Motion is capped at 60 seconds; cloud rendering mixes imported audio/video. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
+`projects export` requests actual files from the authenticated server; its help owns the format list. React ZIP supplies a runnable frontend prototype without a business backend. GLB/glTF supply supported scene geometry and animation. Binary formats require `--output FILE` (or `--out FILE`). PNG/PDF/PPTX, video and 3D exports need a configured cloud/self-host browser renderer; JSON/HTML/SVG and React ZIP do not. Unsupported encoders and missing bindings return explicit errors. `--revision` binds export to the inspected revision. Motion is capped at 60 seconds; cloud rendering mixes imported audio/video. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
 
 `render --file design.json --format svg` performs offline static rendering with optional `--page` and `--time`, preserves references, and does not fetch private media. Offline 3D representations are static; server HTML can include the trusted interactive 3D/timeline viewer, and binary outputs render real WebGL. Remote media must be imported before cloud binary export. JSON imports preserve the editable format; arbitrary HTML/SVG import belongs to the browser parser. Google Slides requires real authorization and supported text/shapes/HTTPS images; complex unsupported nodes fail explicitly.
 
@@ -62,5 +66,7 @@ dsa media status PROJECT_ID JOB_ID
 All fal modes return queued jobs. Poll to a completed asset before reporting success; then explicitly add that asset to the document and save. No provider success is simulated when credentials or model access are missing.
 
 `generate` returns a proposal and does not save it. Inspect it, then use `projects document put` with the original revision. On a conflict, read the newest project and reconcile edits. Never increment the revision blindly. `projects clone` copies owned asset bytes so deleting its source does not remove the clone's media.
+
+For concurrent editing, retain the exact document and revision you read. `projects document changes` observes saved updates; `projects document merge` accepts your edited document with that original base. Resolve reported overlapping changes explicitly; never change the base or invent its revision to force a write. See the [revision workflow](../../docs/agents.md#revision-workflow).
 
 `api METHOD /api/path --file request.json` provides an explicit REST escape hatch constrained to the configured server. It neither bypasses server auth nor evaluates local code. Requests reject redirects to keep tokens bound to the configured origin.

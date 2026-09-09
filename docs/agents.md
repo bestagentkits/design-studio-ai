@@ -14,6 +14,8 @@ Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying it
 
 ## CLI command surface
 
+This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and [library commands](../packages/cli/src/design-system-commands.ts). The linked release can lag these capabilities; inspect installed command help and build from source when a needed command is absent.
+
 | Commands | Behavior |
 | --- | --- |
 | `health`, `config` | Public health and configuration; no credential persistence |
@@ -78,6 +80,6 @@ Network MCP lives at `/mcp` with the server's advertised protocol versions, API-
 
 The CLI is the scoped agentization deliverable in [release phase](../plans/2026-09-07-bootstrap-design-studio-ai/phase-04-integration-release.md). Curated command families cover common workflows; the explicit API escape hatch covers new REST endpoints. Structured operation arrays provide bounded batch edits without arbitrary code execution. Tokens remain stateless, requests reject redirects, and error output redacts the application token.
 
-CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); run `node --import tsx --test tests/cli.test.ts`. They build and execute the distributable in real subprocesses, inspect schema/template output, and exercise authenticated project editing against the SQLite-backed handler. Renderer/server tests cover actual binary export. External provider and Google success require separate credential-dependent checks. Release evidence belongs in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
+CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build prerequisites in [repository verification guidance](../AGENTS.md#run-the-appropriate-checks). They build and execute the distributable in real subprocesses, inspect schema/template output, and exercise authenticated project editing against the SQLite-backed handler. Renderer/server tests cover actual binary export. External provider and Google success require separate credential-dependent checks. Release evidence belongs in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
 The [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) provides the CLI tarball and agent-skill ZIP. GitHub release distribution is separate from npm registry publication.

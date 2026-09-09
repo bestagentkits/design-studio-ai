@@ -4,7 +4,7 @@ The public documentation portal lives at `/docs`; the visual beginner guide live
 
 ## Owning content and routes
 
-[documentation.tsx](../src/app/documentation.tsx) owns the typed endpoint reference, CLI command table, prose, search index, and documentation sections. [guide.tsx](../src/app/guide.tsx) owns beginner workflow explanations, selectable starter briefs, real workspace screenshots, and FAQs. Both use the shared theme control and CSS variables, preserve keyboard navigation, and report clipboard success only after the browser confirms it.
+[documentation.tsx](../src/app/documentation.tsx) owns the human-readable endpoint reference, CLI command table, prose, search index, and documentation sections. [api-reference.ts](../src/shared/api-reference.ts) owns the typed operations used by the playground, OpenAPI and browser API tools; server routes and validators remain the behavioral authority. Keep both references aligned when a contract changes. [guide.tsx](../src/app/guide.tsx) owns beginner workflow explanations, selectable starter briefs, real workspace screenshots, and FAQs. Both use the shared theme control and CSS variables, preserve keyboard navigation, and report clipboard success only after the browser confirms it.
 
 Canonical documentation routes are `/docs`, `/docs/revisions`, `/docs/api`, `/docs/cli`, `/docs/mcp`, `/docs/webmcp`, `/docs/api-keys`, and `/docs/self-hosting`. Real links support direct loading and crawler discovery; client navigation also preserves history. Legacy section hashes remain readable. Connection examples use the current browser origin so a self-hosted workspace does not send users to the public service by accident.
 
@@ -16,10 +16,10 @@ Run [build-public-docs.mjs](../scripts/build-public-docs.mjs) **after Vite build
 
 Generated artifacts live in `dist`:
 
-- Ten public HTML pages: homepage, guide, documentation overview, and seven reference sections.
+- Public HTML pages for the homepage, guide, and sections exported by the documentation source.
 - Markdown counterparts: `/docs.md`, `/guide.md`, `/docs/index.md`, and `/docs/<section>.md` (the overview is `/docs/quickstart.md`). REST Markdown is generated directly from the typed endpoint definitions; other references use the same rendered content as their pages.
 - `/llms.txt` with a curated categorized index, and `/llms-full.txt` with expanded inline documentation.
-- `/sitemap.xml` with only the ten public page URLs. It never enumerates accounts, private projects/assets, API keys, or publications.
+- `/sitemap.xml` with the public page URLs. It never enumerates accounts, private projects/assets, API keys, or publications.
 - `/robots.txt` directing crawlers away from auth/account/project/provider/token/MCP/publication paths. This complements authorization; it is not access control.
 
 The canonical build origin is `PUBLIC_SITE_URL`, then `APP_URL`, then `https://studio.agentkit.best`. Set it explicitly for a different public deployment. Docker Compose passes `APP_URL` as the build origin; direct Docker builds accept `--build-arg PUBLIC_SITE_URL=https://your-studio.example`. It accepts an HTTP(S) origin without embedded credentials. No arbitrary environment-file contents are copied to generated output. Real guide screenshots are maintained in `public/guide/assets` and copied into the build by Vite.
@@ -29,6 +29,8 @@ The HTTP adapter must serve directory indexes for `/docs`, each reference route,
 ## Verification and boundaries
 
 The durable public browser checks are in [public-docs.spec.ts](../tests/public-docs.spec.ts): HTML/metadata/MIME/Markdown discovery, no-JavaScript navigation, responsive layout, clipboard/search/history/theme, and guide controls. They use public resources without accounts or provider calls.
+
+The [browser configuration](../playwright.config.ts) currently exercises Chromium desktop and mobile viewports. Mobile-first usability and cross-browser compatibility remain design requirements; these checks alone do not prove Firefox, Safari, or real-device coverage.
 
 The portal supports searchable section navigation, endpoint filtering, native expandable endpoint details, selectable/copyable examples, keyboard-accessible scrollable tables, mobile navigation, light/dark theme controls, and direct section URLs. The guide follows the implemented persisted interview: contextual questions, saved answers, editable scope, explicit approval, and a separate first-draft generation action. It also explains manual scope/editor paths, refinement, preview, design-check limitations, output selection, publication, and agent connection. Brief revisions are independent of document revisions; every brief edit invalidates approval.
 
