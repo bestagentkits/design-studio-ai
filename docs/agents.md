@@ -10,7 +10,7 @@ To build from source, install dependencies with `npm ci` and `npm ci --prefix pa
 
 Set `DESIGN_STUDIO_URL=https://studio.agentkit.best` and inject `DESIGN_STUDIO_API_KEY` from workspace Settings. `dsa` does not save a configuration file, keychain record, or login session. `--url` and `--api-key` override these values for one invocation; use environment injection to avoid shell history. HTTP is accepted for localhost development only.
 
-Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying its directory into the installed skills directory of your agent runtime. The repository layout is also suitable for a skill installer that accepts a repository and skill path. The skill guides brief capture, catalog discovery, targeted edits, visual quality checks, and authorized exports/publishing.
+Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying its directory into the installed skills directory of your agent runtime. The repository layout is also suitable for a skill installer that accepts a repository and skill path. Copy the complete directory, including `references/`. The skill routes each design kind to composition and review guidance, alongside brief capture, catalog discovery, targeted edits, and authorized exports/publishing. Start with its [shared layout and quality reference](../skills/design-studio-ai/references/layout-and-quality.md); the [skill index](../skills/design-studio-ai/SKILL.md#choose-the-design-kind-guidance) links the kind-specific references.
 
 ## CLI command surface
 
@@ -25,6 +25,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
 | `projects document merge/changes` | Three-way merge using the exact earlier base, and revision polling |
 | `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
+| `observability summary/events/trace` | Owner-scoped activity, provider usage, and correlated spans; global reads require configured operator authorization |
 | `projects check` | Read-only preflight hints with exact layer IDs; inspect the actual preview too |
 | `projects import/export`, `render` | Canonical JSON import; authenticated cloud export; offline JSON/HTML/SVG rendering |
 | `assets list/upload/download` | Authenticated asset storage; node placement is a separate document edit |
@@ -39,6 +40,18 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `api METHOD /api/path` | Same-origin REST escape hatch; JSON input from file/stdin |
 
 All option details are available through command `--help`. Document and operation files accept `--file -` for stdin. The default output is JSON; document/export/template content is raw when sent to stdout. `--output` writes the artifact and returns JSON metadata. Errors are JSON on stderr. Exit codes are 0 success, 1 input/API/conflict, 2 auth, 3 network/invalid response, and 4 local runtime/file errors.
+
+## Activity, usage, and traces
+
+Use `dsa observability summary`, `dsa observability events`, and `dsa observability trace TRACE_ID` to inspect saved activity. Network MCP exposes `get_observability_summary`, `list_activity_events`, and `get_activity_trace`; discover their schemas before calling. The browser API tools use the same authenticated REST contracts, while the human Activity view lives at `/activity` on the configured server. Read the [query and result contract](../src/shared/observability.ts) and installed command help for current filters.
+
+Reads default to the authenticated owner's events. A user ID in `OBSERVABILITY_ADMIN_IDS` may request `scope=all` with an application session or API key; OAuth credentials never grant this global operator view. Actor filtering requires operator scope. Shared filters include time window, project, channel, kind, status, and action. Use returned `nextCursor` for event pagination; do not invent cursor values. A trace can be filtered or truncated, so an incomplete result does not prove no other spans existed.
+
+Events link `traceId` and `parentId` across supported request/tool/provider work. `running` means completion has not yet been observed; `interrupted` means the recorded operation outlived its completion lease, not proof the external provider failed. Recent activity is not online presence, and repeated actions are not a verified retry count. Browser events are reported interactions, not authoritative proof that a server write succeeded.
+
+Token and USD cost values come from provider-reported fields. Missing values remain `null`; never treat them as zero or infer a price from an unverified model name. Summary totals may include only measured calls: retain `measuredTokenCalls`, `measuredCostCalls`, and coverage limitations when reporting usage. Inspect storage degradation and dropped-event indicators before interpreting an empty result. Queries exclude events outside the 30-day retention window; no pre-instrumentation history is reconstructed.
+
+The [deployment guide](deployment.md#activity-retention-and-optional-posthog) owns operator configuration, retention cleanup, and optional PostHog forwarding. Use activity metadata to locate a failure, then inspect the real project/artifact before claiming recovery.
 
 ## Revision workflow
 
@@ -83,3 +96,5 @@ The CLI is the scoped agentization deliverable in [release phase](../plans/2026-
 CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build prerequisites in [repository verification guidance](../AGENTS.md#run-the-appropriate-checks). They build and execute the distributable in real subprocesses, inspect schema/template output, and exercise authenticated project editing against the SQLite-backed handler. Renderer/server tests cover actual binary export. External provider and Google success require separate credential-dependent checks. Release evidence belongs in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
 The [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) provides the CLI tarball and agent-skill ZIP. GitHub release distribution is separate from npm registry publication.
+
+Build the complete installable skill archive with `npm run pack:skill`. The [packaging script](../scripts/package-skill.mjs) includes the entrypoint and all design-kind references in `dist/design-studio-ai-skill.zip`.

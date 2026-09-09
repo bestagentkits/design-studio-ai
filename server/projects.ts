@@ -1,3 +1,4 @@
+import { updateEvent } from './observability-store';
 import { Hono } from "hono";
 import { z } from "zod";
 import { documentSchema, type DesignDocument } from "../src/shared/schema";
@@ -26,6 +27,8 @@ export async function projectRow(c: Context<Env>, projectId: string) {
     .bind(projectId, owner(c))
     .first<ProjectRow>();
   if (!row) fail(404, "not_found", "Project not found.");
+  const span = c.get('telemetrySpan');
+  if (span && span.event.projectId !== row!.id) { span.event.projectId = row!.id; await updateEvent(c.env, span.event); }
   return row!;
 }
 export const serializeProject = (row: ProjectRow, base: string) => ({

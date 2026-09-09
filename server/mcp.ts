@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   McpServer,
   ResourceTemplate,
@@ -15,6 +16,8 @@ import { projectRow, saveDocument, storeAsset } from "./projects";
 import { mediaInputSchema } from './providers';
 import { interviewSchema, answerSchema, scopeSchema } from '../src/shared/brief';
 import { mergeRequestSchema } from '../src/shared/collaboration-contract';
+import { withSpan, telemetryEnv, type TelemetrySpan } from './observability';
+import { registerObservabilityTools } from './observability-tools';
 import { registerDesignSystemTools } from './design-system-tools';
 export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   if (c.req.header("Origin") && c.req.header("Origin") !== origin(c))
@@ -55,12 +58,21 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.2.3" },
+    { name: "design-studio-ai", version: "0.3.0" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
     },
   );
+  // All tool outcomes share the request trace, including direct service operations.
+  const toolSpan = new AsyncLocalStorage<TelemetrySpan>();
+  const register = server.registerTool.bind(server);
+  server.registerTool = ((name: string, config: unknown, handler: (...args: any[]) => any) =>
+    register(name, config as any, async (...args: any[]) => withSpan(c, { kind: 'mcp', action: name }, async span => toolSpan.run(span, async () => {
+        const response = await handler(...args);
+        if (response?.isError) span.set({ status: 'error', errorCode: 'mcp_tool_error' });
+        return response;
+    })))) as typeof server.registerTool;
   const result = (value: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
   });
@@ -75,13 +87,14 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       },
-      c.env,
+      telemetryEnv(c, toolSpan.getStore()),
     );
     const value = await response.json();
     if (!response.ok) return { isError: true, ...result(value) };
     return result(value);
   };
   registerDesignSystemTools(server, callApi);
+  registerObservabilityTools(server, callApi);
   server.registerTool(
     'merge_design',
     { description: 'Merge your edited document against the exact base read earlier. Independent changes are retained; same-field conflicts require reconciliation. Never change the base to bypass a conflict.', inputSchema: { projectId: z.string(), ...mergeRequestSchema.shape } },
@@ -406,7 +419,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       annotations: { readOnlyHint: true },
     },
     async ({ projectId, format, pageIndex, expectedRevision }) => {
-      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision }) }, c.env);
+      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision }) }, telemetryEnv(c, toolSpan.getStore()));
       if (!response.ok) return { isError: true, ...result(await response.json()) };
       if (['json', 'html', 'svg'].includes(format)) return result({ format, content: await response.text() });
       const bytes = await response.arrayBuffer();

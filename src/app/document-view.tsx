@@ -12,7 +12,7 @@ export function containerStyle(layout?: Layout): CSSProperties {
   if (!layout || layout.mode === 'absolute') return {};
   return { display: layout.mode, flexDirection: layout.direction ?? 'column', gap: layout.gap ?? 0, padding: layout.padding ?? 0, flexWrap: layout.wrap ? 'wrap' : 'nowrap', alignContent: 'start', alignItems: layout.align === 'start' ? 'flex-start' : layout.align === 'end' ? 'flex-end' : layout.align, justifyContent: layout.justify === 'start' ? 'flex-start' : layout.justify === 'end' ? 'flex-end' : layout.justify, gridTemplateColumns: layout.mode === 'grid' ? `repeat(${layout.columns ?? 2}, minmax(0, 1fr))` : undefined };
 }
-export function DocumentView({ doc, pageIndex = 0, time = 0, navigate, onBounds, onOverlayBounds }: { doc: DesignDocument; pageIndex?: number; time?: number; navigate?: (id: string) => void; onBounds?: (nodes: DesignNode[]) => void; onOverlayBounds?: (nodes: DesignNode[]) => void }) {
+export function DocumentView({ doc, pageIndex = 0, time = 0, navigate, onBounds, onOverlayBounds, editingId }: { doc: DesignDocument; pageIndex?: number; time?: number; navigate?: (id: string) => void; onBounds?: (nodes: DesignNode[]) => void; onOverlayBounds?: (nodes: DesignNode[]) => void; editingId?: string | null }) {
   const page = doc.pages[pageIndex], ref = useRef<HTMLDivElement>(null);
   const [visibility, setVisibility] = useState<Record<string, boolean>>({});
   const [fontError, setFontError] = useState('');
@@ -65,7 +65,7 @@ export function DocumentView({ doc, pageIndex = 0, time = 0, navigate, onBounds,
       height: n.sizing?.height === 'fill' ? layout?.direction !== 'row' ? undefined : '100%' : n.sizing?.height === 'hug' ? 'max-content' : n.height,
       flex: flow && n.sizing?.[layout.direction === 'row' ? 'width' : 'height'] === 'fill' ? '1 1 0' : '0 0 auto', minWidth: n.sizing?.minWidth ?? 0, maxWidth: n.sizing?.maxWidth, minHeight: n.sizing?.minHeight, maxHeight: n.sizing?.maxHeight,
       opacity: n.opacity ?? 1, transform: `rotate(${n.rotation ?? 0}deg)`, transformOrigin: `${(n.pivot?.[0] ?? .5) * 100}% ${(n.pivot?.[1] ?? .5) * 100}%`,
-      borderRadius: Number(s.borderRadius ?? 0), color: n.type === 'text' ? fill : resolveColor('$text', doc.theme), fontFamily: resolveFont(s.fontFamily, doc.theme), fontSize: Number(s.fontSize ?? 24), fontWeight: Number(s.fontWeight ?? 400), lineHeight: Number(s.lineHeight ?? 1.2), letterSpacing: Number(s.letterSpacing ?? 0), textAlign: (s.textAlign ?? 'left') as CSSProperties['textAlign'], whiteSpace: 'pre-wrap', ...containerStyle(n.layout) };
+      borderRadius: Number(s.borderRadius ?? 0), color: editingId === n.id ? 'transparent' : n.type === 'text' ? fill : resolveColor('$text', doc.theme), fontFamily: resolveFont(s.fontFamily, doc.theme), fontSize: Number(s.fontSize ?? 24), fontWeight: Number(s.fontWeight ?? 400), fontStyle: s.fontStyle === 'italic' ? 'italic' : 'normal', lineHeight: Number(s.lineHeight ?? 1.2), letterSpacing: Number(s.letterSpacing ?? 0), textAlign: (s.textAlign ?? 'left') as CSSProperties['textAlign'], whiteSpace: 'pre-wrap', ...containerStyle(n.layout) };
     if (['frame', 'shape'].includes(n.type)) style.background = fill;
     if (n.type === 'shape' && (s.shape === 'ellipse' || n.data?.shape === 'ellipse')) style.borderRadius = '50%';
     if (Number(s.strokeWidth)) style.border = `${Number(s.strokeWidth)}px solid ${resolveColor(s.stroke, doc.theme)}`;

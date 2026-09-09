@@ -59,7 +59,7 @@ export class Client {
     const url = new URL(path, this.baseUrl);
     if (url.origin !== this.baseUrl || !url.pathname.startsWith('/api/')) throw new CliError('invalid_path', 'API paths must remain inside this server /api/ namespace.');
     if (auth && !this.token) throw new CliError('authentication_required', 'Set DESIGN_STUDIO_API_KEY to an API token from Settings.', 2);
-    const headers = new Headers({ Accept: 'application/json' });
+    const headers = new Headers({ Accept: 'application/json', 'X-Studio-Client': 'cli' });
     if (this.token) headers.set('Authorization', `Bearer ${this.token}`);
     let payload: BodyInit | undefined;
     if (body instanceof FormData) payload = body;
@@ -72,7 +72,7 @@ export class Client {
       try { envelope = await response.json(); } catch { /* Do not print unknown proxy HTML or credentials. */ }
       const error = envelope.error;
       const message = typeof error?.message === 'string' ? error.message : `Server returned HTTP ${response.status}.`;
-      throw new CliError(error?.code ?? 'http_error', this.redact(message), response.status === 401 || response.status === 403 ? 2 : 1, response.status, error?.details);
+      throw new CliError(error?.code ?? 'http_error', this.redact(message), response.status === 401 || response.status === 403 ? 2 : 1, response.status, { ...(error?.details && typeof error.details === 'object' ? error.details : {}), requestId: response.headers.get('X-Request-ID') ?? undefined });
     }
     return response;
   }

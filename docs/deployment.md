@@ -91,6 +91,18 @@ Optional `GOOGLE_FONTS_API_KEY` is a server-only Google Developer API key for fu
 
 Design-system persistence requires the additive `0007-design-systems.sql` migration. Apply outstanding migrations before serving the new routes; preserve existing project and encryption data.
 
+### Activity retention and optional PostHog
+
+Activity records live in the application's database and require the additive observability migration. Apply outstanding [migrations](../migrations) before serving the new code; never reset existing projects to initialize telemetry. Queries exclude records older than 30 days. The [store maintenance owner](../server/observability-store.ts) removes old rows in bounded batches during activity, so exclusion is immediate at the query boundary while physical cleanup can lag on idle or heavily backlogged installations. Backups have their own retention policy.
+
+Set `OBSERVABILITY_ADMIN_IDS` to a comma-separated list of explicit application user IDs only when those people need the global activity view. All other reads default to owner scope. Global access requires that operator's application session or API key; OAuth access remains owner-scoped even for the same account. Treat this setting as privileged access, independent of a browser navigation link.
+
+Optional PostHog forwarding requires both server-runtime `POSTHOG_PROJECT_KEY` and `POSTHOG_HOST`. Use the intended PostHog ingestion origin for your project/region: an HTTPS origin without credentials, path, query, or fragment. Do not infer a host or claim analytics is enabled from a key alone. Keep the key in runtime secrets, not source, browser configuration, or documentation. Inject these variables into the Node process or Cloudflare runtime, and use the owning Compose configuration for containers.
+
+[Forwarding](../server/observability-posthog.ts) sends only allowlisted client-event fields, including pseudonymous actor/project/trace IDs where applicable. It excludes free text, document content, full URLs, and credentials; person-profile creation and IP geolocation are disabled in the payload. This is not session replay or automatic capture. The receiver controls its own retention; the local 30-day rule does not delete copies held by PostHog.
+
+Use the Activity coverage indicators to verify configured state, delivery failures, and last successful delivery. Configuration is not proof of receipt in PostHog; inspect the intended project after an authorized event. Forwarding failures do not change the product operation's result. Delivery/drop counters describe the current runtime instance and reset on restart, so they are not durable accounting. Provider token/cost fields can be unavailable; this view is operational evidence, not a complete billing ledger.
+
 ## Backups and rollback
 
 Back up relational data, binary assets, and the encryption secret together. Stop Node writes before copying SQLite/files, or use a SQLite-consistent backup procedure; copying only an active database file may miss journaled changes. Use D1 backup/export and R2 object backups for Cloudflare. Missing assets or encryption keys cannot be repaired by a database-only restore.
@@ -102,3 +114,5 @@ Roll code back to a known deployment while preserving data and checking schema c
 The initial audit reported five high-severity findings through upstream browser-download and PowerPoint dependencies, including `extract-zip` under `@cloudflare/puppeteer` and `image-size`. No compatible complete fix was available in that dependency tree. Run `npm audit` against the current lockfile and monitor upstream updates; the tree must not be described as audit-clean.
 
 The affected browser-downloading code is not used by the Cloudflare runtime. PowerPoint raster inputs are application-generated PNGs; uploaded media passes type/signature validation, and cloud rendering blocks external fetches. These boundaries reduce exposure without erasing the upstream findings. Successful tests and deployment do not establish a clean dependency audit.
+
+For additional browser checks, install Firefox/WebKit with `npx playwright install firefox webkit`, then run `STUDIO_CROSS_BROWSER=1 npm run test:e2e -- tests/editor-ergonomics.spec.ts tests/observability-ui.spec.ts --project=firefox` (repeat with `--project=webkit`). Each invocation uses an isolated database; the default release suite covers Chromium desktop/mobile.

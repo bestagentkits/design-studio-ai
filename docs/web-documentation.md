@@ -10,6 +10,12 @@ Canonical documentation routes are `/docs`, `/docs/revisions`, `/docs/api`, `/do
 
 The API reference includes public schema/catalog, account/GitHub auth, projects/revisions, persisted interviews/scopes, design preflight, media/assets, conversations, exports/publishing, and credential management. Machine schemas remain authoritative at `/api/schema`; the template/theme/block catalog is at `/api/catalog`. [api-reference.ts](../src/shared/api-reference.ts) owns the playground operations and `/api/openapi` index, including design-system versions, font/model discovery and multipart uploads. WebMCP combines editor tools with [browser-design-tools.ts](../src/app/browser-design-tools.ts); discover supported tools at runtime. Copyable examples contain placeholders and environment references, never real secrets.
 
+## Workspace destinations and activity
+
+The [workspace navigation owner](../src/app/workspace-navigation.ts) defines direct `/templates`, `/design-systems`, and `/activity` destinations on the configured origin. Template and design-system navigation opens a browsing view; loading a link does not create a project or apply a library. Design systems retain their owner authorization when reached directly. Authentication preserves the requested destination; navigation does not grant access to another owner's library.
+
+Activity URLs preserve the selected time window and authorized filters in the query string; `trace` opens the selected trace. A copied URL conveys navigation state, never authorization. Document the [shared filter contract](../src/shared/observability.ts) through the typed API reference so browser tools, REST examples, and generated discovery remain aligned. Operator-only global activity is distinct from ordinary owner-scoped access; see [agent access](agents.md#activity-usage-and-traces).
+
 ## HTML, Markdown, and agent discovery
 
 Run [build-public-docs.mjs](../scripts/build-public-docs.mjs) **after Vite builds**. The script bundles the content for Node rendering with React's server renderer; it uses SSR-safe browser guards and does not mock browser globals. It preserves the built shell's module scripts, global styles, and early theme initialization, then injects real semantic page content. Per-route titles, descriptions, canonical/Open Graph metadata, and structured data describe the actual page.

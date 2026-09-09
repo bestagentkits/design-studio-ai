@@ -1,3 +1,5 @@
+import { z } from 'zod';
+import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },
   { method: 'GET', path: '/api/schema', summary: 'Document and operation schemas', body: undefined },
@@ -41,6 +43,10 @@ export const apiEndpoints = [
   { method: 'DELETE', path: '/api/projects/{id}/share', summary: 'Remove all public snapshots (share alias)', body: undefined },
   { method: 'DELETE', path: '/api/projects/{id}', summary: 'Delete project and assets', body: undefined },
   { method: 'GET', path: '/api/providers', summary: 'Read provider configuration metadata', body: undefined },
+  { method: 'GET', path: '/api/observability/summary', summary: 'Account activity, measured usage and coverage; scope=all requires configured operator', body: undefined },
+  { method: 'GET', path: '/api/observability/events', summary: 'Paginated activity events with owner isolation', body: undefined },
+  { method: 'GET', path: '/api/observability/trace/{id}', summary: 'Read correlated trace steps visible to your account', body: undefined },
+  { method: 'POST', path: '/api/observability/client-events', summary: 'Submit an allowlisted browser event without private content', body: { event: 'page_view', page: 'templates' } },
 ] as const;
 export function openApiDocument(schemas: Record<string, unknown>) {
   const paths: Record<string, Record<string, unknown>> = {};
@@ -49,15 +55,19 @@ export function openApiDocument(schemas: Record<string, unknown>) {
     const parameters: unknown[] = [...path.matchAll(/\{(\w+)\}/g)].map(match => ({ name: match[1], in: 'path', required: true, schema: { type: 'string' } }));
     if (path === '/api/fonts' || path.endsWith('/models')) parameters.push({ name: 'q', in: 'query', schema: { type: 'string', maxLength: 200 }, description: 'Case-insensitive catalog search' });
     if (method === 'GET' && path === '/api/design-systems/{id}') parameters.push({ name: 'version', in: 'query', schema: { type: 'integer', minimum: 1 }, description: 'Immutable version; latest when omitted' });
+    if (method === 'GET' && path.startsWith('/api/observability/')) {
+      const definition = z.toJSONSchema(telemetryQuerySchema) as { properties: Record<string, unknown> };
+      for (const [name, schema] of Object.entries(definition.properties)) parameters.push({ name, in: 'query', schema });
+    }
     const upload = method === 'POST' && path.endsWith('/assets');
     const content = upload
       ? { 'multipart/form-data': { schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } } }
-      : { 'application/json': { schema: schemas[`${method} ${path}`] ?? { type: 'object' }, example: body } };
+      : { 'application/json': { schema: path.endsWith('/client-events') ? z.toJSONSchema(clientEventSchema) : schemas[`${method} ${path}`] ?? { type: 'object' }, example: body } };
     (paths[path] ??= {})[method.toLowerCase()] = { summary, parameters,
       ...(body ? { requestBody: { required: true, content } } : {}),
       responses: { '2XX': { description: 'Success; exports return file bytes with Content-Type and Content-Disposition' }, '400': { description: 'Invalid request' }, '401': { description: 'Authentication required' }, '403': { description: 'Insufficient scope' }, '404': { description: 'Resource not found' }, '409': { description: 'Revision or merge conflict' } },
     };
   }
-  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.2.3' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
+  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.3.0' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }, schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => /^[\w.-]+$/.test(name))) }, paths };
 }

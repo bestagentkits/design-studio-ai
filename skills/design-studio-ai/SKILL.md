@@ -32,6 +32,21 @@ The get result contains `{project:{id,revision,document,...}}`. Save the observe
 
 For browser WebMCP, discover `studio_capabilities` and read `studio_get_design` before editing the open canvas. `studio_apply_operations` edits local state; Live mode autosaves, otherwise call `studio_save_design` explicitly. Tools named `studio_api_…` act on saved server state, so save and verify the revision before using them to export or publish local edits. WebMCP is experimental; use network MCP or CLI when the browser does not expose it. The [public reference](https://studio.agentkit.best/docs/webmcp) explains inputs and boundaries; use the configured server's reference when self-hosting.
 
+## Choose the design-kind guidance
+
+Before creating or substantially refining a design, read [shared layout and quality](references/layout-and-quality.md), then the reference matching the actual document `kind`. For mixed work, read each relevant reference; preserve the approved brief and user taste. These references guide composition and review, while live schemas remain authoritative for fields and limits.
+
+| Kind | Guidance |
+| --- | --- |
+| `web` | [Web interfaces](references/web.md): Flex-first reading flow, components, responsive review |
+| `slides` | [Presentations](references/slides.md): narrative, slide hierarchy, audience-scale review |
+| `report` | [Reports](references/report.md): evidence, editorial flow, page and chart review |
+| `wireframe` | [Wireframes](references/wireframe.md): task flows, states, interaction review |
+| `3d` | [3D scenes](references/3d.md): staging, materials, camera, mesh and export review |
+| `video` | [Timeline videos](references/video.md): readable beats, motion, sound and playback review |
+
+Favor Flex for ordinary content relationships, Grid for real two-dimensional structure, and absolute placement for intentional overlays, fixed compositions, scene staging, or motion. Do not interpret a scaled fixed canvas as proof of responsive reflow. Recover overflow by fixing structure and available space before shrinking typography or changing approved copy.
+
 ## Refine through targeted operations
 
 Prefer a small operation array for requested edits over replacing the entire design. For example, after reading the actual target IDs, write an operations file:
@@ -67,6 +82,12 @@ Inspect the proposal before the second command. Preserve useful work unless the 
 Inspect `design-systems list`, the selected library, and `design-systems schema` before applying or inserting reusable tokens, components, or page compositions. Read the immutable library version and target project revision; use those observed values for updates and project writes. Reconcile a stale library or project instead of substituting newer version numbers. Capture only portable media in a library; private project asset references cannot be reused across projects. Discover equivalent network tools through `tools/list`.
 
 Use `fonts --query` and `providers models PROVIDER --query` to discover names and model IDs. Respect live/cache/fallback provenance: a suggestion does not prove model capability, credentials, quota, or successful generation. Model discovery needs account/API-key access rather than MCP OAuth. Choose actual schema-defined layout, component, mesh and timeline fields; do not invent a second design format.
+
+## Observe activity without guessing outcomes
+
+Use `dsa observability summary`, `dsa observability events`, or `dsa observability trace TRACE_ID` when diagnosing activity or provider usage. Discover the equivalent MCP tools `get_observability_summary`, `list_activity_events`, and `get_activity_trace` and their actual schemas. Read installed CLI help for filters and event pagination; use the returned cursor unchanged. Reads default to your authenticated owner's events. Global scope requires an explicitly configured operator with application-session/API-key authorization; OAuth never grants global access.
+
+Preserve trace/parent IDs and coverage information when explaining a failure. `running` has no observed completion; `interrupted` is not proof an external provider failed. Browser events are reported interactions, not verified server outcomes. Missing tokens or USD cost remain unknown, not zero; measured-call counts show partial coverage. Recent activity is not online presence, repeated actions do not establish retry counts, and the 30-day window cannot reveal earlier history. Inspect the saved design and actual artifacts before claiming success. Reading a trace does not authorize another provider charge, retry, or publication.
 
 ## Assets and media
 

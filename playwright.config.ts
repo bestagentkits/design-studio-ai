@@ -19,6 +19,10 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop', use: { browserName: 'chromium', viewport: { width: 1440, height: 1000 } } },
+    ...(process.env.STUDIO_CROSS_BROWSER === '1' ? [
+      { name: 'firefox', use: { browserName: 'firefox' as const, viewport: { width: 1440, height: 1000 } } },
+      { name: 'webkit', use: { browserName: 'webkit' as const, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
+    ] : []),
     { name: 'mobile', use: { browserName: 'chromium', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
   ],
 });

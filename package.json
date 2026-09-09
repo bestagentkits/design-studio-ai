@@ -1,6 +1,6 @@
 {
   "name": "design-studio-ai",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -17,7 +17,8 @@
     "cf": "node scripts/cloudflare.mjs",
     "deploy": "npm run build && node scripts/cloudflare.mjs deploy",
     "test:e2e": "node scripts/run-e2e.mjs",
-    "build:cli": "npm run build --prefix packages/cli"
+    "build:cli": "npm run build --prefix packages/cli",
+    "pack:skill": "node scripts/package-skill.mjs"
   },
   "dependencies": {
     "@cloudflare/puppeteer": "^1.4.0",

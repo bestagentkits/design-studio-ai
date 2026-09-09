@@ -4,7 +4,7 @@
 
 An agent-first design workspace for web interfaces, slides, reports, wireframes, 3D scenes, and timeline videos. Start with a brief or template, inspect the preview, make focused changes through chat or the manual editor, and export or publish the result. People and agents work on the same versioned document.
 
-![Design Studio AI desktop workspace](plans/2026-09-07-bootstrap-design-studio-ai/reports/home-desktop.png)
+![Design Studio workspace with a prompt composer and starter templates for websites, presentations, documents, wireframes, 3D scenes, and motion](docs/assets/workspace.webp)
 
 ## Capabilities
 
@@ -14,6 +14,7 @@ An agent-first design workspace for web interfaces, slides, reports, wireframes,
 - BYOK text, image, speech, music/effects, and video generation, plus supported source-media edits. See [providers](docs/providers.md).
 - JSON, HTML, SVG, PNG, PDF, PowerPoint, WebM, supported MP4 recording, React prototype ZIP, GLB/glTF, and authorized Google Slides export.
 - Immutable public snapshots, REST, authenticated Streamable HTTP MCP with OAuth/API keys, experimental browser WebMCP, and the `dsa` CLI with an [agent skill](skills/design-studio-ai/SKILL.md).
+- Owner-scoped activity, correlated request/provider traces, and reported token/cost usage with explicit coverage; optional operator views and PostHog forwarding. See [activity and configuration](docs/deployment.md#activity-retention-and-optional-posthog).
 - Cloudflare hosting or Docker self-hosting with persistent SQLite/files.
 - Email/password and optional GitHub sign-in, with explicit account linking in Settings.
 - Persisted contextual interviews, editable scopes, explicit approval, and shared REST/MCP/CLI/WebMCP access to the same brief.
@@ -21,6 +22,25 @@ An agent-first design workspace for web interfaces, slides, reports, wireframes,
 - Searchable API/CLI/connection documentation, a visual beginner guide, crawlable HTML, Markdown, sitemap, and llms indexes.
 
 Generation calls real providers and requires your credentials and account access. It returns a proposal or asset; saved designs change through explicit revision-checked writes.
+
+## Inside the studio
+
+<details>
+<summary>Web, slide, and 3D editing</summary>
+
+**Web layouts** — edit the canvas and typography alongside the conversation.
+
+![Web editor showing an editorial landing page, selected headline, and text properties](docs/assets/web-editor.webp)
+
+**Slides** — refine individual elements while keeping the presentation in view.
+
+![Slide editor showing a Vietnamese presentation, selected text layer, and slide thumbnails](docs/assets/slides-editor.webp)
+
+**3D scenes** — inspect objects, materials, and composition in the interactive scene.
+
+![3D editor showing a selected blue sculptural object with scene and material controls](docs/assets/scene-editor.webp)
+
+</details>
 
 ## Run locally
 
@@ -56,10 +76,10 @@ Set `ENCRYPTION_KEY` and the public `APP_URL` in your environment or a local Com
 
 Create an API token in Settings and inject `DESIGN_STUDIO_API_KEY` into the agent environment. `DESIGN_STUDIO_URL` defaults to the live studio. Network MCP is at `https://studio.agentkit.best/mcp`, with OAuth discovery on the same origin.
 
-Install the published [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) CLI tarball:
+Install the published [v0.3.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.0) CLI tarball:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.0/bestagentkits-design-studio-ai-0.3.0.tgz
 dsa --help
 ```
 
@@ -69,13 +89,13 @@ The package is **not published to the npm registry**. To build and install from 
 cd packages/cli
 npm pack
 cd ../..
-npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.2.3.tgz
+npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.0.tgz
 dsa --help
 dsa schema
 dsa projects list
 ```
 
-The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
+The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.0/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
 
 ## Verify and contribute
 

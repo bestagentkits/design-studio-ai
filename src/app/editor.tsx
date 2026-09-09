@@ -1,3 +1,7 @@
+import { trackClient } from './analytics';
+import './editor-ergonomics.css';
+import { InlineTextEditor } from './inline-text-editor';
+import { canMoveNode, isNodeProtected, localMovement, moveNodeTree, selectedRoots, toggleSelection } from './editor-selection';
 import { loadDocumentFonts } from '../shared/font-loading';
 import { mergeDocuments } from '../shared/document-merge';
 import { DocumentView, usesDom } from './document-view';
@@ -35,6 +39,11 @@ import {
   Film,
   ImagePlus,
   Layers3,
+  Group,
+  Ungroup,
+  Keyboard,
+  Trash2,
+  Pencil,
   ListChecks,
   LockKeyhole,
   Maximize2,
@@ -247,7 +256,14 @@ export function Editor({
     [doc, setDoc] = useState<DesignDocument>(() => clone(initial.document));
   const [saved, setSaved] = useState(JSON.stringify(initial.document)),
     [requestedPageIndex, setPageIndex] = useState(0),
-    [selected, setSelected] = useState<string | null>(null);
+    [selection, setSelection] = useState<string[]>([]);
+  const selected = selection.at(-1) ?? null;
+  const selectionRef = useRef(selection); selectionRef.current = selection;
+  function setSelected(id: string | null) { setSelection(id ? [id] : []); }
+  function selectLayer(id: string, additive = false) {
+    setDirectText(null);
+    setSelection(previous => additive ? toggleSelection(previous, id) : [id]);
+  }
   const [panel, setPanel] = useState("chat"),
     [mobilePanel, setMobilePanel] = useState("canvas"),
     [prompt, setPrompt] = useState(initial.description || "");
@@ -267,7 +283,7 @@ export function Editor({
   const [syncStatus, setSyncStatus] = useState("Live");
   const syncing = useRef(false);
   const syncBlocked = useRef(false);
-  syncBlocked.current = !!busy || !!proposal;
+
   const [presenting, setPresenting] = useState(false);
   const [domBounds, setDomBounds] = useState<DesignNode[]>([]);
   const [domOverlayBounds, setDomOverlayBounds] = useState<DesignNode[]>([]);
@@ -278,6 +294,8 @@ export function Editor({
     [zoom, setZoom] = useState(1),
     [fitted, setFitted] = useState(0.55),
     [directText, setDirectText] = useState<string | null>(null);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  syncBlocked.current = !!busy || !!proposal || !!directText;
   const [historyCount, setHistoryCount] = useState(0),
     [redoCount, setRedoCount] = useState(0),
     [time, setTime] = useState(0),
@@ -301,13 +319,10 @@ export function Editor({
     saveRef = useRef<() => Promise<void>>(async () => {});
   const viewport = useRef<HTMLDivElement>(null),
     drag = useRef<{
-      id: string;
-      x: number;
-      y: number;
-      original: DesignNode;
-      parentRotation: number;
-      resize: Handle;
+      ids: string[]; x: number; y: number; original: DesignDocument;
+      resize: Handle; started: boolean;
     } | null>(null);
+  const pointerSelecting = useRef(false);
   const dirty = JSON.stringify(doc) !== saved,
     displayed = proposal || doc,
     pageIndex = Math.max(0, Math.min(requestedPageIndex, displayed.pages.length - 1)),
@@ -315,6 +330,30 @@ export function Editor({
     baseNode = doc.pages[pageIndex]?.nodes.find((n) => n.id === selected),
     node = baseNode ? interpolateNode(baseNode, doc, time) : undefined,
     scale = fitted * zoom;
+  useEffect(() => {
+    setSelection(ids => {
+      const remaining = ids.filter(id => doc.pages[pageIndex]?.nodes.some(item => item.id === id));
+      return remaining.length === ids.length ? ids : remaining;
+    });
+    if (directText && !doc.pages[pageIndex]?.nodes.some(item => item.id === directText)) setDirectText(null);
+  }, [doc.pages, pageIndex, directText]);
+  useEffect(() => { setSelection([]); setDirectText(null); }, [page.id]);
+  function beginText(id: string) {
+    const target = docRef.current.pages[pageIndex].nodes.find(item => item.id === id);
+    if (!target || target.type !== 'text' || isNodeProtected(docRef.current.pages[pageIndex], target) || busy || preview || proposal) return;
+    drag.current = null; setPlaying(false); setSelected(id); setDirectText(id);
+  }
+  function finishText(text: string | null, restoreFocus: boolean, original: string) {
+    const target = docRef.current.pages[pageIndex].nodes.find(item => item.id === directText);
+    if (target && text !== null && text !== original) {
+      if ((target.text ?? '') !== original) { setError('This text changed remotely. Your draft is still open; copy it before cancelling and reconciling.'); return false; }
+      void trackClient({ event: 'editor_action', action: 'text_edit', page: 'editor', projectId: initial.id });
+      change(d => { const target = d.pages[pageIndex].nodes.find(item => item.id === directText); if (target) target.text = text; });
+    }
+    setDirectText(null);
+    if (restoreFocus) viewport.current?.focus({ preventScroll: true });
+    return true;
+  }
   const viewportReady = (briefLoaded || !!briefError) && (!brief || briefManual);
   const { pan, resetPan } = useCanvasGestures(viewport, scale, setZoom, displayed.kind === '3d', viewportReady, () => { drag.current = null; });
   useEffect(() => {
@@ -367,8 +406,13 @@ export function Editor({
     }
     Object.assign(frame.values, animated);
   }
+  function translateNode(d: DesignDocument, target: DesignNode, patch: Partial<DesignNode>) {
+    const pose = interpolateNode(target, d, time);
+    setNodePatch(d, target, { x: pose.x + (patch.x ?? target.x) - target.x, y: pose.y + (patch.y ?? target.y) - target.y });
+  }
   function update(patch: Partial<DesignNode>) {
-    if (!selected) return;
+    if (!selected || selection.length !== 1 || !baseNode) return;
+    if (isNodeProtected(doc.pages[pageIndex], baseNode) && !Object.keys(patch).every(key => key === 'locked' || key === 'visible')) return;
     change((d) => {
       if (patch.layout) { Object.assign(d, mutateDocument(d, [{ op: 'update-node', nodeId: selected, changes: patch }])); return; }
       const target = d.pages[pageIndex]!.nodes.find((n) => n.id === selected);
@@ -379,7 +423,7 @@ export function Editor({
     const last = history.current.pop();
     if (!last) return;
     future.current.push(clone(docRef.current));
-    setDoc(last);
+    docRef.current = last; setDoc(last);
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
     setProposal(null);
@@ -388,7 +432,7 @@ export function Editor({
     const next = future.current.pop();
     if (!next) return;
     history.current.push(clone(docRef.current));
-    setDoc(next);
+    docRef.current = next; setDoc(next);
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
   }
@@ -497,8 +541,11 @@ export function Editor({
   useEffect(() => {
     if (!viewport.current) return;
     const fit = () => {
-      const width = viewport.current!.clientWidth - 64,
-        height = viewport.current!.clientHeight - 80;
+      // Hidden mobile panels report zero dimensions. Fitting them would mirror
+      // the canvas and leave DOM overlays measured with a negative scale.
+      if (!viewport.current?.clientWidth || !viewport.current.clientHeight) return;
+      const width = Math.max(1, viewport.current.clientWidth - 64),
+        height = Math.max(1, viewport.current.clientHeight - 80);
       setFitted(
         Math.min(width / page.width, height / Math.min(page.height, 1100), 1),
       );
@@ -533,32 +580,60 @@ export function Editor({
     return () => cancelAnimationFrame(frame);
   }, [playing, doc.timeline?.duration]);
   function removeNode() {
-    if (!selected) return;
-    change((d) => {
-      const targetPage = d.pages[pageIndex]!;
-      const ids = new Set([selected]);
-      let previous = 0;
-      while (previous !== ids.size) {
-        previous = ids.size;
-        targetPage.nodes.forEach((n) => {
-          if (n.parentId && ids.has(n.parentId)) ids.add(n.id);
-        });
-      }
-      targetPage.nodes = targetPage.nodes.filter((n) => !ids.has(n.id));
-      if (d.timeline)
-        d.timeline.tracks = d.timeline.tracks.filter((t) => !ids.has(t.nodeId));
+    void trackClient({ event: 'editor_action', action: 'delete', page: 'editor', projectId: initial.id });
+    const roots = selectedRoots(docRef.current.pages[pageIndex], selection);
+    if (!roots.length) return;
+    change(d => {
+      const targetPage = d.pages[pageIndex];
+      const ids = new Set(roots.flatMap(root => [...subtree(targetPage, root.id)]));
+      targetPage.nodes = targetPage.nodes.filter(item => !ids.has(item.id));
+      if (d.timeline) d.timeline.tracks = d.timeline.tracks.filter(track => !ids.has(track.nodeId));
     });
-    setSelected(null);
+    setSelected(null); viewport.current?.focus({ preventScroll: true });
   }
   function duplicateNode() {
-    if (!node) return;
-    const duplicateId = uid();
-    change((d) => {
-      Object.assign(d, mutateDocument(d, [{ op: 'duplicate-node', nodeId: node.id, duplicateId }]));
+    void trackClient({ event: 'editor_action', action: 'duplicate', page: 'editor', projectId: initial.id });
+    const roots = selectedRoots(docRef.current.pages[pageIndex], selection);
+    if (!roots.length) return;
+    const actions = roots.map(root => ({ op: 'duplicate-node' as const, nodeId: root.id, duplicateId: uid() }));
+    change(d => Object.assign(d, mutateDocument(d, actions)));
+    setSelection(actions.map(action => action.duplicateId));
+    viewport.current?.focus({ preventScroll: true });
+  }
+  function groupSelection() {
+    void trackClient({ event: 'editor_action', action: 'group', page: 'editor', projectId: initial.id });
+    const roots = selectedRoots(docRef.current.pages[pageIndex], selection);
+    if (roots.length < 2) return;
+    const id = uid(), ids = roots.map(root => root.id);
+    const bounds = usesDom(page) ? domBounds.filter(item => ids.includes(item.id) || item.id === roots[0].parentId).map(({ id, x, y, width, height }) => ({ id, x, y, width, height })) : undefined;
+    try {
+      const next = mutateDocument(docRef.current, [{ op: 'group-nodes', pageId: page.id, nodeIds: ids, groupId: id, ...(bounds?.length ? { bounds } : {}) }]);
+      change(d => Object.assign(d, next)); setSelected(id);
+    } catch (error) { setError(message(error)); }
+  }
+  function ungroupSelection() {
+    void trackClient({ event: 'editor_action', action: 'ungroup', page: 'editor', projectId: initial.id });
+    const roots = selectedRoots(docRef.current.pages[pageIndex], selection).filter(item => item.type === 'group');
+    if (!roots.length) return;
+    const childIds = docRef.current.pages[pageIndex].nodes.filter(item => roots.some(root => root.id === item.parentId)).map(item => item.id);
+    try {
+      const next = mutateDocument(docRef.current, roots.map(root => ({ op: 'ungroup-node', nodeId: root.id })));
+      change(d => Object.assign(d, next)); setSelection(childIds);
+    } catch (error) { setError(message(error)); }
+  }
+  function nudgeSelection(dx: number, dy: number) {
+    const roots = selectedRoots(docRef.current.pages[pageIndex], selection).filter(item => canMoveNode(docRef.current.pages[pageIndex], item));
+    if (!roots.length) return;
+    change(d => {
+      for (const root of roots) {
+        const target = d.pages[pageIndex].nodes.find(item => item.id === root.id)!;
+        const delta = localMovement(d, d.pages[pageIndex], target, time, dx, dy);
+        moveNodeTree(d.pages[pageIndex], target, delta.x, delta.y, (item, patch) => translateNode(d, item, patch));
+      }
     });
-    setSelected(duplicateId);
   }
   function reorder(direction: number) {
+    if (selection.length !== 1 || !node || isNodeProtected(doc.pages[pageIndex], node)) return;
     change((d) => {
       const nodes = d.pages[pageIndex]!.nodes,
         index = nodes.findIndex((n) => n.id === selected),
@@ -644,6 +719,18 @@ export function Editor({
         return;
       }
       if (!target.closest(".node-target, .layer-row, .canvas-viewport")) return;
+      const command = event.metaKey || event.ctrlKey;
+      const letter = event.key.toLowerCase();
+      if (command && letter === 'a') {
+        event.preventDefault(); setDirectText(null);
+        setSelection(page.nodes.filter(item => !isNodeProtected(page, item)).map(item => item.id)); return;
+      }
+      if (command && letter === 'g') { event.preventDefault(); event.shiftKey ? ungroupSelection() : groupSelection(); return; }
+      if (!command && event.key === '?') { event.preventDefault(); setShortcutsOpen(true); return; }
+      if (!command && event.key === 'Enter' && node?.type === 'text' && selection.length === 1) { event.preventDefault(); beginText(node.id); return; }
+      if (!command && letter === 'v') { event.preventDefault(); setSelected(null); return; }
+      if (!command && letter === 't') { event.preventDefault(); beginText(addNode('text').id); return; }
+      if (command && event.key === '0') { event.preventDefault(); setZoom(1); resetPan(); return; }
       if (
         (event.metaKey || event.ctrlKey) &&
         event.key.toLowerCase() === "d"
@@ -656,33 +743,20 @@ export function Editor({
       } else if (
         !target.closest(".layer-row") &&
         !event.metaKey && !event.ctrlKey &&
-        node &&
-        !node.locked &&
+        selection.length > 0 &&
         ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
       ) {
         event.preventDefault();
         const step = event.shiftKey ? 10 : 1;
-        update({
-          x:
-            node.x +
-            (event.key === "ArrowRight"
-              ? step
-              : event.key === "ArrowLeft"
-                ? -step
-                : 0),
-          y:
-            node.y +
-            (event.key === "ArrowDown"
-              ? step
-              : event.key === "ArrowUp"
-                ? -step
-                : 0),
-        });
+        nudgeSelection(
+          event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0,
+          event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0,
+        );
       }
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [node, selected, pageIndex, busy, preview, proposal]);
+  }, [node, selection, pageIndex, busy, preview, proposal, directText]);
   function addNode(type: DesignNode["type"], extra: Partial<DesignNode> = {}) {
     const newNode: DesignNode = {
       id: uid(),
@@ -708,58 +782,39 @@ export function Editor({
     viewport.current?.focus({ preventScroll: true });
     return newNode;
   }
-  function pointerDown(
-    event: PointerEvent,
-    target: DesignNode,
-    resize: Handle = 'move',
-  ) {
+  function pointerDown(event: PointerEvent, target: DesignNode, resize: Handle = 'move') {
     event.stopPropagation();
-    if (event.currentTarget instanceof HTMLElement)
-      event.currentTarget.focus({ preventScroll: true });
-    if (target.locked || preview || proposal) {
-      setSelected(target.id);
-      return;
-    }
+    if (event.button !== 0 || directText) return;
+    pointerSelecting.current = true;
+    if (event.currentTarget instanceof HTMLElement) event.currentTarget.focus({ preventScroll: true });
+    pointerSelecting.current = false;
     event.preventDefault();
-    setSelected(target.id);
-    remember();
-    let parentRotation = 0, parentId = target.parentId;
-    while (parentId) {
-      const parent = docRef.current.pages[pageIndex].nodes.find(n => n.id === parentId);
-      if (!parent) break;
-      parentRotation += interpolateNode(parent, docRef.current, time).rotation ?? 0;
-      parentId = parent.parentId;
-    }
-    drag.current = {
-      id: target.id,
-      x: event.clientX,
-      y: event.clientY,
-      original: clone(docRef.current.pages[pageIndex].nodes.find(n => n.id === target.id) ?? target),
-      parentRotation,
-      resize,
-    };
+    if (event.shiftKey && resize === 'move') { void trackClient({ event: 'editor_action', action: 'multiselect', page: 'editor', projectId: initial.id }); setSelection(ids => toggleSelection(ids, target.id)); return; }
+    const ids = selectionRef.current.includes(target.id) && resize === 'move' ? selectionRef.current : [target.id];
+    setSelection(ids);
+    if (preview || proposal || busy || isNodeProtected(docRef.current.pages[pageIndex], target)) return;
+    const roots = selectedRoots(docRef.current.pages[pageIndex], ids).filter(item => resize !== 'move' || canMoveNode(docRef.current.pages[pageIndex], item));
+    if (!roots.length || (resize !== 'move' && ids.length !== 1)) return;
+    drag.current = { ids: roots.map(item => item.id), x: event.clientX, y: event.clientY, original: clone(docRef.current), resize, started: false };
     event.currentTarget.setPointerCapture(event.pointerId);
   }
   function pointerMove(event: PointerEvent) {
     const active = drag.current;
     if (!active) return;
-    const dx = (event.clientX - active.x) / scale,
-      dy = (event.clientY - active.y) / scale;
-    setDoc((current) => {
-      const next = clone(current),
-        target = next.pages[pageIndex]!.nodes.find((n) => n.id === active.id)!;
-      const angle = active.parentRotation * Math.PI / 180;
-      const patch = transformNode(active.original, dx * Math.cos(angle) + dy * Math.sin(angle), -dx * Math.sin(angle) + dy * Math.cos(angle), active.resize, event.shiftKey);
-      if (active.resize === 'move') {
-        const parent = next.pages[pageIndex].nodes.find(n => n.id === target.parentId);
-        const layout = parent?.layout ?? (!target.parentId ? next.pages[pageIndex].layout : undefined);
-        if (layout && layout.mode !== 'absolute' && target.position !== 'absolute') return current;
-        const ids = subtree(next.pages[pageIndex], target.id);
-        if (!target.layout) next.pages[pageIndex].nodes.filter(n => ids.has(n.id) && n.id !== target.id).forEach(n => { n.x += (patch.x ?? target.x) - target.x; n.y += (patch.y ?? target.y) - target.y; });
-      }
-      setNodePatch(next, target, patch);
-      return next;
-    });
+    const dx = (event.clientX - active.x) / scale, dy = (event.clientY - active.y) / scale;
+    if (!active.started) {
+      if (Math.hypot(event.clientX - active.x, event.clientY - active.y) < 3) return;
+      void trackClient({ event: 'editor_action', action: active.resize === 'move' ? 'move' : active.resize === 'rotate' ? 'rotate' : 'resize', page: 'editor', projectId: initial.id });
+      remember(); active.started = true;
+    }
+    const next = clone(active.original), targetPage = next.pages[pageIndex];
+    for (const id of active.ids) {
+      const target = targetPage.nodes.find(item => item.id === id)!;
+      const delta = localMovement(next, targetPage, target, time, dx, dy);
+      if (active.resize === 'move') moveNodeTree(targetPage, target, delta.x, delta.y, (item, patch) => translateNode(next, item, patch));
+      else setNodePatch(next, target, transformNode(interpolateNode(target, next, time), delta.x, delta.y, active.resize, event.shiftKey));
+    }
+    docRef.current = next; setDoc(next);
   }
   async function generate() {
     if (!prompt.trim() || busy) return;
@@ -1675,7 +1730,7 @@ export function Editor({
               </button>
             </>
           ) : panel === "layers" ? (
-            <LayerTree doc={doc} page={page} measured={usesDom(page) ? domBounds : undefined} selected={selected} select={id => { setSelected(id); setDirectText(null); }} change={change} />
+            <LayerTree doc={doc} page={page} selection={selection} select={selectLayer} group={groupSelection} ungroup={ungroupSelection} change={change} />
 
           ) : (
             <div className="assets-panel">
@@ -1960,6 +2015,22 @@ export function Editor({
               </button>
             </div>
           )}
+          {!preview && !proposal && <div className="selection-actions">
+            <small role="status">{selection.length ? `${selection.length} selected` : 'Shift + click to select multiple layers'}{selection.length > 1 ? ' · Resize one layer at a time' : ''}</small>
+            {selection.length > 0 && <>
+              <button className="icon-button" aria-label="Duplicate selection" title="Duplicate (⌘/Ctrl+D)" disabled={!!busy || !selectedRoots(page, selection).length} onClick={duplicateNode}><Copy size={16}/></button>
+              <button className="icon-button" aria-label="Delete selection" title="Delete selection" disabled={!!busy || !selectedRoots(page, selection).length} onClick={removeNode}><Trash2 size={16}/></button>
+              <button className="icon-button" aria-label="Group selection" title="Group (⌘/Ctrl+G)" disabled={!!busy || selectedRoots(page, selection).length < 2} onClick={groupSelection}><Group size={16}/></button>
+              <button className="icon-button" aria-label="Ungroup selection" title="Ungroup (⌘/Ctrl+Shift+G)" disabled={!!busy || !selectedRoots(page, selection).some(item => item.type === 'group')} onClick={ungroupSelection}><Ungroup size={16}/></button>
+              {selection.length === 1 && node?.type === 'text' && <button className="icon-button" aria-label="Edit text" title="Edit text (Enter)" disabled={!!busy || isNodeProtected(page, node)} onClick={() => beginText(node.id)}><Pencil size={16}/></button>}
+            </>}
+            <button className="icon-button" aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)" onClick={event => {
+              // WebKit pointer clicks do not focus buttons. Capture the real
+              // dialog opener before Modal records the element to restore.
+              event.currentTarget.focus({ preventScroll: true });
+              setShortcutsOpen(true);
+            }}><Keyboard size={16}/></button>
+          </div>}
           <div
             className="canvas-viewport"
             ref={viewport}
@@ -1999,7 +2070,7 @@ export function Editor({
                     transform: `scale(${scale})`,
                   }}
                 >
-                  {usesDom(page) ? <DocumentView doc={displayed} pageIndex={pageIndex} time={time} onBounds={measureDom} onOverlayBounds={measureOverlay} navigate={id => { const next = displayed.pages.findIndex(p => p.id === id); if (next >= 0) setPageIndex(next); }}/> : <div className="canvas-svg" dangerouslySetInnerHTML={{ __html: renderSvg(displayed, pageIndex, time) }}/>}
+                  {usesDom(page) ? <DocumentView doc={displayed} pageIndex={pageIndex} time={time} onBounds={measureDom} onOverlayBounds={measureOverlay} editingId={directText} navigate={id => { const next = displayed.pages.findIndex(p => p.id === id); if (next >= 0) setPageIndex(next); }}/> : <div className="canvas-svg" dangerouslySetInnerHTML={{ __html: renderSvg(directText ? { ...displayed, pages: displayed.pages.map((item, index) => index === pageIndex ? { ...item, nodes: item.nodes.map(target => target.id === directText ? { ...target, text: '' } : target) } : item) } : displayed, pageIndex, time) }}/>}
                   {preview &&
                     page.nodes
                       .filter(
@@ -2047,7 +2118,7 @@ export function Editor({
                       .map((target) => (
                         <div
                           key={target.id}
-                          className={`node-target ${selected === target.id ? "selected" : ""} ${target.locked ? "locked" : ""}`}
+                          className={`node-target ${selection.includes(target.id) ? "selected" : ""} ${target.locked ? "locked" : ""}`}
                           style={
                             {
                               left: target.x,
@@ -2062,7 +2133,8 @@ export function Editor({
                           aria-label={`${target.name}, ${target.type}`}
                           tabIndex={0}
                           role="button"
-                          onFocus={() => setSelected(target.id)}
+                          aria-pressed={selection.includes(target.id)}
+                          onFocus={event => { if (event.target === event.currentTarget && !directText && !pointerSelecting.current && !selection.includes(target.id)) setSelected(target.id); }}
                           onPointerDown={(e) => pointerDown(e, target)}
                           onPointerMove={pointerMove}
                           onPointerUp={() => {
@@ -2072,35 +2144,23 @@ export function Editor({
                             drag.current = null;
                           }}
                           onDoubleClick={() => {
-                            if (target.type === "text" && !target.locked)
-                              setDirectText(target.id);
+                            beginText(target.id);
                           }}
                         >
                           <span className="node-selection-name">
                             {target.name}
                           </span>
-                          {selected === target.id && !target.locked && (
+                          {selection.length === 1 && selected === target.id && !isNodeProtected(page, target) && !directText && (
                             <>{(['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w', 'rotate'] as Handle[]).map(handle => <button key={handle} className={`resize-handle handle-${handle}`} aria-label={`Transform ${handle}`} onPointerDown={e => pointerDown(e, target, handle)} onPointerMove={pointerMove} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}/>)}</>
                           )}
                         </div>
                       ))}
-                  {directText && node && (
-                    <textarea
-                      className="direct-text-editor"
-                      autoFocus
-                      aria-label="Edit selected text"
-                      style={{
-                        left: node.x,
-                        top: node.y,
-                        width: Math.max(node.width, 200),
-                        height: Math.max(node.height, 80),
-                        fontSize: Number(node.style?.fontSize || 24),
-                      }}
-                      value={node.text || ""}
-                      onChange={(e) => update({ text: e.target.value })}
-                      onBlur={() => setDirectText(null)}
-                    />
-                  )}
+                  {directText && node && (() => {
+                    const bounds = (usesDom(page) ? domOverlayBounds : resolveLayout({ ...page, nodes: page.nodes.map(item => interpolateNode(item, displayed, time)) }).nodes).find(item => item.id === directText) ?? node;
+                    let opacity = node.opacity ?? 1, parent = page.nodes.find(item => item.id === node.parentId);
+                    while (parent) { opacity *= parent.opacity ?? 1; parent = page.nodes.find(item => item.id === parent!.parentId); }
+                    return <InlineTextEditor key={directText} node={node} bounds={bounds} theme={doc.theme} opacity={opacity} finish={finishText} save={() => void saveRef.current()}/>;
+                  })()}
                 </div>
               </div>
             )}
@@ -2237,7 +2297,7 @@ export function Editor({
         <Inspector
           doc={doc}
           page={doc.pages[pageIndex] || doc.pages[0]!}
-          node={node}
+          node={selection.length === 1 ? node : undefined}
           update={update}
           change={change}
           duplicate={duplicateNode}
@@ -2247,6 +2307,14 @@ export function Editor({
           removePage={removePage}
         />
       </div>
+      {shortcutsOpen && <Modal title="Editor shortcuts" onClose={() => setShortcutsOpen(false)}><div className="modal-body shortcut-list">
+        {[
+          ['Select multiple', 'Shift + click · layer checkboxes'], ['Select all layers', '⌘/Ctrl + A'], ['Duplicate', '⌘/Ctrl + D'], ['Delete selection', 'Delete / Backspace'],
+          ['Group / ungroup', '⌘/Ctrl + G / Shift + G'], ['Nudge / larger nudge', 'Arrows / Shift + arrows'], ['Undo / redo', '⌘/Ctrl + Z / Shift + Z'],
+          ['Save', '⌘/Ctrl + S'], ['Edit text / add text', 'Enter / T'], ['Finish / cancel text', '⌘/Ctrl + Enter / Escape'], ['Deselect', 'Escape'], ['Fit canvas', '⌘/Ctrl + 0'], ['Pan canvas', 'Space + drag / middle mouse'],
+        ].map(([action, keys]) => <div key={action}><span>{action}</span><kbd>{keys}</kbd></div>)}
+        <p>Canvas shortcuts apply while the canvas or layers have focus. Locked layers stay unchanged. Flow-layout children move through their container layout.</p>
+      </div></Modal>}
       {presenting && <SlidePlayer doc={doc} close={() => setPresenting(false)} notes/>}
       {exportOpen && (
         <Modal

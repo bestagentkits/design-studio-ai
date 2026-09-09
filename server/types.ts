@@ -38,6 +38,9 @@ export interface Bindings {
   GITHUB_CLIENT_SECRET?: string;
   GITHUB_CALLBACK_URL?: string;
   TRUSTED_ORIGINS?: string;
+  OBSERVABILITY_ADMIN_IDS?: string;
+  POSTHOG_PROJECT_KEY?: string;
+  POSTHOG_HOST?: string;
 }
 export interface User {
   id: string;
@@ -46,5 +49,5 @@ export interface User {
 }
 export type Env = {
   Bindings: Bindings;
-  Variables: { user: User | null; authMethod: "session" | "token" | null; tokenKind: 'api' | 'oauth' | null };
+  Variables: { user: User | null; authMethod: "session" | "token" | null; tokenKind: 'api' | 'oauth' | null; telemetrySpan?: import('./observability').TelemetrySpan; telemetryErrorCode?: string };
 };

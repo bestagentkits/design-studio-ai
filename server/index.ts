@@ -1,3 +1,8 @@
+import { telemetryQuerySchema, clientEventSchema } from '../src/shared/observability';
+import { observabilityMiddleware, bindTelemetryActor, errorCode } from './observability';
+import { observabilityRoutes } from './observability-routes';
+import { isObservabilityOperator } from './observability-queries';
+import { posthogConfig } from './observability-posthog';
 import { openApiDocument } from '../src/shared/api-reference';
 import { collaborationRoutes } from './collaboration';
 import { designSystemRoutes } from './design-systems';
@@ -40,6 +45,7 @@ import { interviewSchema, scopeSchema } from '../src/shared/brief';
 import { inspectDesign } from '../src/shared/design-checks';
 import { projectRow } from './projects';
 export const app = new Hono<Env>();
+app.use("*", observabilityMiddleware);
 app.use("*", async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
   c.header("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -63,6 +69,7 @@ app.use(
 );
 app.use("*", async (c, next) => {
   await authenticate(c);
+  await bindTelemetryActor(c);
   const mutation = !["GET", "HEAD", "OPTIONS"].includes(c.req.method);
   if (
     mutation &&
@@ -84,6 +91,7 @@ app.use("*", async (c, next) => {
   await next();
 });
 app.onError((error, c) => {
+  c.set("telemetryErrorCode", errorCode(error));
   if (c.req.path.startsWith("/oauth/")) {
     const code = error instanceof ApiError ? error.code : "invalid_request";
     const message =
@@ -135,17 +143,19 @@ app.onError((error, c) => {
     500,
   );
 });
-app.get('/api/openapi', c => c.json(openApiDocument({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
+app.get('/api/openapi', c => c.json(openApiDocument({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "design-studio-ai" }),
 );
-app.get('/api/schema', c => c.json({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema) }));
+app.get('/api/schema', c => c.json({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
 app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
 app.get("/api/config", (c) =>
   c.json({
     googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
     allowRegistration: c.env.ALLOW_REGISTRATION === "true",
     githubEnabled: githubEnabled(c),
+    observability: { operator: isObservabilityOperator(c), retentionDays: 30 },
+    analytics: { enabled: true, posthogConfigured: !!posthogConfig(c.env) },
   }),
 );
 const credentials = z.object({
@@ -157,6 +167,7 @@ const credentials = z.object({
   password: z.string().min(12).max(128),
   name: z.string().trim().min(1).max(100).optional(),
 });
+app.route('/api/observability', observabilityRoutes);
 app.route('/api/auth/github', githubRoutes);
 app.post("/api/auth/register", async (c) => {
   if (c.env.ALLOW_REGISTRATION !== "true")
@@ -185,6 +196,7 @@ app.post("/api/auth/register", async (c) => {
     throw error;
   }
   await createSession(c, user);
+  c.set("user", user); c.set("authMethod", "session");
   return c.json({ user }, 201);
 });
 app.post("/api/auth/login", async (c) => {
@@ -202,6 +214,7 @@ app.post("/api/auth/login", async (c) => {
     fail(401, "invalid_credentials", "Email or password is incorrect.");
   const user = { id: row.id, email: row.email, name: row.name };
   await createSession(c, user);
+  c.set("user", user); c.set("authMethod", "session");
   return c.json({ user });
 });
 app.get("/api/auth/me", (c) => c.json({ user: c.get("user") }));
