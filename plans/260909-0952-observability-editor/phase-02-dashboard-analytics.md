@@ -12,7 +12,7 @@ Priority P1. Owner parent dashboard/integration; backend API required. Read `src
 - [x] Correlate browser → API request IDs for errors and actions; count definitive server outcomes once, separate client intent from result. Observe WebMCP-originated requests and label source without treating an asserted source as authentication.
 - [x] Optional/unconfigured PostHog is visible in operational configuration but doesn't break product. Bound timeout/queue/retry and delivery; failed export doesn't replay business operations. PostHog is a product analytics sink, persisted server data remains operational source.
 
-- [ ] Reliable retry attribution and a measured retry ratio: no attempt/retry relationship is currently recorded. Repeated calls remain independent observed calls; this measurement is unavailable, not implemented or inferred. Retain this limitation explicitly rather than marking the requested signal delivered.
+- [ ] Plan-proposed diagnostic — reliable retry attribution and a measured retry ratio: no attempt/retry relationship is currently recorded. Repeated calls remain independent observed calls; this measurement is unavailable, not implemented or inferred. Retain this limitation explicitly rather than fabricating this unmeasured diagnostic. The user requested usage/efficiency visibility broadly; a retry ratio was proposed by this plan, not explicitly requested.
 
 ## Files / ownership
 

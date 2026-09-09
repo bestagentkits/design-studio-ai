@@ -30,7 +30,7 @@ Temporary browser logs above were inspected for actual terminal results. They ar
 
 ## Explicit acceptance limits
 
-- **Retry attribution:** the event contract contains observations, not a reliable attempt/retry relationship. Repeated calls may be distinct user actions. Coverage says retries cannot be inferred; no measured retry count or ratio exists. The corresponding phase 2 item remains open as a measurement limitation, not silently removed or relabeled complete.
+- **Retry attribution (plan-proposed diagnostic, not an explicit user-requested ratio):** the event contract contains observations, not a reliable attempt/retry relationship. Repeated calls may be distinct user actions. Coverage says retries cannot be inferred; no measured retry count or ratio exists. The corresponding phase 2 item remains open as a measurement limitation, not silently removed or relabeled complete.
 - **Physical IME:** source ignores composing key events and uses a native textarea. The test enters `Xin chào\nNew line` with `.fill()`, which verifies Unicode/multiline persistence but does not emulate an OS input method, candidate selection or real composition events.
 - **Font outage:** bounded twenty-family previews, debounce, ten-second timeout, `onerror` status and catalog fallback exist. Keyboard/system/custom font paths pass. No live Google Fonts outage was induced, so external outage recovery is not claimed tested.
 - **Input/focus matrix:** actual tested Ctrl shortcuts, font keyboard selection, dialog closure, nested rotation and saved text are listed above. Exhaustive Meta/IME/contenteditable/modal/busy/preview combinations, physical touch and live conflicting remote drafts remain open validation; source protections are not substituted for those experiments.
