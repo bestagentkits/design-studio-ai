@@ -53,10 +53,10 @@ Freeze shared connection/source/action/run schemas and resolve transport risks b
 
 ## Todo
 
-- [ ] Verify checkout/dependencies and pin protocol support with regression strategy.
+- [x] Verify checkout/dependencies and pin protocol support with regression strategy.
 - [ ] Prove Node/Cloudflare egress and OAuth discovery safety.
 - [ ] Prove continuation/lease behavior and choose measured budgets.
-- [ ] Add shared schemas and focused validation tests.
+- [x] Add shared schemas and focused validation tests.
 - [ ] Record probe results and remove abandoned scratch processes/artifacts.
 
 ## Validation and success

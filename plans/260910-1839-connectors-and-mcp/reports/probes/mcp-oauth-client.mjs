@@ -17,11 +17,11 @@ function provider(origin) {
     redirectToAuthorization(value) { this.authorizationUrl = value; },
   };
 }
-export async function probeOAuth(origin) {
+export async function probeOAuth(origin, modern = true) {
   const passed = [], p = provider(origin), endpoint = `${origin}/mcp/good`;
   const transport = new StreamableHTTPClientTransport(new URL(endpoint), { authProvider: p });
   const client = new Client({ name: 'oauth-probe', version: '1' }, {
-    versionNegotiation: { mode: { pin: '2026-07-28' } }, jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
+    versionNegotiation: { mode: modern ? { pin: '2026-07-28' } : 'legacy' }, jsonSchemaValidator: new CfWorkerJsonSchemaValidator(),
   });
   try {
     await rejects(() => client.connect(transport, { timeout: 5000 }), /Unauthorized|authorization|redirect/i);

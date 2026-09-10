@@ -1,17 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { z } from 'zod';
+import { McpServer as LegacyServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 
 // Isolated contract peer: no accounts, provider credentials, or production storage.
-export function createOAuthPeer(origin) {
+export function createOAuthPeer(origin, modern = true, responseMode = 'json') {
   const codes = new Map(), tokens = new Map(), refresh = new Map();
   const counts = { pkce: 0, refresh: 0, authenticatedMcp: 0, rejectedGrant: 0 };
-  const handler = createMcpHandler(() => {
-    const server = new McpServer({ name: 'oauth-contract-peer', version: '1' });
+  const register = server => {
     server.registerTool('sum', { inputSchema: z.object({ a: z.number(), b: z.number() }) },
       async ({ a, b }) => ({ content: [{ type: 'text', text: String(a + b) }] }));
     return server;
-  }, { responseMode: 'json', legacy: 'reject' });
+  };
+  const handler = createMcpHandler(() => register(new McpServer({ name: 'oauth-contract-peer', version: '1' })), { responseMode, legacy: 'reject' });
   const issue = resource => {
     const access = randomUUID(), renewal = randomUUID();
     tokens.set(access, resource); refresh.set(renewal, resource);
@@ -68,7 +70,15 @@ export function createOAuthPeer(origin) {
         'WWW-Authenticate': `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp/${mode}", scope="tools:read"`,
       } });
       counts.authenticatedMcp++;
-      return handler.fetch(request);
+      if (modern) return handler.fetch(request);
+      const legacy = register(new LegacyServer({ name: 'oauth-legacy-peer', version: '1' }));
+      const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: responseMode === 'json' });
+      try {
+        await legacy.connect(transport);
+        const response = await transport.handleRequest(request);
+        const bytes = await response.arrayBuffer();
+        return new Response(bytes.byteLength ? bytes : null, { status: response.status, headers: response.headers });
+      } finally { await legacy.close(); }
     }
     return new Response('Not found', { status: 404 });
   } };

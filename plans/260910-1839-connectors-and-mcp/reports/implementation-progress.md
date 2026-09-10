@@ -4,7 +4,7 @@ Partial foundation implemented and verified on `codex/connectors-and-mcp`; the n
 
 | Phase | Evidence and remaining work |
 | --- | --- |
-| 1 | Shared schema foundation, pinned client, local MCP JSON/SSE/profile probes, SQLite/local D1 lease probes and binding-free Cloudflare edge smoke completed. Controlled Cloudflare hostname/DNS mutation probes now pass for recorded cases; bounded OAuth feasibility passes on Node/local workerd; transport and application OAuth lifecycle, complete contracts and measured budgets remain pending. See [runtime probes](runtime-probes.md). |
+| 1 | Shared schema foundation, pinned client, local MCP JSON/SSE/profile probes, SQLite/local D1 lease probes and binding-free Cloudflare edge smoke completed. Controlled Cloudflare hostname/DNS mutation probes now pass for recorded cases; OAuth passes both profiles × JSON/SSE on Node/local workerd; shared transport passes Node/local workerd/remote Cloudflare checks and independent review. Payload/checkpoint measurements recorded. Application OAuth lifecycle and integrated execution budgets remain pending. See [runtime probes](runtime-probes.md). |
 | 2 | Pending phase 1 gate; no persistent product migrations, lifecycle, grants or operation routes implemented. |
 | 3 | Pending; no outgoing connector exposed. SDK probe is not the adapter. |
 | 4 | Pending; no provider tool loop or persisted product runs. |

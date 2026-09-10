@@ -6,16 +6,22 @@ import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
 import { createOAuthPeer } from './mcp-oauth-peer.mjs';
 import { probeOAuth } from './mcp-oauth-client.mjs';
 const origin = 'http://127.0.0.1:18845';
-const peer = createOAuthPeer(origin);
-const server = serve({ hostname: '127.0.0.1', port: 18845, overrideGlobalObjects: false, fetch: peer.fetch });
+for (const modern of [false, true]) for (const encoding of ['json', 'sse']) {
+const peer = createOAuthPeer(origin, modern, encoding);
+const server = serve({ hostname: '127.0.0.1', port: 18845, overrideGlobalObjects: false, fetch: async request => {
+  const response = await peer.fetch(request);
+  const headers = new Headers(response.headers);
+  headers.set('connection', 'close');
+  return new Response(response.body, { status: response.status, headers });
+} });
 await once(server, 'listening');
 console.log(JSON.stringify({ pid: process.pid, port: 18845, cwd: process.cwd(), node: process.version }));
 let runtime;
 try {
-  const node = await probeOAuth(origin);
-  console.log(JSON.stringify({ runtime: 'Node', ...node }));
+  const node = await probeOAuth(origin, modern);
+  console.log(JSON.stringify({ runtime: 'Node', modern, encoding, ...node }));
   const worker = await build({ stdin: {
-    contents: "import { probeOAuth } from './mcp-oauth-client.mjs'; export default { async fetch() { try { return Response.json(await probeOAuth('http://127.0.0.1:18845')); } catch(error) { return Response.json({error:error.message,stack:error.stack},{status:500}); } } };",
+    contents: `import { probeOAuth } from './mcp-oauth-client.mjs'; export default { async fetch() { try { return Response.json(await probeOAuth('http://127.0.0.1:18845', ${modern})); } catch(error) { return Response.json({error:error.message,stack:error.stack},{status:500}); } } };`,
     resolveDir: new URL('.', import.meta.url).pathname, sourcefile: 'oauth-worker.mjs',
   }, bundle: true, write: false, platform: 'browser', format: 'esm', conditions: ['workerd'], external: ['node:*'], minify: true });
   runtime = new Miniflare(convertV4MiniflareOptions({ modules: true, compatibilityDate: '2026-09-07', compatibilityFlags: ['nodejs_compat'], script: worker.outputFiles[0].text }));
@@ -26,9 +32,10 @@ try {
   assert.equal(peer.counts.pkce, 2);
   assert.equal(peer.counts.refresh, 2);
   assert.equal(peer.counts.rejectedGrant, 8);
-  console.log(JSON.stringify({ runtime: 'local-workerd', ...workerd, bundleBytes: worker.outputFiles[0].contents.length, peerCounts: peer.counts }));
+  console.log(JSON.stringify({ runtime: 'local-workerd', modern, encoding, ...workerd, bundleBytes: worker.outputFiles[0].contents.length, peerCounts: peer.counts }));
 } finally {
   await runtime?.dispose(); await peer.close();
   await new Promise(resolve => server.close(resolve));
   console.log('Isolated peer and workerd stopped.');
+}
 }

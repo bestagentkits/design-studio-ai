@@ -68,6 +68,8 @@ const server = serve(
       );
       return app.fetch(request, env);
     },
+    // Preserve native fetch Response identity for outgoing OAuth SDK error parsing.
+    overrideGlobalObjects: false,
     port,
     hostname: process.env.HOST ?? "127.0.0.1",
   },

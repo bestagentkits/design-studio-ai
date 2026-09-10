@@ -15,7 +15,7 @@ User selected native Cloudflare validation and authorized `studio.agentkit.best`
 
 Native transport now has controlled hostname evidence, including public-to-loopback DNS changes, plus a documented platform boundary: [Cloudflare explains that global fetch reaches only the public Internet](https://blog.cloudflare.com/workers-environment-live-object-bindings/). The documented legacy exception concerns same-zone origin bypass; the probe explicitly enables `global_fetch_strictly_public`, has no origin or private-network bindings, and never dispatches user URLs through a resource binding. This supports continuing with native Cloudflare transport under those constraints; finite probes alone are not a universal security proof.
 
-Remaining phase-1 work: implement and test the shared transport boundary (Node DNS pinning; Workers public fetch; redirects; bounded responses; OAuth discovery destinations), complete remaining OAuth/profile coverage and choose measured step budgets. No extra domain/access decision is pending. The complete MCP + GitHub + Drive scope remains queued.
+Shared transport is now implemented, independently reviewed and verified on actual Node HTTPS, local workerd and remote Cloudflare preview; see [transport results](connector-transport-results.md). OAuth covers both profiles and JSON/SSE. [Execution measurements](execution-budget-results.md) establish tested payload caps and request-driven checkpoint behavior. Remaining gate: integrate credential-audience/lifecycle handling and settle step budgets from integrated execution before enabling product execution. No extra domain/access decision is pending. The complete MCP + GitHub + Drive scope remains queued.
 
 ## Runtime and dependency evidence
 
@@ -47,11 +47,11 @@ Run from repository root. Install isolated dependencies with `npm ci --prefix pl
 | 2026-07-28 | JSON | list/call result 42; modern era | Same |
 | 2026-07-28 | SSE | list/call result 42; modern era | Same |
 
-Pinned modern client rejected the legacy-only endpoint. All clients and servers closed in finally blocks. Initial paired Node/workerd elapsed times: 602, 36, 44, 33 ms respectively; these tiny local operations do not validate production tool budgets, provider latency, CPU or memory envelopes. The separate OAuth probe below now covers bounded modern JSON auth feasibility; pagination, resource reading, legacy/SSE OAuth combinations and interruption during a call remain unproven.
+Pinned modern client rejected the legacy-only endpoint. All clients and servers closed in finally blocks. Initial paired Node/workerd elapsed times: 602, 36, 44, 33 ms respectively; these tiny local operations do not validate production tool budgets, provider latency, CPU or memory envelopes. The separate OAuth probe below covers both profiles and JSON/SSE. Pagination, resource reading and integrated interruption recovery remain downstream implementation work.
 
 ### Outgoing OAuth feasibility
 
-[OAuth probe results](oauth-probe-results.md) records twelve matching cases in Node/local workerd using the actual client SDK and a real isolated HTTP authorization/MCP contract peer. Coverage includes discovery, S256 PKCE, denial, application-owned callback state, SDK issuer checks, code replay, refresh and an authenticated modern JSON tool call. No external provider account or production lifecycle is claimed.
+[OAuth probe results](oauth-probe-results.md) records twelve matching cases for every Node/local workerd × legacy/modern × JSON/SSE combination (96 executions) using the actual client SDK and a real isolated HTTP authorization/MCP contract peer. Coverage includes discovery, S256 PKCE, denial, application-owned callback state, SDK issuer checks, code replay, refresh and authenticated tool calls on both profiles and encodings. No external provider account or production lifecycle is claimed.
 
 The combined Node peer/client needed Hono's `overrideGlobalObjects: false` to keep SDK error parsing compatible with native fetch responses. `server/node.ts` currently uses the same adapter default; integration must carry this requirement or otherwise prove error parsing under that entrypoint. Callback state, durable discovery/verifier persistence, one-use authorization state and credential encryption remain application responsibilities.
 
@@ -61,7 +61,7 @@ The combined Node peer/client needed Hono's `overrideGlobalObjects: false` to ke
 
 - Node custom lookup called once and prevented connection with `connection-time-policy-denied`.
 - Local workerd custom lookup called zero times and returned `The options.lookup option is not implemented`.
-- This proves the Node hook cannot be reused as a Workers guard. It does not prove a full Node public-IP classifier/pinned TLS implementation; that implementation is still pending.
+- This proves the Node hook cannot be reused as a Workers guard. It does not prove a full Node public-IP classifier/pinned TLS implementation; the implementation is now independently verified in [transport results](connector-transport-results.md).
 - First scratch run used obsolete Miniflare constructor options and failed validation. Switched to the installed exported conversion helper. Second run exposed the expected synchronous lookup rejection outside the initial JSON wrapper; corrected the probe error capture. Neither scratch failure affected application code or checks.
 
 ### Node pinned TLS connection
@@ -139,4 +139,4 @@ They are not yet imported by application routes or clients. Ownership, authoriza
 
 ## Remaining work
 
-No domain or DNS-access question remains. Native Cloudflare is selected and the controlled experiment succeeded for the recorded cases. Phase 1 still requires complete transport/OAuth implementation and measured execution budgets; dependent product phases remain unfinished.
+No domain or DNS-access question remains. Native Cloudflare is selected and the controlled experiment succeeded for the recorded cases. The shared transport and OAuth compatibility matrix now pass. Payload/checkpoint measurements are recorded; integrated budgets and credential lifecycle remain uncompleted. Phase 2 persistence can be built without enabling custom-origin execution, whose release gate remains enforced.
