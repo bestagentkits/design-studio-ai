@@ -16,7 +16,7 @@ async function readProject(page: Page, id: string): Promise<Project> {
   return (await response.json() as { project: Project }).project;
 }
 async function mobilePanel(page: Page, info: TestInfo, name: 'Chat & layers' | 'Design' | 'Canvas') {
-  if (info.project.name === 'mobile') await page.locator('.mobile-editor-nav').getByRole('button', { name, exact: true }).click();
+  if (await page.locator('.mobile-editor-nav').isVisible()) await page.locator('.mobile-editor-nav').getByRole('button', { name, exact: true }).click();
 }
 async function selectLayer(page: Page, info: TestInfo, name: string) {
   await mobilePanel(page, info, 'Chat & layers');
@@ -84,9 +84,10 @@ test('hierarchical grouping saves and reloads, numeric shortcuts and canvas cont
     await expect(page.getByRole('button', { name: 'Transform rotate', exact: true })).toBeVisible();
     const zoom = page.locator('.zoom-value'), before = await zoom.textContent();
     await page.locator('.canvas-viewport').hover();
-    await page.keyboard.down('Control'); await page.mouse.wheel(0, -80); await page.keyboard.up('Control');
+    if (info.project.name === 'webkit' && info.project.use.isMobile) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    else { await page.keyboard.down('Control'); await page.mouse.wheel(0, -80); await page.keyboard.up('Control'); }
     await expect(zoom).not.toHaveText(before!);
-    await page.getByRole('button', { name: 'Fit', exact: true }).click();
+    await page.getByRole('button', { name: 'Fit to canvas', exact: true }).click();
     await page.getByRole('button', { name: 'Preview', exact: true }).click();
     const checkbox = page.getByRole('checkbox', { name: 'Email updates', exact: true });
     await expect(checkbox).not.toBeChecked(); await checkbox.click(); await expect(checkbox).toBeChecked();
@@ -188,18 +189,22 @@ test('published slides navigate and show overview while presenter notes stay own
     const popupPromise = page.waitForEvent('popup');
     await page.getByRole('button', { name: 'Presenter window', exact: true }).click();
     const presenter = await popupPromise; await expect(presenter.locator('#notes')).toContainText(privateNote); await presenter.close();
-    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.getByRole('button', { name: 'Close presentation', exact: true }).click();
     const response = await page.request.post(`/api/projects/${project.id}/publish`, { headers }); expect(response.status()).toBe(200);
     const { url } = await response.json() as { url: string };
     const publicContext = await page.context().browser()!.newContext();
     try {
-      const publicPage = await publicContext.newPage(), html = await publicPage.goto(url);
+      const publicPage = await publicContext.newPage(), html = await publicPage.goto(url + '#slide=1.5');
       expect(html?.status()).toBe(200); expect(await html!.text()).not.toContain(privateNote);
       await expect(publicPage.getByRole('navigation', { name: 'Presentation controls' })).toBeVisible();
       await expect(publicPage.locator('main')).toContainText('Public slide 1');
       await publicPage.getByRole('button', { name: 'Next slide', exact: true }).click();
       await expect(publicPage.locator('main')).toContainText('Public slide 2');
+      await expect(publicPage).toHaveURL(/slide=2/);
       await publicPage.getByLabel('Presentation mode', { exact: true }).selectOption('overview');
+      await expect(publicPage).toHaveURL(/view=overview/);
+      await publicPage.reload();
+      await expect(publicPage.getByLabel('Presentation mode', { exact: true })).toHaveValue('overview');
       await expect(publicPage.getByRole('button', { name: 'Go to slide 1', exact: true })).toBeVisible();
       await expect(publicPage.getByRole('button', { name: 'Go to slide 2', exact: true })).toBeVisible();
       await publicPage.getByRole('button', { name: 'Go to slide 1', exact: true }).press('Enter');

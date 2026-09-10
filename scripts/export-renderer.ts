@@ -50,14 +50,14 @@ const pageDisposers: Array<() => void> = [];
 async function present(input: DesignDocument, pageIndex = 0, all = false) {
   pageDisposers.splice(0).forEach(dispose => dispose());
   document.body.replaceChildren(); document.body.style.cssText = 'margin:0;background:transparent';
-  const scene = input.pages.some(p => p.scene || p.nodes.some(n => n.scene));
+  const scene = input.kind === '3d' || input.pages.some(p => p.scene || p.nodes.some(n => n.scene));
   const doc = scene ? input : await prepare(input);
   const style = document.createElement('style'); style.textContent = `svg{display:block;max-width:100%;height:auto}@page{size:${doc.pages[0].width}px ${doc.pages[0].height}px;margin:0}`; document.head.append(style);
   for (const index of all ? doc.pages.map((_, i) => i) : [pageIndex]) pageDisposers.push((await mountExportPage(doc, index)).dispose);
   return true;
 }
 async function pptx(input: DesignDocument) {
-  const doc = input.pages.some(p => p.scene || p.nodes.some(n => n.scene)) ? input : await prepare(input), deck = new PptxGenJS(), first = doc.pages[0];
+  const doc = input.kind === '3d' || input.pages.some(p => p.scene || p.nodes.some(n => n.scene)) ? input : await prepare(input), deck = new PptxGenJS(), first = doc.pages[0];
   deck.defineLayout({ name: 'STUDIO', width: first.width / 96, height: first.height / 96 }); deck.layout = 'STUDIO'; deck.title = doc.name;
   for (const [pageIndex, page] of doc.pages.entries()) {
     const slide = deck.addSlide(); slide.background = { color: resolveColor(page.background, doc.theme).replace('#', '') };

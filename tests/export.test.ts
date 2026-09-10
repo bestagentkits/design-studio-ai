@@ -28,7 +28,9 @@ test('real headless renderer creates PNG, PDF, editable PowerPoint, 3D and video
     });
     await t.test('Three.js scene is rendered into a raster layer', async () => {
       await page.evaluate(doc => (globalThis as any).studioRenderer.present(doc, 0), createDocument('3d', 'Object'));
-      assert.ok(await page.locator('svg image').getAttribute('href').then(value => value?.startsWith('data:image/png')));
+      const raster = page.locator('canvas[data-scene-layer="3d"]');
+      assert.ok(await raster.evaluate(canvas => (canvas as HTMLCanvasElement).getContext('2d')!.getImageData(0, 0, (canvas as HTMLCanvasElement).width, (canvas as HTMLCanvasElement).height).data.some((v, i) => i % 4 === 3 && v > 0)));
+      assert.equal(await page.locator('[data-scene-layer="2d"]').count(), 2, 'Captions remain on either side of the 3D layer');
     });
     await t.test('timeline records an actual WebM container', async () => {
       const motion = createDocument('video', 'Motion'); motion.timeline!.duration = 0.4;

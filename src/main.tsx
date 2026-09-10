@@ -3,6 +3,7 @@ import { trackClient } from "./app/analytics";
 import { createRoot } from "react-dom/client";
 import { initializeTheme } from "./app/theme-toggle";
 import "./styles.css";
+import "./app/studio-feedback.css";
 const App = React.lazy(() => import('./app/app').then(module => ({ default: module.App })));
 const DocsApp = React.lazy(() => import('./app/documentation').then(module => ({ default: module.DocsApp })));
 const GuideApp = React.lazy(() => import('./app/guide').then(module => ({ default: module.GuideApp })));

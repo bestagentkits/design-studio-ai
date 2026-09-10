@@ -59,7 +59,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.3.1" },
+    { name: "design-studio-ai", version: "0.3.2" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { screenParam, writeScreen } from './screen-state';
+import { useEffect, useRef, useState } from 'react';
 import { applyDesignSystem, captureSystemComponent, designSystemSchema, insertSystemItem, type DesignSystem, type DesignSystemDefinition } from '../shared/design-systems';
 import { componentNames } from '../shared/design-capabilities';
 import type { DesignDocument, DesignNode, DesignPage } from '../shared/schema';
@@ -6,13 +7,18 @@ import { api, message, post, put, uid } from './api';
 import { Field, Modal } from './ui';
 
 export function DesignSystemLibrary({ doc, page, node, change }: { doc: DesignDocument; page: DesignPage; node?: DesignNode; change: (recipe: (doc: DesignDocument) => void) => void }) {
-  const [open, setOpen] = useState(false), [systems, setSystems] = useState<DesignSystem[]>([]), [selected, select] = useState<DesignSystem>();
+  const [open, setOpen] = useState(() => !!screenParam('library')), [systems, setSystems] = useState<DesignSystem[]>([]), [selected, select] = useState<DesignSystem>();
+  const navigation = useRef(0);
   const [draft, setDraft] = useState<DesignSystemDefinition>(), [error, setError] = useState(''), [busy, setBusy] = useState(false), [query, setQuery] = useState('');
   const [versions, setVersions] = useState<{ version: number; createdAt: string }[]>([]), [json, setJson] = useState('');
   async function refresh() { const result = await api<{ systems: DesignSystem[] }>('/api/design-systems'); setSystems(result.systems); return result.systems; }
-  async function choose(system: DesignSystem) { select(system); setDraft(structuredClone(system.definition)); setJson(''); setError(''); setVersions((await api<{ versions: typeof versions }>(`/api/design-systems/${system.id}/versions`)).versions); }
-  function create() { select(undefined); setVersions([]); setJson(''); setDraft({ name: `${doc.theme.name} library`, description: '', system: 'shadcn', theme: structuredClone(doc.theme), components: [], compositions: [] }); }
-  useEffect(() => { if (open) void refresh().catch(e => setError(message(e))); }, [open]);
+  async function choose(system: DesignSystem, updateUrl = true) { const request = ++navigation.current; if (updateUrl) writeScreen({ library: system.id }); select(system); setDraft(structuredClone(system.definition)); setJson(''); setError(''); setVersions([]); const result = await api<{ versions: typeof versions }>(`/api/design-systems/${system.id}/versions`); if (request === navigation.current) setVersions(result.versions); }
+  function create(updateUrl = true) { navigation.current++; if (updateUrl) writeScreen({ library: 'new' }); select(undefined); setVersions([]); setJson(''); setDraft({ name: `${doc.theme.name} library`, description: '', system: 'shadcn', theme: structuredClone(doc.theme), components: [], compositions: [] }); }
+  useEffect(() => {
+    const restore = () => { const request = ++navigation.current, id = screenParam('library'); setOpen(!!id); if (!id) return; void refresh().then(items => { if (request !== navigation.current || screenParam('library') !== id) return; const system = items.find(s => s.id === id); if (system) return choose(system, false); create(false); }).catch(e => { if (request === navigation.current) setError(message(e)); }); };
+    restore(); window.addEventListener('popstate', restore); return () => { navigation.current++; window.removeEventListener('popstate', restore); };
+  }, []);
+  function close() { navigation.current++; setOpen(false); writeScreen({ library: null }); }
   async function run(action: () => Promise<void>) { setBusy(true); setError(''); try { await action(); } catch (e) { setError(message(e)); } finally { setBusy(false); } }
   async function save() {
     if (!draft) return;
@@ -22,8 +28,8 @@ export function DesignSystemLibrary({ doc, page, node, change }: { doc: DesignDo
       await refresh(); await choose(response.system);
     });
   }
-  function apply() { if (!selected) return; change(d => Object.assign(d, applyDesignSystem(d, selected))); setOpen(false); }
-  function insert(itemId: string) { if (!selected) return; change(d => Object.assign(d, insertSystemItem(d, selected, page.id, itemId))); setOpen(false); }
+  function apply() { if (!selected) return; change(d => Object.assign(d, applyDesignSystem(d, selected))); close(); }
+  function insert(itemId: string) { if (!selected) return; change(d => Object.assign(d, insertSystemItem(d, selected, page.id, itemId))); close(); }
   function capturePage() {
     if (!draft) return;
     const copy = structuredClone(page), originalId = copy.id; copy.id = uid(); copy.name += ' composition';
@@ -31,9 +37,9 @@ export function DesignSystemLibrary({ doc, page, node, change }: { doc: DesignDo
     edit({ compositions: [...draft.compositions, copy] });
   }
   const edit = (patch: Partial<DesignSystemDefinition>) => { setDraft(current => current && ({ ...current, ...patch })); setJson(''); };
-  return <><button onClick={() => { setOpen(true); create(); }}>Manage design systems</button>{doc.designSystem && <p>{doc.designSystem.name} · version {doc.designSystem.version}</p>}
-    {open && <Modal title="Design systems" wide onClose={() => setOpen(false)}><div className="system-library">
-      <nav aria-label="Design system library"><input aria-label="Search design systems" placeholder="Search libraries…" value={query} onChange={e => setQuery(e.target.value)}/><button onClick={create}>New design system</button>
+  return <><button onClick={() => { setOpen(true); void refresh().catch(e => setError(message(e))); create(); }}>Manage design systems</button>{doc.designSystem && <p>{doc.designSystem.name} · version {doc.designSystem.version}</p>}
+    {open && <Modal title="Design systems" wide onClose={close}><div className="system-library">
+      <nav aria-label="Design system library"><input aria-label="Search design systems" placeholder="Search libraries…" value={query} onChange={e => setQuery(e.target.value)}/><button onClick={() => create()}>New design system</button>
         {systems.filter(s => s.definition.name.toLowerCase().includes(query.toLowerCase())).map(s => <button key={s.id} aria-pressed={selected?.id === s.id} onClick={() => void run(() => choose(s))}><strong>{s.definition.name}</strong><small>{s.definition.system} · v{s.version} · {s.definition.components.length + s.definition.compositions.length} items</small><span className="system-swatches">{Object.entries(s.definition.theme.colors).slice(0, 6).map(([name, color]) => <i key={name} style={{ background: color }} title={name}/>)}</span></button>)}
       </nav>
       {draft && <section className="system-editor"><div className="property-grid"><Field label="Library name"><input value={draft.name} onChange={e => edit({ name: e.target.value })}/></Field><Field label="Component system"><select value={draft.system} onChange={e => edit({ system: e.target.value as 'antd' | 'shadcn' })}><option value="shadcn">shadcn-style</option><option value="antd">Ant Design</option></select></Field></div>
