@@ -69,6 +69,23 @@ Configure repository or production-environment secrets `CLOUDFLARE_API_TOKEN` an
 
 The workflow preserves dashboard variables with `--keep-vars` and does not upload or replace runtime secrets. Keep the existing `ENCRYPTION_KEY` and GitHub OAuth secrets on the Worker. CI's public probes do not create accounts, invoke paid providers, or prove a complete ChatGPT login; browser OAuth behavior is covered by the isolated verification suite.
 
+### Beta deployment from dev
+
+Pushes to `dev` run the separate [beta workflow](../.github/workflows/beta.yml). It runs the same verification, CLI packaging and browser checks before deploying the verified static artifact to [beta.studio.agentkit.best](https://beta.studio.agentkit.best). Beta documentation is built with its own `PUBLIC_SITE_URL`; its OAuth audience and callbacks use the beta origin.
+
+The `beta` environment in [wrangler.jsonc](../wrangler.jsonc) owns a separate Worker, D1 database and R2 bucket. It does not share production accounts, sessions, stored provider keys or assets. Provision a separate stable `ENCRYPTION_KEY` on the beta Worker once and preserve it thereafter. GitHub/Google integrations need beta-specific approved callback/origin configuration; production OAuth secrets are not copied automatically.
+
+The GitHub `beta` environment uses repository-level Cloudflare CI secrets unless environment-level overrides are configured. Beta deployments serialize independently of production and skip superseded `dev` commits. Migration/deploy commands must explicitly select beta:
+
+```sh
+npm run cf -- d1 migrations apply design-studio-ai-beta --remote --env beta
+npm run cf -- secret put ENCRYPTION_KEY --env beta
+PUBLIC_SITE_URL=https://beta.studio.agentkit.best npm run build
+npm run cf -- deploy --env beta --keep-vars
+```
+
+Production remains deployed only from `main`. Back up beta data with its own encryption key; rolling back beta code must not reset its database or touch production bindings. Connector runtime probes and acceptance evidence remain separate from beta deployment health.
+
 ## Optional integrations
 
 ### GitHub sign-in

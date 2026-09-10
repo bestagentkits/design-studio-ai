@@ -16,5 +16,39 @@
   "routes": [{ "pattern": "studio.agentkit.best", "custom_domain": true }],
   "observability": { "enabled": true },
   "browser": { "binding": "BROWSER" },
-  "limits": { "cpu_ms": 30000 }
+  "limits": { "cpu_ms": 30000 },
+  "env": {
+    "beta": {
+      "name": "design-studio-ai-beta",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [
+        {
+          "pattern": "beta.studio.agentkit.best",
+          "custom_domain": true
+        }
+      ],
+      "vars": {
+        "APP_URL": "https://beta.studio.agentkit.best",
+        "ALLOW_REGISTRATION": "true"
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "design-studio-ai-beta",
+          "database_id": "d9a0325a-1a4c-46bd-b696-c0ed724a0881",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "ASSETS_BUCKET",
+          "bucket_name": "design-studio-ai-assets-beta"
+        }
+      ],
+      "browser": {
+        "binding": "BROWSER"
+      }
+    }
+  }
 }

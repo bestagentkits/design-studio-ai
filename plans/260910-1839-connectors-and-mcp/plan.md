@@ -21,7 +21,7 @@ Constraints: preserve owner isolation, stable encryption key, independent brief/
 
 Non-goals for this plan: local stdio/command execution, MCP Apps UI, marketplace, autonomous background sync, whole-Drive indexing, bidirectional document synchronization, shared team credentials, automatic publication/merge. These are proposed product boundaries from the advisory discussion, not claims that the user explicitly rejected them.
 
-Implementation authorized by the user on 2026-09-10 after this plan was written. Work started on `codex/connectors-and-mcp`; original planning-only restriction is superseded. Real account writes, paid provider calls and production release are not inferred from implementation approval. See [runtime probes and current gate](reports/runtime-probes.md).
+Implementation authorized by the user on 2026-09-10 after this plan was written. Work started on `codex/connectors-and-mcp`; original planning-only restriction is superseded. Real account writes, paid provider calls and production release are not inferred from implementation approval. User subsequently authorized the project domain and a separate `beta.studio.agentkit.best` deployment on pushes to `dev`; beta uses isolated storage and credentials. See [runtime probes and current gate](reports/runtime-probes.md).
 
 ## Baseline and design
 
