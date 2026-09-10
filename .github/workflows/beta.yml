@@ -54,6 +54,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check this is still the dev head
         id: head
+        shell: bash
         run: |
           remote_head=$(git ls-remote --exit-code origin refs/heads/dev | cut -f1)
           if [ "$remote_head" = "$GITHUB_SHA" ]; then
