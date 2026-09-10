@@ -1,4 +1,5 @@
 import { serve } from "@hono/node-server";
+import { materializeNodeRequest } from './node-request';
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import { app } from "./index";
@@ -66,7 +67,7 @@ const server = serve(
         "CF-Connecting-IP",
         connection.incoming.socket.remoteAddress ?? "local",
       );
-      return app.fetch(request, env);
+      return app.fetch(materializeNodeRequest(request), env);
     },
     // Preserve native fetch Response identity for outgoing OAuth SDK error parsing.
     overrideGlobalObjects: false,
