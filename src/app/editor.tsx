@@ -1,3 +1,4 @@
+import { builtInProviders, isTextProvider, isCustomProvider } from '../shared/providers';
 import { trackClient } from './analytics';
 import './editor-ergonomics.css';
 import { InlineTextEditor } from './inline-text-editor';
@@ -501,13 +502,17 @@ export function Editor({
     return () => { stopped = true; clearInterval(timer); };
   }, [live, project.id]);
   useEffect(() => {
-    api<{ providers: Provider[] }>("/api/providers")
-      .then((result) => {
+    let active = true;
+    const load = () => api<{ providers: Provider[] }>("/api/providers")
+      .then(result => {
+        if (!active) return;
         setProviders(result.providers);
-        const textProvider = result.providers.find((p) => p.provider !== "fal");
-        if (textProvider) setProvider(textProvider.provider);
-      })
-      .catch((e) => setError(message(e)));
+        setMediaProvider(current => isCustomProvider(current) && !result.providers.some(p => p.provider === current) ? 'openai' : current);
+        setProvider(current => result.providers.some(p => p.provider === current && isTextProvider(p.provider)) ? current : result.providers.find(p => isTextProvider(p.provider))?.provider ?? 'openai');
+      }).catch(e => { if (active) setError(message(e)); });
+    void load();
+    window.addEventListener('studio-providers-updated', load);
+    return () => { active = false; window.removeEventListener('studio-providers-updated', load); };
   }, []);
   useEffect(() => {
     let active = true;
@@ -527,6 +532,9 @@ export function Editor({
       active = false;
     };
   }, [project.id]);
+  useEffect(() => { setModel(''); }, [provider]);
+  useEffect(() => { setMediaModel(''); setSourceAsset(''); }, [mediaProvider]);
+
   async function appendChat(role: ChatMessage["role"], text: string) {
     const optimisticId = uid();
     setChat((current) => [...current, { id: optimisticId, role, text }]);
@@ -1337,7 +1345,7 @@ export function Editor({
   }, [project.id]);
 
   function mediaSettings() {
-    const canSource = mediaKind !== "audio" || mediaProvider === "fal";
+    const canSource = mediaProvider === "fal" || (mediaProvider === "openai" && mediaKind === "image");
     const eligible = doc.assets.filter((asset) =>
       mediaKind === "image"
         ? asset.mimeType.startsWith("image/")
@@ -1693,12 +1701,10 @@ export function Editor({
                   <select
                     aria-label="Generation provider"
                     value={provider}
-                    onChange={(e) => setProvider(e.target.value)}
+                    onChange={(e) => { setProvider(e.target.value); setModel(''); }}
                   >
-                    <option value="openai">OpenAI</option>
-                    <option value="anthropic">Anthropic</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="openrouter">OpenRouter</option>
+                    {builtInProviders.filter(p => isTextProvider(p.id)).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {providers.filter(p => isCustomProvider(p.provider)).map(p => <option key={p.provider} value={p.provider}>{p.name ?? p.provider}</option>)}
                   </select>
                   <button
                     className="send-button"
@@ -1815,6 +1821,10 @@ export function Editor({
                       <option value="openai">OpenAI</option>
                     )}
                     <option value="fal">fal.ai</option>
+                    {mediaKind === 'image' && <>
+                      <option value="gemini">Google Gemini</option><option value="leonardo">LeonardoAI</option><option value="grok">Grok (xAI)</option>
+                      {providers.filter(p => isCustomProvider(p.provider) && p.protocol !== 'anthropic').map(p => <option key={p.provider} value={p.provider}>{p.name ?? p.provider}</option>)}
+                    </>}
                   </select>
                 </Field>
                 {mediaSettings()}

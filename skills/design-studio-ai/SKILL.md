@@ -93,7 +93,7 @@ Preserve trace/parent IDs and coverage information when explaining a failure. `r
 
 Use `assets upload PROJECT_ID --file image.png`, then add the returned asset to the document and use its URL in an image node. Upload alone does not place it on the canvas. Asset MIME types and size limits are enforced by the server. Use `assets list` and `assets download` to inspect stored results.
 
-Provider keys use `providers set openai --key-env OPENAI_API_KEY`, or `--key-stdin`; never write secrets into prompts, design documents, or committed files. `media generate` supports OpenAI image generation/editing and speech, plus fal images, video generation/editing, and music/sound effects with source-audio transformation. Use `--source-asset ID` for an asset owned by this project; the source is sent to the chosen provider without being automatically published. Select only compatible models and respect the user's provider-spend authorization.
+Provider keys use `providers set openai --key-env OPENAI_API_KEY`, or `--key-stdin`; never write secrets into prompts, design documents, or committed files. `generate` and `brief interview` also support the official `deepseek` provider and configured `custom-<slug>` connections. Use `list_provider_connections` with API-key MCP access (or `dsa providers list`) to discover saved custom IDs. Custom connections require a name, allowlisted HTTPS base URL, model, API format (OpenAI/Anthropic/Gemini compatible) and authentication method (bearer/api-key/basic/none); see `dsa providers set --help`. Never pass raw credentials through agent tool arguments; the human can configure Settings or supply CLI environment/stdin credentials. `media generate` supports prompt-only Gemini, Grok and Leonardo images, custom OpenAI/Gemini compatible images, and OpenAI image generation/editing and speech, plus fal images, video generation/editing, and music/sound effects with source-audio transformation. Use `--source-asset ID` for an asset owned by this project; the source is sent to the chosen provider without being automatically published. Select only compatible models and respect the user's provider-spend authorization.
 
 ```sh
 dsa media generate PROJECT_ID --kind image --provider openai --source-asset ASSET_ID --prompt-file edit.txt
@@ -101,7 +101,7 @@ dsa media generate PROJECT_ID --kind audio --provider fal --duration 30 --prompt
 dsa media status PROJECT_ID JOB_ID
 ```
 
-`--duration` applies to supported video/music modes. `--strength` from 0 to 1 applies only to fal source-image/source-audio transformations; `--voice` is for OpenAI speech. Inspect command help and provider errors for incompatible options. All fal modes return queued jobs: poll to the final status and inspect the asset before placing it in a document. Never report a queued job as completed media or replace a failed call with an invented result.
+`--duration` applies to supported video/music modes. `--strength` from 0 to 1 applies only to fal source-image/source-audio transformations; `--voice` is for OpenAI speech. Inspect command help and provider errors for incompatible options. All fal modes and Leonardo image generation return queued jobs: poll to the final status and inspect the asset before placing it in a document. Never report a queued job as completed media or replace a failed call with an invented result.
 
 ## Inspect quality and deliver
 

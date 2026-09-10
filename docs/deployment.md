@@ -103,6 +103,8 @@ Optional PostHog forwarding requires both server-runtime `POSTHOG_PROJECT_KEY` a
 
 Use the Activity coverage indicators to verify configured state, delivery failures, and last successful delivery. Configuration is not proof of receipt in PostHog; inspect the intended project after an authorized event. Forwarding failures do not change the product operation's result. Delivery/drop counters describe the current runtime instance and reset on restart, so they are not durable accounting. Provider token/cost fields can be unavailable; this view is operational evidence, not a complete billing ledger.
 
+Custom provider connections require their exact HTTPS origin in `PROVIDER_ALLOWED_ORIGINS` (comma-separated). Users supply the API version path in Settings. Migration `0009-custom-providers.sql` adds connection metadata without rewriting keys; preserve the existing encryption secret. Unlisted origins remain blocked when saving and generating.
+
 ## Backups and rollback
 
 Back up relational data, binary assets, and the encryption secret together. Stop Node writes before copying SQLite/files, or use a SQLite-consistent backup procedure; copying only an active database file may miss journaled changes. Use D1 backup/export and R2 object backups for Cloudflare. Missing assets or encryption keys cannot be repaired by a database-only restore.

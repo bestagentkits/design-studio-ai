@@ -1,3 +1,5 @@
+import { providerSettingsSchema, providerIdSchema, builtInProviders } from '../src/shared/providers';
+import { mediaInputSchema, generationInputSchema, providerInterviewSchema } from '../src/shared/provider-requests';
 import { telemetryQuerySchema, clientEventSchema } from '../src/shared/observability';
 import { observabilityMiddleware, bindTelemetryActor, errorCode } from './observability';
 import { observabilityRoutes } from './observability-routes';
@@ -143,11 +145,11 @@ app.onError((error, c) => {
     500,
   );
 });
-app.get('/api/openapi', c => c.json(openApiDocument({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
+app.get('/api/openapi', c => c.json(openApiDocument({ 'PUT /api/providers/{provider}': z.toJSONSchema(providerSettingsSchema), 'POST /api/projects/{id}/media': z.toJSONSchema(mediaInputSchema), 'POST /api/projects/{id}/generate': z.toJSONSchema(generationInputSchema), 'POST /api/projects/{id}/brief/interview': z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "design-studio-ai" }),
 );
-app.get('/api/schema', c => c.json({ document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
+app.get('/api/schema', c => c.json({ providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
 app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
 app.get("/api/config", (c) =>
   c.json({
