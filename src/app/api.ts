@@ -1,3 +1,4 @@
+import type { AuthMethod, ProviderProtocol } from '../shared/providers';
 import { trackClient, trackClientFailure } from './analytics';
 export class ApiError extends Error {
   constructor(
@@ -81,6 +82,10 @@ export function download(name: string, content: BlobPart | Blob, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 export type Provider = {
+  name?: string;
+  protocol?: ProviderProtocol;
+  authMethod?: AuthMethod;
+  authHeader?: string;
   provider: string;
   configured: boolean;
   model?: string;

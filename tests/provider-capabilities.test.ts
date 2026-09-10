@@ -85,12 +85,14 @@ test('real SQLite source ownership, unconfigured providers, and cached media pol
   assert.equal(missingKey.status, 400); assert.equal((await missingKey.json()).error.code, 'provider_unconfigured');
   const musicMissingKey = await api(`/api/projects/${first.id}/media`, 'POST', { kind: 'audio', provider: 'fal', prompt: 'Soft piano music' }, cookie);
   assert.equal((await musicMissingKey.json()).error.code, 'provider_unconfigured');
+  for (const provider of ['fal', 'leonardo']) {
   const jobId = crypto.randomUUID();
   await database.prepare('INSERT INTO media_jobs(id,user_id,project_id,provider,remote_id,model,kind,result_asset,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
-    .bind(jobId, user.id, first.id, 'fal', 'completed-persisted-request', 'fal-ai/flux/dev', 'image', JSON.stringify(asset), new Date().toISOString()).run();
+    .bind(jobId, user.id, first.id, provider, 'completed-persisted-request', 'fal-ai/flux/dev', 'image', JSON.stringify(asset), new Date().toISOString()).run();
   const countBefore = (await database.prepare('SELECT COUNT(*) AS count FROM assets').first<{count:number}>())!.count;
   for (let index = 0; index < 2; index++) { const polled = await api(`/api/projects/${first.id}/media/${jobId}`, 'GET', undefined, cookie); assert.equal(polled.status, 200); assert.deepEqual(await polled.json(), { status: 'completed', asset }); }
   assert.equal((await database.prepare('SELECT COUNT(*) AS count FROM assets').first<{count:number}>())!.count, countBefore);
   assert.equal((await api(`/api/projects/${second.id}/media/${jobId}`, 'GET', undefined, cookie)).status, 404);
   assert.equal((await api(`/api/projects/${first.id}/media/${jobId}`, 'GET', undefined, otherCookie)).status, 404);
+  }
 });

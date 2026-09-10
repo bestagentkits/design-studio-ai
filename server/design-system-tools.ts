@@ -1,3 +1,4 @@
+import { providerIdSchema } from '../src/shared/providers';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { designSystemSchema, systemApplySchema, systemUpdateSchema } from '../src/shared/design-systems';
@@ -12,5 +13,6 @@ export function registerDesignSystemTools(server: McpServer, call: (method: stri
   server.registerTool('insert_design_system_item', { description: 'Insert a library component or composition, preserving hierarchy and remapping IDs.', inputSchema: { id: z.string(), ...systemApplySchema.shape, pageId: z.string(), itemId: z.string() } }, ({ id, ...body }) => call('POST', path(id) + '/insert', body));
   server.registerTool('delete_design_system', { description: 'Delete a library and its versions. Existing project content remains embedded.', inputSchema: { id: z.string() }, annotations: { destructiveHint: true } }, ({ id }) => call('DELETE', path(id)));
   server.registerTool('list_google_fonts', { description: 'Search Google Fonts; source identifies official catalog versus fallback.', inputSchema: { query: z.string().optional() }, annotations: { readOnlyHint: true } }, ({ query }) => call('GET', '/api/fonts' + (query ? `?q=${encodeURIComponent(query)}` : '')));
-  server.registerTool('list_provider_models', { description: 'Discover provider model IDs and capabilities. API key authentication required; no raw credential is returned.', inputSchema: { provider: z.enum(['openai', 'anthropic', 'gemini', 'openrouter', 'fal']), query: z.string().optional() }, annotations: { readOnlyHint: true } }, ({ provider, query }) => call('GET', `/api/providers/${provider}/models` + (query ? `?q=${encodeURIComponent(query)}` : '')));
+  server.registerTool('list_provider_connections', { description: 'List your configured official and custom provider IDs and masked metadata. Requires an account API key; MCP OAuth cannot access provider settings.', inputSchema: {}, annotations: { readOnlyHint: true } }, () => call('GET', '/api/providers'));
+  server.registerTool('list_provider_models', { description: 'Discover provider model IDs and capabilities. API key authentication required; no raw credential is returned.', inputSchema: { provider: providerIdSchema, query: z.string().optional() }, annotations: { readOnlyHint: true } }, ({ provider, query }) => call('GET', `/api/providers/${provider}/models` + (query ? `?q=${encodeURIComponent(query)}` : '')));
 }
