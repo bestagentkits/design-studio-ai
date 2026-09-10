@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { boundedConnectorJson, connectorPrincipalSchema } from '../src/shared/connector-values';
 import { connectionCreateSchema, connectionMetadataSchema, connectorToolSchema, connectorSelectionSchema, sourceSnapshotSchema } from '../src/shared/connectors';
 import { canTransitionConnectorOperation, connectorOperationPrepareSchema, connectorOperationSchema } from '../src/shared/connector-operations';
-import { agentRunAdvanceSchema, agentRunSchema } from '../src/shared/agent-runs';
+import { agentRunAdvanceSchema, agentRunSchema, agentRunStartSchema } from '../src/shared/agent-runs';
 
 const timestamp = '2026-09-10T12:00:00.000Z';
 const fingerprint = 'a'.repeat(64);
@@ -97,6 +97,15 @@ test('run continuation cannot approve tools; paused and completed runs need dura
   assert.equal(agentRunAdvanceSchema.safeParse({ expectedRevision: 1, approved: true }).success, false);
   const run = { id: 'r-1', projectId: 'p-1', principal, revision: 1, status: 'ready_to_continue', provider: 'openai', model: 'model', pins: [{ bindingId: 'b-1', versions: pins }], modelTurns: 0, toolCalls: 0, activeMs: 0, pendingOperationId: null, proposalId: null, leaseId: null, leaseExpiresAt: null, createdAt: timestamp, updatedAt: timestamp };
   assert.ok(agentRunSchema.safeParse(run).success);
+  const start = { prompt: 'Use the selected sources', provider: 'openai', bindingIds: ['b-1'], sourceSnapshotIds: [], expectedDocumentRevision: 1, expectedBriefRevision: 1, idempotencyKey: '1234567890abcdef' };
+  for (const provider of ['deepseek', 'custom-private-model']) {
+    assert.ok(agentRunStartSchema.safeParse({ ...start, provider }).success);
+    assert.ok(agentRunSchema.safeParse({ ...run, provider }).success);
+  }
+  for (const provider of ['fal', 'leonardo', 'grok', 'custom-', 'unknown']) {
+    assert.equal(agentRunStartSchema.safeParse({ ...start, provider }).success, false);
+    assert.equal(agentRunSchema.safeParse({ ...run, provider }).success, false);
+  }
   assert.equal(agentRunSchema.safeParse({ ...run, status: 'awaiting_approval' }).success, false);
   assert.equal(agentRunSchema.safeParse({ ...run, status: 'succeeded' }).success, false);
   assert.equal(agentRunSchema.safeParse({ ...run, toolCalls: 13 }).success, false);
