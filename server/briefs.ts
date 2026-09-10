@@ -1,8 +1,9 @@
+import { providerInterviewSchema } from '../src/shared/provider-requests';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { answerSchema, interviewSchema, scopeSchema, type DesignBrief, type Interview } from '../src/shared/brief';
 import { projectRow } from './projects';
-import { completeText, textProviderSchema } from './providers';
+import { completeText } from './providers';
 import { fail, now, owner, rateLimit } from './security';
 import type { Env } from './types';
 
@@ -99,7 +100,7 @@ briefRoutes.post('/:id/brief/approve', async c => {
   return c.json({ brief: await persist(c, brief, body.expectedRevision) });
 });
 briefRoutes.post('/:id/brief/interview', async c => {
-  const body = z.object({ expectedRevision: revisionSchema, provider: textProviderSchema, model: z.string().min(1).max(200).optional() }).strict().parse(await c.req.json());
+  const body = providerInterviewSchema.parse(await c.req.json());
   const project = await projectRow(c, c.req.param('id'));
   const brief = await readBrief(c, project.id);
   checkRevision(brief, body.expectedRevision);

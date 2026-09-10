@@ -1,3 +1,4 @@
+import { isTextProvider } from '../shared/providers';
 import { useEffect, useRef, useState } from "react";
 import { ModelPicker } from './model-picker';
 import {
@@ -78,7 +79,7 @@ export function DesignBriefWorkspace({
   );
   const approved = brief.status === "approved" && !dirty;
   const connected = providers.filter(
-    (p) => p.configured && p.provider !== "fal",
+    (p) => p.configured && isTextProvider(p.provider),
   );
   useEffect(() => {
     if (server.current.revision === brief.revision) return;
@@ -107,7 +108,7 @@ export function DesignBriefWorkspace({
           setProvider((current) =>
             next.some((p) => p.configured && p.provider === current)
               ? current
-              : next.find((p) => p.configured && p.provider !== "fal")
+              : next.find((p) => p.configured && isTextProvider(p.provider))
                   ?.provider || "",
           );
         })
@@ -328,7 +329,7 @@ export function DesignBriefWorkspace({
                 </option>
                 {connected.map((p) => (
                   <option key={p.provider} value={p.provider}>
-                    {p.provider}
+                    {p.name ?? p.provider}
                   </option>
                 ))}
               </select>

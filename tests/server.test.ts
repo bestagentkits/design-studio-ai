@@ -439,6 +439,7 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
       assert.equal(listed.status, 200);
       const listedTools = ((await listed.json()) as any).result.tools as Array<{ name: string }>;
       for (const name of [
+        "list_provider_connections",
         "patch_document",
         "preview_project",
         "unpreview_project",

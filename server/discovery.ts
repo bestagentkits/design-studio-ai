@@ -5,7 +5,8 @@ import { fail, hash, owner, rateLimit } from './security';
 import { limitedBytes, providerConfig, upstream } from './providers';
 import { discoveryProviderSchema, fallbackFonts, fallbackModels, fontOptionSchema, modelOptionSchema, type DiscoveryProvider, type FontCatalog, type ModelCatalog, type ModelOption } from '../src/shared/discovery';
 
-const bases: Record<DiscoveryProvider, string> = { openai: 'https://api.openai.com/v1', anthropic: 'https://api.anthropic.com/v1', gemini: 'https://generativelanguage.googleapis.com/v1beta', openrouter: 'https://openrouter.ai/api/v1', fal: 'https://queue.fal.run' };
+import { builtInProviders, isCustomProvider } from '../src/shared/providers';
+const bases: Record<string, string> = Object.fromEntries(builtInProviders.map(p => [p.id, p.baseUrl]));
 export class DiscoveryCache<T> {
   private entries = new Map<string, { value: T; expires: number }>();
   constructor(private ttl: number, private capacity: number) {}
@@ -37,7 +38,8 @@ export function filterFontCatalog(catalog: FontCatalog, query: string): FontCata
 }
 
 export function modelDiscoveryRequest(provider: DiscoveryProvider, key: string, cursor?: string) {
-  const url = new URL(provider === 'fal' ? 'https://api.fal.ai/v1/models' : `${bases[provider]}/models`);
+  if (isCustomProvider(provider)) fail(400, 'unsupported_provider', 'Enter custom model IDs manually.');
+  const url = new URL(provider === 'leonardo' ? `${bases[provider]}/platformModels` : provider === 'grok' ? `${bases[provider]}/image-generation-models` : provider === 'fal' ? 'https://api.fal.ai/v1/models' : `${bases[provider]}/models`);
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (provider === 'anthropic') { headers['x-api-key'] = key; headers['anthropic-version'] = '2023-06-01'; url.searchParams.set('limit', '1000'); }
   else if (provider === 'gemini') { headers['x-goog-api-key'] = key; url.searchParams.set('pageSize', '1000'); }
@@ -49,7 +51,7 @@ export function modelDiscoveryRequest(provider: DiscoveryProvider, key: string, 
 const record = z.record(z.string(), z.unknown());
 export function parseModelPage(provider: DiscoveryProvider, input: unknown): { models: ModelOption[]; cursor?: string } {
   const body = record.parse(input);
-  const rows = z.array(record).max(10000).parse(body[provider === 'gemini' || provider === 'fal' ? 'models' : 'data']);
+  const rows = z.array(record).max(10000).parse(body[provider === 'leonardo' ? 'custom_models' : provider === 'gemini' || provider === 'fal' || provider === 'grok' ? 'models' : 'data']);
   const models: ModelOption[] = [];
   for (const item of rows) {
     if (provider === 'gemini' && (!Array.isArray(item.supportedGenerationMethods) || !item.supportedGenerationMethods.includes('generateContent'))) continue;
@@ -92,6 +94,7 @@ discoveryRoutes.get('/providers/:provider/models', async c => {
   };
   try {
     const config = await providerConfig(c, provider);
+    if (isCustomProvider(provider)) return respond(fallback('Custom endpoint: enter its model ID manually. No official catalog is queried.'));
     // A proxy credential must never be forwarded to an official provider origin.
     if (config.base_url.replace(/\/+$/, '') !== bases[provider]) return respond(fallback('Custom endpoint: enter a model ID. Starter suggestions are not verified.'));
     const cacheKey = await hash(`${userId}:${provider}:${config.encrypted_key}:${config.base_url}`);

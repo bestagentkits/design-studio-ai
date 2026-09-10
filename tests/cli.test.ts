@@ -47,7 +47,7 @@ before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'dsa-cli-test-'));
   database = new SqliteDatabase(join(directory, 'studio.sqlite'));
   for (const name of (await readdir(resolve('migrations'))).filter(name => name.endsWith('.sql')).sort()) await database.exec(await readFile(resolve('migrations', name), 'utf8'));
-  const bindings: Bindings = { ASSETS: builtStaticAssets, DB: database, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret() };
+  const bindings: Bindings = { ASSETS: builtStaticAssets, DB: database, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret(), PROVIDER_ALLOWED_ORIGINS: 'https://cli-provider.example' };
   server = serve({ fetch: request => app.fetch(request, bindings), hostname: '127.0.0.1', port: 0 });
   await new Promise<void>(resolveListening => { if (server.listening) resolveListening(); else server.once('listening', resolveListening); });
   const address = server.address(); assert.ok(address && typeof address !== 'string');
@@ -89,7 +89,7 @@ test('standalone built executable prints help and version without checkout depen
   const standalone = join(directory, 'standalone.mjs'); await copyFile(executable, standalone);
   const help = await run(['--help'], { executable: standalone });
   assert.equal(help.code, 0); assert.match(help.stdout, /projects/); assert.match(help.stdout, /google-slides/);
-  const version = await run(['--version'], { executable: standalone }); assert.equal(version.code, 0); assert.equal(version.stdout.trim(), '0.3.0');
+  const version = await run(['--version'], { executable: standalone }); assert.equal(version.code, 0); assert.equal(version.stdout.trim(), JSON.parse(await readFile(resolve('packages/cli/package.json'), 'utf8')).version);
 });
 
 test('schema and templates use the actual shared document format', async () => {
@@ -166,4 +166,17 @@ test('token revocation invalidates actual CLI authentication', async () => {
   await json(['tokens', 'revoke', created.id]);
   const denied = await run(['projects', 'list'], { token: created.token });
   assert.equal(denied.code, 2); assert.equal(denied.stderr.includes(created.token), false);
+});
+
+
+test('CLI custom connections support secure input, metadata updates and no-auth endpoints', async () => {
+  const base = ['providers', 'set', 'custom-cli', '--name', 'CLI gateway', '--base-url', 'https://cli-provider.example/v1', '--model', 'text-model', '--protocol', 'openai'];
+  const saved = await json([...base, '--auth-method', 'api-key', '--auth-header', 'X-Team-Key', '--key-stdin'], { input: 'local-cli-test-secret' });
+  assert.equal(saved.provider, 'custom-cli'); assert.equal(saved.authMethod, 'api-key');
+  assert.equal(JSON.stringify(saved).includes('local-cli-test-secret'), false);
+  assert.equal((await json(['providers', 'set', 'custom-cli', '--model', 'updated-model', '--keep-key'])).model, 'updated-model');
+  const conflict = await run(['providers', 'set', 'custom-cli', '--keep-key', '--key-stdin'], { input: 'never-send' });
+  assert.notEqual(conflict.code, 0); assert.equal(conflict.stderr.includes('never-send'), false);
+  assert.equal((await json(['providers', 'set', 'custom-cli', '--auth-method', 'none'])).authMethod, 'none');
+  await json(['providers', 'remove', 'custom-cli']);
 });

@@ -13,7 +13,7 @@ import { mutateDocument, operationsSchema } from "../src/shared/operations";
 import { renderHtml, renderSvg } from "../src/shared/render";
 import { fail, origin, owner, unb64 } from "./security";
 import { projectRow, saveDocument, storeAsset } from "./projects";
-import { mediaInputSchema } from './providers';
+import { mediaInputSchema, textProviderSchema } from './providers';
 import { interviewSchema, answerSchema, scopeSchema } from '../src/shared/brief';
 import { mergeRequestSchema } from '../src/shared/collaboration-contract';
 import { withSpan, telemetryEnv, type TelemetrySpan } from './observability';
@@ -58,7 +58,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.3.0" },
+    { name: "design-studio-ai", version: "0.3.1" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -122,7 +122,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   );
   server.registerTool(
     'interview_design_brief',
-    {description:'Ask the owner-configured BYOK provider to prepare contextual questions or a scope from saved answers. Incurs provider usage. Updates the brief only if its revision is unchanged.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().positive(),provider:z.enum(['openai','anthropic','gemini','openrouter']),model:z.string().min(1).max(200).optional()}},
+    {description:'Ask the owner-configured BYOK provider to prepare contextual questions or a scope from saved answers. Incurs provider usage. Updates the brief only if its revision is unchanged.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().positive(),provider:textProviderSchema,model:z.string().min(1).max(200).optional()}},
     async ({projectId,...body}) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/brief/interview`,body),
   );
   server.registerTool(
@@ -437,7 +437,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       inputSchema: {
         projectId: z.string(),
         prompt: z.string().min(1).max(12000),
-        provider: z.enum(["openai", "anthropic", "gemini", "openrouter"]),
+        provider: textProviderSchema,
         model: z.string().optional(),
         expectedRevision: z.number().int().positive(),
       },

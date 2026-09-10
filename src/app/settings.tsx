@@ -1,9 +1,8 @@
 import { useScreenState } from './screen-state';
 import { useEffect, useState } from "react";
-import { ModelPicker } from './model-picker';
+import { ProviderSettings } from './provider-settings';
 import {
   Check,
-  ChevronRight,
   Code2,
   Copy,
   KeyRound,
@@ -11,43 +10,11 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
-import { api, post, put, message, type Provider, type User } from "./api";
+import { api, post, message, type Provider, type User } from "./api";
 import { Busy, Field, Modal } from "./ui";
 import { ThemeToggle } from "./theme-toggle";
 import { navigateButtonGroup } from "./keyboard-navigation";
 
-const providerOptions = [
-  {
-    id: "openai",
-    name: "OpenAI",
-    detail: "Design generation, images & speech",
-    model: "gpt-4.1",
-  },
-  {
-    id: "anthropic",
-    name: "Anthropic",
-    detail: "Design generation with Claude",
-    model: "claude-sonnet-4-20250514",
-  },
-  {
-    id: "gemini",
-    name: "Google Gemini",
-    detail: "Design generation with Gemini",
-    model: "gemini-2.5-flash",
-  },
-  {
-    id: "openrouter",
-    name: "OpenRouter",
-    detail: "Your choice of language model",
-    model: "openai/gpt-4.1",
-  },
-  {
-    id: "fal",
-    name: "fal.ai",
-    detail: "Image and video generation",
-    model: "fal-ai/flux/schnell",
-  },
-];
 type Token = {
   id: string;
   name: string;
@@ -86,12 +53,7 @@ export function Settings({
   const [tab, setTab] = useScreenState('settings', initialTab, ['providers', 'agents', 'account'], true),
     [providers, setProviders] = useState<Provider[]>([]),
     [tokens, setTokens] = useState<Token[]>([]);
-  const [selected, setSelected] = useState("openai"),
-    [key, setKey] = useState(""),
-    [model, setModel] = useState(""),
-    [tokenName, setTokenName] = useState(""),
-    [newToken, setNewToken] = useState("");
-  const [modelRefresh, setModelRefresh] = useState(0);
+  const [tokenName, setTokenName] = useState(''), [newToken, setNewToken] = useState('');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [success, setSuccess] = useState("");
@@ -127,14 +89,12 @@ export function Settings({
       api<{ tokens: Token[] }>("/api/tokens"),
     ]);
     setProviders(p.providers);
-    setModelRefresh(value => value + 1);
     onProviders(p.providers);
     setTokens(t.tokens);
   }
   useEffect(() => {
     load().catch((e) => setError(message(e)));
   }, []);
-  const current = providerOptions.find((p) => p.id === selected)!;
   const support = Boolean(
     (document as unknown as { modelContext?: unknown }).modelContext ||
     (navigator as unknown as { modelContext?: unknown }).modelContext,
@@ -193,118 +153,7 @@ export function Settings({
           </button>
         </nav>
         <div className="settings-content">
-          {tab === "providers" && (
-            <>
-              <h3>Your keys. Your choice.</h3>
-              <p className="modal-description">
-                Connect a provider to generate designs and media. Keys are
-                encrypted on the server and never included in designs.
-              </p>
-              <div
-                className="provider-list"
-                onKeyDown={(event) => navigateButtonGroup(event, ":scope > button", "vertical")}
-              >
-                {providerOptions.map((item) => (
-                  <button
-                    key={item.id}
-                    className={selected === item.id ? "selected" : ""}
-                    aria-pressed={selected === item.id}
-                    onClick={() => {
-                      setSelected(item.id);
-                      setKey("");
-                      setModel(
-                        providers.find((p) => p.provider === item.id)?.model ||
-                          "",
-                      );
-                      setSuccess("");
-                    }}
-                  >
-                    <span className="provider-letter">{item.name[0]}</span>
-                    <span>
-                      <strong>{item.name}</strong>
-                      <small>{item.detail}</small>
-                    </span>
-                    {providers.some(
-                      (p) => p.provider === item.id && p.configured,
-                    ) ? (
-                      <span className="configured">
-                        <Check size={14} /> Connected
-                      </span>
-                    ) : (
-                      <ChevronRight size={16} />
-                    )}
-                  </button>
-                ))}
-              </div>
-              <form
-                className="provider-form"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void run(async () => {
-                    await put(`/api/providers/${selected}`, {
-                      apiKey: key,
-                      ...(model.trim() ? { model: model.trim() } : {}),
-                    });
-                    setKey("");
-                    await load();
-                    setSuccess(`${current.name} connected.`);
-                  });
-                }}
-              >
-                <h4>Connect {current.name}</h4>
-                <Field label="API key">
-                  <input
-                    type="password"
-                    autoComplete="off"
-                    value={key}
-                    onChange={(e) => setKey(e.target.value)}
-                    placeholder="Paste your provider API key"
-                    required
-                  />
-                </Field>
-                <Field
-                  label="Default model"
-                  hint="Optional. Leave blank to use the server default."
-                >
-                  <ModelPicker
-                    provider={selected}
-                    label="Default model"
-                    value={model}
-                    placeholder={current.model}
-                    disabled={busy}
-                    refreshKey={modelRefresh}
-                    onChange={setModel}
-                  />
-                </Field>
-                <div className="button-row">
-                  <button
-                    className="button primary"
-                    disabled={busy || !key.trim()}
-                  >
-                    {busy ? <Busy /> : "Save connection"}
-                  </button>
-                  {providers.some((p) => p.provider === selected) && (
-                    <button
-                      type="button"
-                      className="button"
-                      disabled={busy}
-                      onClick={() =>
-                        void run(async () => {
-                          await api(`/api/providers/${selected}`, {
-                            method: "DELETE",
-                          });
-                          await load();
-                          setSuccess("Provider disconnected.");
-                        })
-                      }
-                    >
-                      Disconnect
-                    </button>
-                  )}
-                </div>
-              </form>
-            </>
-          )}
+          {tab === "providers" && <ProviderSettings providers={providers} onChanged={load} />}
           {tab === "agents" && (
             <>
               <h3>A workspace your agents can use.</h3>
