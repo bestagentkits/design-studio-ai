@@ -36,7 +36,8 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'interview', 'observabilityQuery', 'operations', 'scope']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'generationInput', 'interview', 'mediaInput', 'observabilityQuery', 'operations', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'scope']);
+  expect(schema.providerSettings.properties.authMethod.enum).toEqual(['bearer', 'api-key', 'basic', 'none']);
   expect(schema.clientEvent.additionalProperties).toBe(false);
   expect(schema.observabilityQuery.properties.scope.enum).toEqual(['owner', 'all']);
   expect(schema.designSystem.properties.components.items.properties.src).toBeDefined();

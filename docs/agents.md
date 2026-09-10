@@ -98,3 +98,7 @@ CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build pr
 The [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) provides the CLI tarball and agent-skill ZIP. GitHub release distribution is separate from npm registry publication.
 
 Build the complete installable skill archive with `npm run pack:skill`. The [packaging script](../scripts/package-skill.mjs) includes the entrypoint and all design-kind references in `dist/design-studio-ai-skill.zip`.
+
+## Provider connections
+
+Use the shared [provider guide](providers.md#official-and-custom-connections) for official DeepSeek, Gemini/OpenAI/Leonardo/Grok image generation and custom API connections. API-key MCP clients can call `list_provider_connections` to find saved custom IDs without receiving credentials. REST `/api/schema` exposes provider IDs and configuration/generation schemas; MCP and WebMCP use the same IDs. Saved custom IDs start with `custom-`. Credential management remains account/API-key only; MCP OAuth and WebMCP can generate with configured providers but cannot change credentials. CLI `providers set --help` describes base URL, API format and auth options; inject credentials through environment variables or stdin. Model catalog fallback is not proof of provider capability.
