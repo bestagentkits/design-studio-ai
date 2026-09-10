@@ -12,6 +12,7 @@ export function mergeDocuments(base: DesignDocument, local: DesignDocument, remo
     if (path === 'metadata.updatedAt') return r;
     if (same(l, b) || same(l, r)) return structuredClone(r);
     if (same(r, b)) return structuredClone(l);
+    if (path.endsWith('.mesh')) { conflicts.push(path); return r; }
     if (record(b) && record(l) && record(r)) {
       const result: Record<string, unknown> = {};
       for (const key of new Set([...Object.keys(b), ...Object.keys(l), ...Object.keys(r)])) {

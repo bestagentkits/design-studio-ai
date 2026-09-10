@@ -1,3 +1,4 @@
+import { motionFrames } from './motion-frame-export';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import PptxGenJS from 'pptxgenjs';
@@ -166,4 +167,4 @@ async function scene(input: DesignDocument, pageIndex: number, format: 'glb' | '
   const bytes = result instanceof ArrayBuffer ? new Uint8Array(result) : new TextEncoder().encode(JSON.stringify(result));
   return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(new Blob([bytes])); });
 }
-Object.assign(globalThis, { studioRenderer: { present, pptx, video, scene } });
+Object.assign(globalThis, { studioRenderer: { present, pptx, video, scene, motionFrames } });

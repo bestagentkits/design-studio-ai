@@ -1,3 +1,5 @@
+import {CharacterSceneLayer} from './character-scene-layer';
+import { CharacterView } from './character-view';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { loadDocumentFonts } from '../shared/font-loading';
 import type { DesignDocument, DesignNode, DesignPage } from '../shared/schema';
@@ -7,12 +9,12 @@ import { childrenOf, resolveLayout } from '../shared/layout';
 import { DesignComponent } from './design-component';
 import type { Layout } from '../shared/design-capabilities';
 
-export const usesDom = (page: DesignPage) => !!page.layout || page.nodes.some(n => !!n.layout || n.type === 'component');
+export const usesDom = (page: DesignPage) => !!page.layout || page.nodes.some(n => !!n.layout || n.type === 'component' || n.type === 'character');
 export function containerStyle(layout?: Layout): CSSProperties {
   if (!layout || layout.mode === 'absolute') return {};
   return { display: layout.mode, flexDirection: layout.direction ?? 'column', gap: layout.gap ?? 0, padding: layout.padding ?? 0, flexWrap: layout.wrap ? 'wrap' : 'nowrap', alignContent: 'start', alignItems: layout.align === 'start' ? 'flex-start' : layout.align === 'end' ? 'flex-end' : layout.align, justifyContent: layout.justify === 'start' ? 'flex-start' : layout.justify === 'end' ? 'flex-end' : layout.justify, gridTemplateColumns: layout.mode === 'grid' ? `repeat(${layout.columns ?? 2}, minmax(0, 1fr))` : undefined };
 }
-export function DocumentView({ doc, pageIndex = 0, time = 0, navigate, onBounds, onOverlayBounds, editingId }: { doc: DesignDocument; pageIndex?: number; time?: number; navigate?: (id: string) => void; onBounds?: (nodes: DesignNode[]) => void; onOverlayBounds?: (nodes: DesignNode[]) => void; editingId?: string | null }) {
+export function DocumentView({ doc, pageIndex = 0, time = 0, playback = false, navigate, onBounds, onOverlayBounds, editingId }: { doc: DesignDocument; pageIndex?: number; time?: number; playback?:boolean; navigate?: (id: string) => void; onBounds?: (nodes: DesignNode[]) => void; onOverlayBounds?: (nodes: DesignNode[]) => void; editingId?: string | null }) {
   const page = doc.pages[pageIndex], ref = useRef<HTMLDivElement>(null);
   const [visibility, setVisibility] = useState<Record<string, boolean>>({});
   const [fontError, setFontError] = useState('');
@@ -56,7 +58,7 @@ export function DocumentView({ doc, pageIndex = 0, time = 0, navigate, onBounds,
     const observer = new ResizeObserver(measure); observer.observe(host); host.querySelectorAll('[data-design-node]').forEach(el => observer.observe(el)); measure();
     return () => observer.disconnect();
   }, [animatedPage, onBounds, onOverlayBounds, visibility]);
-  const draw = (n: DesignNode, parent?: DesignNode): React.ReactNode => { if (!(visibility[n.id] ?? n.visible !== false)) return null;
+  const draw = (n: DesignNode, parent?: DesignNode): React.ReactNode => { if(page.scene&&page.nodes.some(x=>x.character)&&n.type==='model3d')return null; if (!(visibility[n.id] ?? n.visible !== false)) return null;
     const layout = parent?.layout ?? (!parent ? page.layout : undefined), flow = layout && layout.mode !== 'absolute' && n.position !== 'absolute';
     const s = n.style ?? {}, fill = resolveColor(s.fill ?? (n.type === 'text' ? '$text' : '$surface'), doc.theme);
     const parentBox = parent && resolved.get(parent.id);
@@ -71,9 +73,9 @@ export function DocumentView({ doc, pageIndex = 0, time = 0, navigate, onBounds,
     if (Number(s.strokeWidth)) style.border = `${Number(s.strokeWidth)}px solid ${resolveColor(s.stroke, doc.theme)}`;
     const interact = (trigger: 'click' | 'hover', event: React.SyntheticEvent) => { for (const action of n.interactions ?? []) if (action.trigger === trigger) { event.stopPropagation(); if (action.action === 'navigate') navigate?.(action.target); if (action.action === 'url' && /^https:\/\//.test(action.target)) window.open(action.target, '_blank', 'noopener,noreferrer'); if (action.action === 'toggle') { const target = page.nodes.find(node => node.id === action.target); if (target) setVisibility(previous => ({ ...previous, [target.id]: !(previous[target.id] ?? target.visible !== false) })); } } };
     return <div key={n.id} data-design-node={n.id} style={style} onClick={e => interact('click', e)} onMouseEnter={e => interact('hover', e)}>
-      {n.component ? <DesignComponent node={n} theme={doc.theme}/> : n.type === 'text' ? n.text : n.type === 'image' && n.src && isSafeUrl(n.src) ? <img src={n.src} alt={n.name} style={{ width: '100%', height: '100%', objectFit: s.objectFit === 'contain' ? 'contain' : 'cover' }}/> : n.type === 'video' && n.src ? <video src={n.src} controls style={{ width: '100%', height: '100%' }}/> : n.type === 'audio' && n.src ? <audio src={n.src} controls/> : ['chart', 'icon', 'model3d'].includes(n.type) ? <div style={{ width: '100%', height: '100%' }} dangerouslySetInnerHTML={{ __html: renderSvg({ ...doc, timeline: undefined, pages: [{ ...page, layout: undefined, width: Math.max(1, n.width), height: Math.max(1, n.height), background: 'transparent', nodes: [{ ...n, parentId: undefined, x: 0, y: 0, rotation: 0, opacity: 1 }] }] }) }}/> : null}
+      {n.character && doc.characters?.find(c=>c.id===n.character!.characterId) ? <CharacterView character={doc.characters.find(c=>c.id===n.character!.characterId)!} instance={n.character} assets={doc.assets} time={time} playback={playback}/> : n.component ? <DesignComponent node={n} theme={doc.theme}/> : n.type === 'text' ? n.text : n.type === 'image' && n.src && isSafeUrl(n.src) ? <img src={n.src} alt={n.name} style={{ width: '100%', height: '100%', objectFit: s.objectFit === 'contain' ? 'contain' : 'cover' }}/> : n.type === 'video' && n.src ? <video src={n.src} controls style={{ width: '100%', height: '100%' }}/> : n.type === 'audio' && n.src ? <audio src={n.src} controls/> : n.type==='model3d'&&page.nodes.some(x=>x.character)?<CharacterSceneLayer doc={doc} pageIndex={pageIndex} node={page.nodes.find(x=>x.id===n.id)} time={time}/>:['chart', 'icon', 'model3d'].includes(n.type) ? <div style={{ width: '100%', height: '100%' }} dangerouslySetInnerHTML={{ __html: renderSvg({ ...doc, timeline: undefined, pages: [{ ...page, layout: undefined, width: Math.max(1, n.width), height: Math.max(1, n.height), background: 'transparent', nodes: [{ ...n, parentId: undefined, x: 0, y: 0, rotation: 0, opacity: 1 }] }] }) }}/> : null}
       {childrenOf(animatedPage, n.id).map(child => draw(child, n))}
     </div>;
   };
-  return <div ref={ref} className="studio-document" data-font-error={fontError || undefined} title={fontError || undefined} style={{ position: 'relative', isolation: 'isolate', boxSizing: 'border-box', width: '100%', minHeight: page.height, background: resolveColor(page.background, doc.theme), ...containerStyle(page.layout) }}>{childrenOf(animatedPage).map(n => draw(n))}</div>;
+  return <div ref={ref} className="studio-document" data-font-error={fontError || undefined} title={fontError || undefined} style={{ position: 'relative', isolation: 'isolate', boxSizing: 'border-box', width: '100%', minHeight: page.height, background: resolveColor(page.background, doc.theme), ...containerStyle(page.layout) }}>{page.scene&&page.nodes.some(n=>n.character)&&<CharacterSceneLayer doc={doc} pageIndex={pageIndex} time={time}/>} {childrenOf(animatedPage).map(n => draw(n))}</div>;
 }

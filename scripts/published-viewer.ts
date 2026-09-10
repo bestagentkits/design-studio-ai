@@ -1,3 +1,4 @@
+import {motionDuration} from '../src/shared/motion-duration';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { buildScene, disposeScene, animateScene } from '../src/shared/scene-runtime';
@@ -22,6 +23,7 @@ if (source?.textContent) {
       section.replaceChildren();
       const root = createRoot(section); roots.set(index, root); root.render(createElement(DocumentView, { doc, pageIndex: index, navigate: (id: string) => { const next = doc.pages.findIndex(p => p.id === id); sections.forEach((el, i) => { el.hidden = i !== next; }); } }));
     }
+    if (page.nodes.some(n=>n.character)) continue;
     if (page.scene || page.nodes.some(n => n.scene)) {
       section.replaceChildren();
       void (async () => {
@@ -66,14 +68,15 @@ if (source?.textContent) {
       })();
     }
   }
-  if (doc.timeline) {
+  const duration=motionDuration(doc);
+  if (duration>0) {
     const controls = document.createElement('div'); controls.style.cssText = 'position:sticky;bottom:16px;display:flex;align-items:center;gap:16px;max-width:480px;margin:16px auto;padding:12px 20px;border-radius:12px;background:#1b1b1b;color:white;font:14px Arial';
     const play = document.createElement('button'); play.textContent = 'Play animation'; play.style.cssText = 'padding:10px 16px;cursor:pointer;border:0;border-radius:6px';
-    const scrub = document.createElement('input'); scrub.type = 'range'; scrub.min = '0'; scrub.max = String(doc.timeline.duration); scrub.step = '0.01'; scrub.value = '0'; scrub.setAttribute('aria-label', 'Animation time'); scrub.style.flex = '1';
+    const scrub = document.createElement('input'); scrub.type = 'range'; scrub.min = '0'; scrub.max = String(duration); scrub.step = '0.01'; scrub.value = '0'; scrub.setAttribute('aria-label', 'Animation time'); scrub.style.flex = '1';
     controls.appendChild(play); controls.appendChild(scrub); document.body.appendChild(controls);
     let running = false, time = 0, frame = 0;
-    const paint = () => { sections.forEach((section, index) => { scenePaint.get(index)?.(time); const root = roots.get(index); if (root) root.render(createElement(DocumentView, { doc, pageIndex: index, time })); else { const svg = section.querySelector('svg'); if (svg) svg.outerHTML = renderSvg(doc, index, time); } for (const node of doc.pages[index].nodes.filter(n => n.type === 'model3d' && n.visible !== false)) { section.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`)?.setAttribute('visibility', 'hidden'); const host = section.querySelector<HTMLElement>(`[data-studio-object="${CSS.escape(node.id)}"]`); if (host) { const animated = interpolateNode(node, doc, time), page = doc.pages[index]; host.style.left = `${animated.x / page.width * 100}%`; host.style.top = `${animated.y / page.height * 100}%`; host.style.width = `${animated.width / page.width * 100}%`; host.style.height = `${animated.height / page.height * 100}%`; host.style.opacity = String(animated.opacity ?? 1); } } }); scrub.value = String(time); };
-    play.onclick = () => { running = !running; play.textContent = running ? 'Pause' : 'Play animation'; cancelAnimationFrame(frame); if (!running) return; if (time >= doc.timeline!.duration) time = 0; const start = performance.now() - time * 1000; const tick = () => { time = Math.min(doc.timeline!.duration, (performance.now() - start) / 1000); paint(); if (time < doc.timeline!.duration && running) frame = requestAnimationFrame(tick); else { running = false; play.textContent = 'Play animation'; } }; tick(); };
+    const paint = () => { sections.forEach((section, index) => { scenePaint.get(index)?.(time); const root = roots.get(index); if (root) root.render(createElement(DocumentView, { doc, pageIndex: index, time, playback: running })); else { const svg = section.querySelector('svg'); if (svg) svg.outerHTML = renderSvg(doc, index, time); } for (const node of doc.pages[index].nodes.filter(n => n.type === 'model3d' && n.visible !== false)) { section.querySelector(`[data-node-id="${CSS.escape(node.id)}"]`)?.setAttribute('visibility', 'hidden'); const host = section.querySelector<HTMLElement>(`[data-studio-object="${CSS.escape(node.id)}"]`); if (host) { const animated = interpolateNode(node, doc, time), page = doc.pages[index]; host.style.left = `${animated.x / page.width * 100}%`; host.style.top = `${animated.y / page.height * 100}%`; host.style.width = `${animated.width / page.width * 100}%`; host.style.height = `${animated.height / page.height * 100}%`; host.style.opacity = String(animated.opacity ?? 1); } } }); scrub.value = String(time); };
+    play.onclick = () => { running = !running; play.textContent = running ? 'Pause' : 'Play animation'; cancelAnimationFrame(frame); if (!running) return; if (time >= duration) time = 0; const start = performance.now() - time * 1000; const tick = () => { time = Math.min(duration, (performance.now() - start) / 1000); paint(); if (time < duration && running) frame = requestAnimationFrame(tick); else { running = false; play.textContent = 'Play animation'; } }; tick(); };
     scrub.oninput = () => { time = Number(scrub.value); running = false; cancelAnimationFrame(frame); play.textContent = 'Play animation'; paint(); };
     paint();
   }

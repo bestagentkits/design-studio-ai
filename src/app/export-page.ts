@@ -18,7 +18,7 @@ export async function mountExportPage(doc: DesignDocument, index = 0, time = 0) 
   let renderer: THREE.WebGLRenderer | undefined, scene: THREE.Scene | undefined, camera: THREE.PerspectiveCamera | undefined;
   try {
     await loadDocumentFonts(doc);
-    if (page.scene || page.nodes.some(n => n.scene)) {
+    if ((page.scene || page.nodes.some(n => n.scene))&&!page.nodes.some(n=>n.character)) {
       const built = await buildScene(doc, index, time); scene = built.scene; camera = built.camera;
       renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(1); renderer.setSize(page.width, page.height);
@@ -28,6 +28,8 @@ export async function mountExportPage(doc: DesignDocument, index = 0, time = 0) 
     } else host.innerHTML = renderSvg(doc, index, time);
     await document.fonts.ready;
     await Promise.all(Array.from(host.querySelectorAll('img')).map(img => img.decode()));
+    const deadline=performance.now()+15000;
+    while(host.querySelector('[data-character-ready="false"]')) {if(host.querySelector('[data-character-error]')||performance.now()>deadline)throw new Error('Character assets failed to load');await new Promise(resolve=>setTimeout(resolve,16));}
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
     return { host, draw: (time: number) => { if (scene && renderer && camera) { animateScene(scene, doc, index, time); renderer.render(scene, camera); } }, dispose: () => { root?.unmount(); if (scene) disposeScene(scene); renderer?.dispose(); renderer?.forceContextLoss(); host.remove(); } };
   } catch (error) { root?.unmount(); if (scene) disposeScene(scene); renderer?.dispose(); renderer?.forceContextLoss(); host.remove(); throw error; }

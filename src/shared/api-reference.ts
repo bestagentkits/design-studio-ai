@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
+  {method:'GET',path:'/api/projects/{id}/motion',summary:'Inspect character rigs, clips and sampled pose (characterId, nodeId, time query)',body:undefined},
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },
   { method: 'GET', path: '/api/schema', summary: 'Document and operation schemas', body: undefined },
   { method: 'GET', path: '/api/catalog', summary: 'Templates, themes and blocks', body: undefined },

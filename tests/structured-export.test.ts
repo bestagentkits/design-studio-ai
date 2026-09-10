@@ -8,6 +8,8 @@ import { execFile } from 'node:child_process';
 import JSZip from 'jszip';
 import { chromium } from '@playwright/test';
 import { createDocument } from '../src/shared/catalog';
+import {newCharacter,addCharacterLayer,newClip,keyBone} from '../src/shared/character-editing';
+import {characterInstanceSchema} from '../src/shared/character-schema';
 import { createReactArchive } from '../src/shared/react-export';
 
 const run = promisify(execFile);
@@ -35,6 +37,7 @@ test('React source archive builds a real prototype with bundled local assets', {
   const doc = createDocument('web', 'Source prototype');
   const image = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a9R8AAAAASUVORK5CYII=';
   doc.assets.push({ id: 'logo', name: 'Logo', type: 'image', mimeType: 'image/png', url: image });
+  const character=newCharacter();addCharacterLayer(character,'logo','Logo',64,64);const clip=newClip('Wave');character.clips.push(clip);keyBone(character,clip.id,character.bones[0].id,0,{rotation:0});keyBone(character,clip.id,character.bones[0].id,1,{rotation:45});doc.schemaVersion=2;doc.characters=[character];doc.pages[0].nodes.push({id:'actor',name:'Actor',type:'character',x:0,y:0,width:256,height:256,character:characterInstanceSchema.parse({characterId:character.id,clipId:clip.id})});
   const runtime = JSON.parse(await readFile('public/studio-react-runtime.json', 'utf8'));
   const zip = await JSZip.loadAsync(await createReactArchive(doc, runtime));
   assert.ok(zip.file('src/app/design-component.tsx'));

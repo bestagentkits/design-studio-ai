@@ -12,5 +12,5 @@ export const mediaInputSchema = z.object({
   strength: z.number().min(0).max(1).optional(),
 });
 
-export const generationInputSchema = z.object({ prompt: z.string().trim().min(1).max(12000), provider: textProviderSchema, model: z.string().min(1).max(200).optional(), expectedRevision: z.number().int().positive() });
+export const generationInputSchema = z.object({ mode:z.enum(['document','motion']).optional(), prompt: z.string().trim().min(1).max(12000), provider: textProviderSchema, model: z.string().min(1).max(200).optional(), expectedRevision: z.number().int().positive() });
 export const providerInterviewSchema = z.object({ provider: textProviderSchema, model: z.string().min(1).max(200).optional(), expectedRevision: z.number().int().min(0) }).strict();

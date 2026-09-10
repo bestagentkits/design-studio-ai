@@ -1,3 +1,5 @@
+import {motionProposalSchema,motionProposalContext,parseMotionProposal} from '../src/shared/motion-proposal';
+import { operationsSchema, mutateDocument } from '../src/shared/operations';
 import { buildTextRequest } from './text-provider-request';
 import { mediaInputSchema, generationInputSchema } from '../src/shared/provider-requests';
 import { buildImageRequest, decodeImageResult, imageMime, leonardoJob } from './image-providers';
@@ -110,10 +112,13 @@ generationRoutes.post("/:id/generate", async (c) => {
   const savedBrief = await c.env.DB.prepare('SELECT brief,revision FROM design_briefs WHERE project_id=? AND user_id=?').bind(row.id, owner(c)).first<{ brief: string; revision: number }>();
   const brief = savedBrief ? JSON.parse(savedBrief.brief) as DesignBrief : null;
   if (brief && (brief.status !== 'approved' || !brief.scope || !brief.approvedAt)) fail(409, 'brief_not_approved', 'Review and explicitly approve the project scope before generating.');
-  const system = 'You edit DesignDocument v1 JSON. Return only the complete valid document, no prose or markdown. Preserve id and kind and existing useful content unless asked. Nodes have finite pixel x,y,width,height; type frame,group,component,text,image,shape,icon,chart,model3d,video,audio. Prefer structured flex/grid page and container layout for Web/App designs: layout has mode, direction row/column, gap,padding,align,justify,wrap,columns. sizing width/height uses fixed/hug/fill. Explicit absolute containers use local child coordinates; containers with no layout keep legacy page-space coordinates. Components use component:{name,system:antd or shadcn,props:{label,...}}; available names Button,Checkbox,Input,InputNumber,Slider,Image,Avatar,List,Statistics,Chart,Table,Select,Switch,Textarea,Card,Badge,Progress,Tabs,Dialog,Radio. Parent IDs must exist on the same page. Text belongs in text, styles in style. Timeline keyframes support linear,easeIn,easeOut,easeInOut,bounce,spring,step or a cubic bezier tuple. Mesh geometry/UV/materials/bones belong in scene; preserve existing mesh data unless specifically editing it. Never return executable code, scripts, event handlers, or javascript URLs. Preserve schemaVersion, theme, pages, assets and metadata. '
+  const motion=body.mode==='motion'||(body.mode!=='document'&&!!JSON.parse(row.document).characters?.length);
+  const system = 'You edit DesignDocument v1 or v2 JSON. Return only the complete valid document, no prose or markdown. Preserve id and kind and existing useful content unless asked. Nodes have finite pixel x,y,width,height; type frame,group,component,text,image,shape,icon,chart,model3d,video,audio. Prefer structured flex/grid page and container layout for Web/App designs: layout has mode, direction row/column, gap,padding,align,justify,wrap,columns. sizing width/height uses fixed/hug/fill. Explicit absolute containers use local child coordinates; containers with no layout keep legacy page-space coordinates. Components use component:{name,system:antd or shadcn,props:{label,...}}; available names Button,Checkbox,Input,InputNumber,Slider,Image,Avatar,List,Statistics,Chart,Table,Select,Switch,Textarea,Card,Badge,Progress,Tabs,Dialog,Radio. Parent IDs must exist on the same page. Text belongs in text, styles in style. Timeline keyframes support linear,easeIn,easeOut,easeInOut,bounce,spring,step or a cubic bezier tuple. Mesh geometry/UV/materials/bones belong in scene; preserve existing mesh data unless specifically editing it. Never return executable code, scripts, event handlers, or javascript URLs. Preserve schemaVersion, theme, pages, assets and metadata. '
     + (brief ? `The user explicitly approved this scope. Fulfill its objective, audience, direction, deliverables, constraints and acceptance criteria: ${JSON.stringify(brief.scope)}. ` : '')
     + 'Current document: ' + row.document;
-  const { output, usage } = await completeText(c, { provider: body.provider, model: body.model, system, prompt: body.prompt });
+  const motionContext=motionProposalContext(documentSchema.parse(JSON.parse(row.document)));
+  const motionSystem='Return only a JSON array of bounded document operations. Preserve all unrelated artwork, keys, skins and IDs. Build editable bones, clips and constraints; never return code. Existing assets only. The user will review before applying. Operations schema: '+JSON.stringify(z.toJSONSchema(motionProposalSchema))+' Current approved scope: '+JSON.stringify(brief?.scope??null)+' Current document (media URLs omitted): '+JSON.stringify(motionContext);
+  const { output, usage } = await completeText(c, { provider: body.provider, model: body.model, system:motion?motionSystem:system, prompt: body.prompt });
   const currentBrief = await c.env.DB.prepare('SELECT revision FROM design_briefs WHERE project_id=? AND user_id=?').bind(row.id, owner(c)).first<{ revision: number }>();
   if ((currentBrief?.revision ?? 0) !== (savedBrief?.revision ?? 0)) fail(409, 'revision_conflict', 'The brief changed during generation. Review its latest scope before generating again.');
   let draft: unknown;
@@ -128,6 +133,8 @@ generationRoutes.post("/:id/generate", async (c) => {
       "Provider did not return a valid document. Your project was not changed.",
     );
   }
+  let operations:unknown;
+  if(motion){try{operations=parseMotionProposal(documentSchema.parse(JSON.parse(row.document)),draft);draft=mutateDocument(documentSchema.parse(JSON.parse(row.document)),operations);}catch{fail(502,'invalid_generation','Motion operations failed validation. Your project was not changed.');}}
   const parsed = documentSchema.safeParse(draft);
   if (!parsed.success)
     fail(
@@ -141,9 +148,11 @@ generationRoutes.post("/:id/generate", async (c) => {
       "invalid_generation",
       "Provider changed document identity. Your project was not changed.",
     );
-  await validateAssets(c, parsed.data);
+  if(parsed.data.schemaVersion<JSON.parse(row.document).schemaVersion)fail(502,'invalid_generation','Provider downgraded the document.');
+  if((await projectRow(c,row.id)).revision!==row.revision)fail(409,'revision_conflict','Project changed during generation.');
+  await validateAssets(c, parsed.data,row.id);
   return c.json({
-    document: parsed.data,
+    document: parsed.data, operations, baseRevision:row.revision, baseBriefRevision:savedBrief?.revision??0,
     usage,
   });
 });

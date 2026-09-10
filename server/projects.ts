@@ -1,3 +1,5 @@
+import {characterEvolutionErrors} from '../src/shared/character-validation';
+import { inspectMotion, motionInspectionSchema } from '../src/shared/motion-inspection';
 import { updateEvent } from './observability-store';
 import { Hono } from "hono";
 import { z } from "zod";
@@ -73,19 +75,22 @@ export async function saveDocument(
   projectId: string,
   document: unknown,
   expectedRevision: number,
+  expectedBriefRevision?: number,
 ) {
   const row = await projectRow(c, projectId);
   const parsed = documentSchema.parse(document);
+  if (JSON.parse(row.document).schemaVersion > parsed.schemaVersion) fail(409, 'schema_downgrade', 'Reload with a client supporting this document version before saving.');
   if (parsed.id !== row.id || parsed.kind !== row.kind)
     fail(
       400,
       "invalid_document",
       "Document ID and kind must match the project.",
     );
+  const evolution=characterEvolutionErrors(JSON.parse(row.document).characters??[],parsed.characters??[]);if(evolution.length)fail(400,'invalid_topology',evolution.join('; '));
   await validateAssets(c, parsed, row.id);
   parsed.metadata.updatedAt = now();
   const result = await c.env.DB.prepare(
-    "UPDATE projects SET document=?,name=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=?",
+    "UPDATE projects SET document=?,name=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=? AND (? IS NULL OR COALESCE((SELECT revision FROM design_briefs WHERE project_id=projects.id AND user_id=projects.user_id),0)=?)",
   )
     .bind(
       JSON.stringify(parsed),
@@ -94,6 +99,7 @@ export async function saveDocument(
       row.id,
       owner(c),
       expectedRevision,
+      expectedBriefRevision??null, expectedBriefRevision??null,
     )
     .run();
   if (!result.meta.changes)
@@ -272,6 +278,8 @@ projectRoutes.post("/", async (c) => {
       mapping.set(sourceId, await storeAsset(c, projectId, source.name, source.mime_type, await bytes.arrayBuffer()));
     }
     if (mapping.size) {
+      const assetIds = new Map(parsed.assets.map(asset=>[asset.id,mapping.get(asset.url.split('/').pop()!)?.id??asset.id]));
+      for(const character of parsed.characters??[]) for(const attachment of character.attachments) {if(attachment.assetId)attachment.assetId=assetIds.get(attachment.assetId)??attachment.assetId;if(attachment.frames)attachment.frames=attachment.frames.map(id=>assetIds.get(id)??id);}
       parsed.assets = parsed.assets.map(asset => mapping.get(asset.url.split('/').pop()!) ?? asset);
       for (const asset of mapping.values()) if (!parsed.assets.some(a => a.id === asset.id)) parsed.assets.push(asset);
       for (const page of parsed.pages) for (const node of page.nodes) if (node.src?.startsWith('/api/assets/')) node.src = mapping.get(node.src.split('/').pop()!)!.url;
@@ -331,6 +339,7 @@ projectRoutes.put("/:id/document", async (c) => {
     .object({
       document: documentSchema,
       expectedRevision: z.number().int().positive(),
+      expectedBriefRevision:z.number().int().min(0).optional(),
     })
     .parse(await c.req.json());
   return c.json({
@@ -339,6 +348,7 @@ projectRoutes.put("/:id/document", async (c) => {
       c.req.param("id"),
       body.document,
       body.expectedRevision,
+      body.expectedBriefRevision,
     ),
   });
 });
@@ -480,3 +490,5 @@ export async function published(c: Context<Env>, slug: string) {
     },
   );
 }
+
+projectRoutes.get('/:id/motion',async c=>{const row=await projectRow(c,c.req.param('id'));const input=motionInspectionSchema.parse(c.req.query());const doc=documentSchema.parse(JSON.parse(row.document));if(input.nodeId&&!doc.pages.some(p=>p.nodes.some(n=>n.id===input.nodeId&&n.character)))fail(404,'not_found','Unknown character instance');if(input.characterId&&!doc.characters?.some(x=>x.id===input.characterId))fail(404,'not_found','Unknown character');return c.json({revision:row.revision,...inspectMotion(documentSchema.parse(JSON.parse(row.document)),input)});});

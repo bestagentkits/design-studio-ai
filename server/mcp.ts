@@ -1,3 +1,4 @@
+import { motionInspectionSchema } from '../src/shared/motion-inspection';
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   McpServer,
@@ -95,6 +96,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   };
   registerDesignSystemTools(server, callApi);
   registerObservabilityTools(server, callApi);
+  server.registerTool('inspect_motion',{description:'Read rig IDs, clips, skins, constraints and an optional sampled pose. No provider call.',inputSchema:{projectId:z.string(),...motionInspectionSchema.shape}},async ({projectId,...query})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/motion?${new URLSearchParams(Object.entries(query).filter(([,v])=>v!==undefined).map(([k,v])=>[k,String(v)]))}`));
   server.registerTool(
     'merge_design',
     { description: 'Merge your edited document against the exact base read earlier. Independent changes are retained; same-field conflicts require reconciliation. Never change the base to bypass a conflict.', inputSchema: { projectId: z.string(), ...mergeRequestSchema.shape } },
@@ -180,6 +182,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       inputSchema: {
         projectId: z.string(),
         document: documentSchema,
+        expectedBriefRevision:z.number().int().min(0).optional(),
         expectedRevision: z.number().int().positive(),
       },
     },
@@ -412,14 +415,15 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         "Render the saved design on the cloud and return actual file bytes. PNG is a visual preview. PPTX preserves legacy editable text/shapes and rasterizes structured layouts. React returns runnable frontend source ZIP; GLB/glTF return scene geometry and animation. Video supports up to 60 seconds. Import external media into the project first.",
       inputSchema: {
         projectId: z.string(),
-        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf"]),
+        start:z.number().min(0).optional(),end:z.number().positive().optional(),fps:z.number().int().min(1).max(60).optional(),
+        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf", "motion", "png-sequence", "spritesheet"]),
         pageIndex: z.number().int().min(0).default(0),
         expectedRevision: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ projectId, format, pageIndex, expectedRevision }) => {
-      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision }) }, telemetryEnv(c, toolSpan.getStore()));
+    async ({ projectId, format, pageIndex, expectedRevision, start, end, fps }) => {
+      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision, start, end, fps }) }, telemetryEnv(c, toolSpan.getStore()));
       if (!response.ok) return { isError: true, ...result(await response.json()) };
       if (['json', 'html', 'svg'].includes(format)) return result({ format, content: await response.text() });
       const bytes = await response.arrayBuffer();
@@ -436,6 +440,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         "Ask a configured BYOK text provider to propose a complete design. Can incur provider charges. Does not save; use update_document after reviewing.",
       inputSchema: {
         projectId: z.string(),
+        mode:z.enum(['document','motion']).optional(),
         prompt: z.string().min(1).max(12000),
         provider: textProviderSchema,
         model: z.string().optional(),
