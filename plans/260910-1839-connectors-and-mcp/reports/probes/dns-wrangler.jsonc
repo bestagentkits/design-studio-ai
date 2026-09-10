@@ -1,0 +1,9 @@
+{
+  "name": "dsa-d5cf-dns-probe",
+  "main": "dns-edge-worker.mjs",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "routes": [],
+  "observability": { "enabled": false }
+}

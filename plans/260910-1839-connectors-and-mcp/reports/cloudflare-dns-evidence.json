@@ -1,0 +1,95 @@
+{
+  "observedAt": "2026-09-10T12:34:23.737Z",
+  "runtime": "Cloudflare remote preview",
+  "compatibilityDate": "2026-09-07",
+  "compatibilityFlags": [
+    "nodejs_compat",
+    "global_fetch_strictly_public"
+  ],
+  "targets": [
+    {
+      "label": "control",
+      "target": "https://example.com",
+      "status": 200,
+      "elapsedMs": 15,
+      "errorCode": null,
+      "title": "Example Domain"
+    },
+    {
+      "label": "loopback",
+      "target": "https://d5cf-egress-loopback.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 34,
+      "errorCode": "1002",
+      "title": null
+    },
+    {
+      "label": "private",
+      "target": "https://d5cf-egress-private.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 54,
+      "errorCode": "1002",
+      "title": null
+    },
+    {
+      "label": "linklocal",
+      "target": "https://d5cf-egress-linklocal.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 34,
+      "errorCode": "1002",
+      "title": null
+    },
+    {
+      "label": "ipv6",
+      "target": "https://d5cf-egress-ipv6.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 47,
+      "errorCode": "1102",
+      "title": null
+    },
+    {
+      "label": "mapped",
+      "target": "https://d5cf-egress-mapped.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 94,
+      "errorCode": "1002",
+      "title": null
+    },
+    {
+      "label": "cname",
+      "target": "https://d5cf-egress-cname.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 104,
+      "errorCode": "1002",
+      "title": null
+    }
+  ],
+  "dnsChange": {
+    "name": "d5cf-egress-rebind.beta.studio.agentkit.best",
+    "initialDns": [
+      {
+        "name": "d5cf-egress-rebind.beta.studio.agentkit.best",
+        "type": 1,
+        "TTL": 60,
+        "data": "1.1.1.1"
+      }
+    ],
+    "changedAt": "2026-09-10T12:32:19.065Z",
+    "finalDns": [
+      {
+        "name": "d5cf-egress-rebind.beta.studio.agentkit.best",
+        "type": 1,
+        "TTL": 60,
+        "data": "127.0.0.1"
+      }
+    ],
+    "result": {
+      "label": "rebind",
+      "target": "https://d5cf-egress-rebind.beta.studio.agentkit.best",
+      "status": 403,
+      "elapsedMs": 33,
+      "errorCode": "1002",
+      "title": null
+    }
+  }
+}

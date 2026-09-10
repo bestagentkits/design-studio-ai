@@ -11,12 +11,11 @@ Phase 1 remains incomplete. Its exact acceptance says: “An unsupported profile
 
 ### Selected next path
 
-User selected native Cloudflare validation on 2026-09-10 at 19:11 Asia/Ho_Chi_Minh. Awaiting the actual designated test domain and DNS management access. Gateway is not selected.
+User selected native Cloudflare validation and authorized `studio.agentkit.best`, an isolated `beta.studio.agentkit.best`, and deployment on pushes to `dev`. The project-scoped Cloudflare credential successfully created isolated DNS records, D1 and R2 resources. The unrelated default Wrangler login was not used for these resources. Gateway remains unselected.
 
-1. **Continue validating native Cloudflare transport**, preserving the existing hosting topology. Needs an explicitly designated DNS test zone/hostname with authority to change A/AAAA/CNAME responses and a controlled HTTPS origin. Exercise public-to-private rebinding, mixed DNS answers, mapped IPv6, CNAME changes and redirects without real credentials. Existing Wrangler login works, but its observed scopes include `zone:read`, not DNS edit authority. No DNS records were changed. Passing these tests must be paired with platform guarantees; a few blocked requests do not establish a universal invariant.
-2. **Adopt a Node egress gateway** if native transport cannot meet the invariant. A separate HTTPS service resolves and validates every address immediately before connecting, pins the selected public address while preserving target TLS/SNI validation, denies redirects, and bounds time/bytes. Workers authenticate to this service; outgoing provider credentials transit it. This adds a service, availability dependency, trust boundary, deployment secrets and compute/egress cost. No host, price, deployment, gateway implementation or credential forwarding is approved/claimed yet. A destination and budget must be selected before deployment. Self-hosted Node can use the same transport directly.
+Native transport now has controlled hostname evidence, including public-to-loopback DNS changes, plus a documented platform boundary: [Cloudflare explains that global fetch reaches only the public Internet](https://blog.cloudflare.com/workers-environment-live-object-bindings/). The documented legacy exception concerns same-zone origin bypass; the probe explicitly enables `global_fetch_strictly_public`, has no origin or private-network bindings, and never dispatches user URLs through a resource binding. This supports continuing with native Cloudflare transport under those constraints; finite probes alone are not a universal security proof.
 
-No allowlist-only substitute, Node-only product, relaxed DNS guard or gateway was silently adopted. The complete MCP + GitHub + Drive scope remains queued.
+Remaining phase-1 work: implement and test the shared transport boundary (Node DNS pinning; Workers public fetch; redirects; bounded responses; OAuth discovery destinations), complete remaining OAuth/profile coverage and choose measured step budgets. No extra domain/access decision is pending. The complete MCP + GitHub + Drive scope remains queued.
 
 ## Runtime and dependency evidence
 
@@ -48,7 +47,13 @@ Run from repository root. Install isolated dependencies with `npm ci --prefix pl
 | 2026-07-28 | JSON | list/call result 42; modern era | Same |
 | 2026-07-28 | SSE | list/call result 42; modern era | Same |
 
-Pinned modern client rejected the legacy-only endpoint. All clients and servers closed in finally blocks. Initial paired Node/workerd elapsed times: 602, 36, 44, 33 ms respectively; these tiny local operations do not validate production tool budgets, provider latency, CPU or memory envelopes. OAuth, pagination, resource reading and interruption during a call remain unproven.
+Pinned modern client rejected the legacy-only endpoint. All clients and servers closed in finally blocks. Initial paired Node/workerd elapsed times: 602, 36, 44, 33 ms respectively; these tiny local operations do not validate production tool budgets, provider latency, CPU or memory envelopes. The separate OAuth probe below now covers bounded modern JSON auth feasibility; pagination, resource reading, legacy/SSE OAuth combinations and interruption during a call remain unproven.
+
+### Outgoing OAuth feasibility
+
+[OAuth probe results](oauth-probe-results.md) records twelve matching cases in Node/local workerd using the actual client SDK and a real isolated HTTP authorization/MCP contract peer. Coverage includes discovery, S256 PKCE, denial, application-owned callback state, SDK issuer checks, code replay, refresh and an authenticated modern JSON tool call. No external provider account or production lifecycle is claimed.
+
+The combined Node peer/client needed Hono's `overrideGlobalObjects: false` to keep SDK error parsing compatible with native fetch responses. `server/node.ts` currently uses the same adapter default; integration must carry this requirement or otherwise prove error parsing under that entrypoint. Callback state, durable discovery/verifier persistence, one-use authorization state and credential encryption remain application responsibilities.
 
 ### Connection-time lookup hook
 
@@ -58,6 +63,10 @@ Pinned modern client rejected the legacy-only endpoint. All clients and servers 
 - Local workerd custom lookup called zero times and returned `The options.lookup option is not implemented`.
 - This proves the Node hook cannot be reused as a Workers guard. It does not prove a full Node public-IP classifier/pinned TLS implementation; that implementation is still pending.
 - First scratch run used obsolete Miniflare constructor options and failed validation. Switched to the installed exported conversion helper. Second run exposed the expected synchronous lookup rejection outside the initial JSON wrapper; corrected the probe error capture. Neither scratch failure affected application code or checks.
+
+### Node pinned TLS connection
+
+`node plans/260910-1839-connectors-and-mcp/reports/probes/node-dns-pinning.mjs` passed on Node v25.2.1. A real HTTPS call to example.com returned 200 with the TLS peer authenticated and its socket address equal to the sole checked address returned by the lookup hook. The resolver was called once; its programmed second answer would have been loopback. Loopback, RFC1918, link-local, IPv6 loopback and IPv4-mapped-loopback answers were rejected before connecting (five cases). The scratch address list is deliberately not claimed as a complete production classifier.
 
 ### Cloudflare remote preview
 
@@ -73,7 +82,17 @@ curl --fail --max-time 25 --silent http://127.0.0.1:18841/
 
 Observed `https://example.com` → 200; `https://127.0.0.1` → 403; `https://[::1]` → 403; HTTPS lookup hook → `The options.lookup option is not implemented`.
 
-This was actual remote preview execution, not a production deployment. It used no project database, bucket, application secrets, routes or provider credentials. Stopped the harness after the probe. Cloudflare blocks direct IP fetches generally, so literal loopback rejection **does not establish hostname rebinding protection**. No controlled DNS/CNAME changes were tested.
+This was actual remote preview execution, not a production deployment. It used no project database, bucket, application secrets, routes or provider credentials. Stopped the harness after the probe. Cloudflare blocks direct IP fetches generally, so literal loopback rejection **does not establish hostname rebinding protection**. That first probe did not test controlled DNS/CNAME changes; the later experiment below does.
+
+### Controlled hostname and DNS change experiment
+
+[Machine-readable results](cloudflare-dns-evidence.json), [fixed-target Worker](probes/dns-edge-worker.mjs), [configuration](probes/dns-wrangler.jsonc). Executed with the project account in Cloudflare remote preview, local forwarding port 18842. No application database, bucket, credential or provider account was bound to the probe.
+
+Created seven temporary, DNS-only records under `beta.studio.agentkit.best`, with TTL 60. The public control `https://example.com` returned 200. Hostnames pointing at loopback IPv4, RFC1918, link-local metadata IP, IPv4-mapped IPv6 and CNAME-to-loopback returned HTTP 403 / Cloudflare 1002. IPv6 loopback returned HTTP 403 / 1102; record the observed result without interpreting its code as a DNS-specific guarantee.
+
+For DNS mutation, Cloudflare DNS-over-HTTPS first reported public A `1.1.1.1`. The same owned record was changed to `127.0.0.1`; after TTL, DNS-over-HTTPS reported loopback and the remote Worker fetch returned HTTP 403 / 1002. This is an observed public-to-private DNS transition followed by connection rejection, not a nanosecond race stress test or a successful TLS origin exchange at the initial public IP. Mixed A/AAAA and credential-bearing OAuth/redirect behavior remain separate transport tests.
+
+All seven temporary DNS records were deleted after recording evidence; production and beta application domain records were not changed by this experiment. The preview process was stopped.
 
 ### Persistence and interrupted writes
 
@@ -88,7 +107,7 @@ Passed with Node in-memory SQLite and local D1:
 - Late completion CAS cannot overwrite recovered state.
 - An unknown write cannot be blindly dispatched again.
 
-SQL belongs only to scratch probes. It is not a migration or the finished operation service. No remote D1 database was created. Production run/provider budgets, revocation races and full request-driven execution remain pending.
+SQL belongs only to scratch probes. It is not a migration or the finished operation service. No remote D1 database was used for this lease probe; the separately authorized beta deployment has its own D1 database. Production run/provider budgets, revocation races and full request-driven execution remain pending.
 
 ## Shared schema foundation
 
@@ -103,12 +122,12 @@ They are not yet imported by application routes or clients. Ownership, authoriza
 - `npx tsx --test tests/connector-contracts.test.ts`: 9 passed, 0 failed.
 - `npm run build:cli`: passed.
 - `npm run typecheck`: passed.
-- `npm test`: 157 passed, 0 failed; includes existing auth/MCP/provider/export behavior.
+- Initial `npm test`: 157 passed; after merging current main and aligning the run provider schema with its owning validator: 166 passed, 0 failed.
 - `npm run build`: passed; generated normal documentation/renderer output. Existing ineffective dynamic-import warning for document-view remains.
 - Final schema review added malformed-URL regression cases and allowed base64url identifier prefixes; focused tests and typecheck rerun afterward.
 - `git diff --check`: passed at checkpoint.
-- UI/E2E, real connector accounts, paid model tool loop, GitHub PR/Drive artifacts and production deployment: not performed.
-- No independent subagent review claimed; this session restricts delegation absent explicit current-request authorization.
+- Beta enabling work: Chromium desktop 31 passed, mobile 30 passed with one existing skip, and exact-commit beta CI/deploy passed. See [beta rollout](beta-rollout.md). Real connector accounts, paid model tool loop, GitHub PR/Drive artifacts and production deployment remain unperformed.
+- Independent review of beta workflow, native egress evidence and provider-schema alignment completed; recorded workflow lookup finding fixed and re-reviewed. This does not constitute a review of the unimplemented connector product.
 
 ## References checked during execution
 
@@ -118,6 +137,6 @@ They are not yet imported by application routes or clients. Ownership, authoriza
 - [Workers fetch](https://developers.cloudflare.com/workers/runtime-apis/fetch/): global fetch and strictly-public routing flag; not a full DNS pinning guarantee.
 - [Workers known issues](https://developers.cloudflare.com/workers/platform/known-issues/): direct-IP fetch limitation; remote preview caveats.
 
-## Remaining questions
+## Remaining work
 
-What exact test domain/subdomain and configured DNS management access should be used? Native Cloudflare validation is selected; no gateway authorization is assumed. Until the controlled experiment and remaining phase-1 requirements pass, phase 1 stays incomplete and dependent phases remain pending.
+No domain or DNS-access question remains. Native Cloudflare is selected and the controlled experiment succeeded for the recorded cases. Phase 1 still requires complete transport/OAuth implementation and measured execution budgets; dependent product phases remain unfinished.
