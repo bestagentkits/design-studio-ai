@@ -63,3 +63,7 @@ Mở package ở project mới; đổi skin vẫn đủ assets sau khi source pr
 ## Risks, security and rollback
 
 Filename/HTTP200 không chứng minh export đúng. Browser recording fallback vẫn silent nếu chưa có audio support; thiếu capability phải hiện rõ. Không tải hoặc publish private assets ra URL công khai chỉ để export thành công.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

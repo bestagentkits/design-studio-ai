@@ -61,3 +61,7 @@ Các prompt mẫu tạo proposal có keyframes thật và preview; apply/reject/
 ## Risks, security and rollback
 
 LLM không được điều khiển trực tiếp state runtime hoặc viết executable code. Không gửi credential/user asset trong docs/traces; giữ transport redirect:'manual' trên Workers.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

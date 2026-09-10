@@ -56,3 +56,7 @@ Cùng rig có hai instance khác skin/clip/time; walk + wave phối đúng vùng
 ## Risks, security and rollback
 
 State machine cho game engine chưa nằm trong native interaction API. Không tự thêm callbacks có quyền network, write hoặc thực thi code trong published content.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

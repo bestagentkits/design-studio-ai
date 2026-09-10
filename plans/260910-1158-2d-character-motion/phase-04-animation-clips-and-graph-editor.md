@@ -59,3 +59,7 @@ Hai thuộc tính cùng timestamp có curves khác nhau; retime nhiều key khô
 Không reuse Selection chỉ dựa timestamp khi keys đã có ID. Ghost sampling không bắn events hoặc mutate physics state đang phát.
 
 Giữ owner/asset isolation, explicit brief approval và expected revision. Không ghi credentials vào document/log/artifact; không dùng dữ liệu tài khoản thực cho test.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

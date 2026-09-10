@@ -59,3 +59,7 @@ Một ảnh mesh uốn theo nhiều bones; thay skin và linked mesh không mấ
 Texture/alpha seams cần kiểm tra visual thật; không coi serialized weights là proof skinning chạy. Revert UI entry nếu lỗi nhưng giữ reader/document data và không sửa 3D exports.
 
 Giữ owner/asset isolation, explicit brief approval và expected revision. Không ghi credentials vào document/log/artifact; không dùng dữ liệu tài khoản thực cho test.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

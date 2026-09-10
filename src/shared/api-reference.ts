@@ -1,7 +1,6 @@
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
-  {method:'GET',path:'/api/projects/{id}/motion',summary:'Inspect character rigs, clips and sampled pose (characterId, nodeId, time query)',body:undefined},
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },
   { method: 'GET', path: '/api/schema', summary: 'Document and operation schemas', body: undefined },
   { method: 'GET', path: '/api/catalog', summary: 'Templates, themes and blocks', body: undefined },
@@ -18,6 +17,7 @@ export const apiEndpoints = [
   { method: 'GET', path: '/api/projects', summary: 'List your projects', body: undefined },
   { method: 'POST', path: '/api/projects', summary: 'Create a project', body: { name: 'My design', kind: 'web' } },
   { method: 'GET', path: '/api/projects/{id}', summary: 'Read a project', body: undefined },
+  {method:'GET',path:'/api/projects/{id}/motion',summary:'Inspect character rigs, clips and sampled pose (characterId, nodeId, time query)',body:undefined},
   { method: 'PUT', path: '/api/projects/{id}/document', summary: 'Save a validated document at the observed revision', body: { expectedRevision: 1, document: {} } },
   { method: 'POST', path: '/api/projects/{id}/merge', summary: 'Merge nonconflicting human and agent edits', body: { baseRevision: 1, base: {}, document: {} } },
   { method: 'GET', path: '/api/projects/{id}/changes', summary: 'Read current revision and changes', body: undefined },

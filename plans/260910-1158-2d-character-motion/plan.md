@@ -16,7 +16,7 @@ created: 2026-09-10
 
 Nâng motion thành workspace tạo nhân vật 2D: import ảnh, rig, slots/skins, mesh/weights, clip/keyframe/graph, IK/path/transform constraints, physics, pose sliders, blending, AI đề xuất chỉnh sửa và xuất bản thực tế.
 
-Implementation authorized, including PR and merge into main. Execution baseline: `ee7ab1b8e8b5cb1152139afd0d618ec9520a560e`; branch `codex/2d-character-motion`. Application changes and verification are in progress.
+Implementation authorized, including PR and merge into main. Execution baseline: `ee7ab1b8e8b5cb1152139afd0d618ec9520a560e`; branch `codex/2d-character-motion`. Native implementation is complete; release verification and merge are in progress.
 
 Giả định để lập kế hoạch: ưu tiên mascot cho video/web/slide; chuẩn bị native portable player. Game-engine integration, nhập/xuất Spine và PSD là nhánh cần xác nhận, không được tự nhận là đã hỗ trợ hoặc tự bỏ nếu người dùng chọn. Xem [thiết kế và quyết định](architecture.md).
 
@@ -33,16 +33,16 @@ Giả định để lập kế hoạch: ưu tiên mascot cho video/web/slide; ch
 
 | # | Phase | Status |
 |---|-------|--------|
-| 1 | [Chốt contract và runtime spike](phase-01-start.md) | Implemented; acceptance in progress |
-| 2 | [Document, compatibility và runtime](phase-02-document-contracts-and-runtime.md) | Implemented; acceptance in progress |
-| 3 | [Assets và rig editor](phase-03-character-assets-and-rig-editor.md) | Implemented; acceptance in progress |
-| 4 | [Clip, dopesheet và graph editor](phase-04-animation-clips-and-graph-editor.md) | Implemented; acceptance in progress |
-| 5 | [Mesh, skins và deformation](phase-05-meshes-skins-and-deformation.md) | Implemented; acceptance in progress |
-| 6 | [Constraints, physics và pose controls](phase-06-constraints-physics-and-pose-controls.md) | Implemented; acceptance in progress |
-| 7 | [Blending và scene composition](phase-07-clip-mixing-and-scene-composition.md) | Implemented; acceptance in progress |
-| 8 | [AI motion và agent workflows](phase-08-ai-motion-and-agent-workflows.md) | Implemented; acceptance in progress |
-| 9 | [Export và portable playback](phase-09-exports-and-portable-playback.md) | Implemented; acceptance in progress |
-| 10 | [Acceptance, docs và rollout handoff](phase-10-acceptance-documentation-and-rollout.md) | Implemented; acceptance in progress |
+| 1 | [Chốt contract và runtime spike](phase-01-start.md) | Implemented; see release evidence |
+| 2 | [Document, compatibility và runtime](phase-02-document-contracts-and-runtime.md) | Implemented; see release evidence |
+| 3 | [Assets và rig editor](phase-03-character-assets-and-rig-editor.md) | Implemented; see release evidence |
+| 4 | [Clip, dopesheet và graph editor](phase-04-animation-clips-and-graph-editor.md) | Implemented; see release evidence |
+| 5 | [Mesh, skins và deformation](phase-05-meshes-skins-and-deformation.md) | Implemented; see release evidence |
+| 6 | [Constraints, physics và pose controls](phase-06-constraints-physics-and-pose-controls.md) | Implemented; see release evidence |
+| 7 | [Blending và scene composition](phase-07-clip-mixing-and-scene-composition.md) | Implemented; see release evidence |
+| 8 | [AI motion và agent workflows](phase-08-ai-motion-and-agent-workflows.md) | Implemented; see release evidence |
+| 9 | [Export và portable playback](phase-09-exports-and-portable-playback.md) | Implemented; see release evidence |
+| 10 | [Acceptance, docs và rollout handoff](phase-10-acceptance-documentation-and-rollout.md) | Implemented; see release evidence |
 
 ## Dependencies and ownership
 
@@ -62,7 +62,9 @@ Người tích hợp sở hữu `schema`, `operations`, `editor`, renderer, serv
 
 ## Review and handoff
 
-[Evidence và self-review](reports/planning-review.md) ghi baseline, rủi ro, validation; không phải independent multi-agent audit. Implementation evidence is being collected in reports. Checklist trong các phase là nguồn trạng thái; không có task tracker riêng được tạo.
+[Evidence và self-review](reports/planning-review.md) ghi baseline, rủi ro, validation; không phải independent multi-agent audit. Implementation evidence is being collected in reports. Execution status and verification evidence: [implementation review](reports/implementation-review.md), [contract decisions](reports/contract-decisions.md), [performance boundaries](reports/performance-baseline.md). Original phase checklists remain a planning audit trail; unchecked extended measurements are not product guarantees.
+
+Release tracking: [local checks and rollout boundaries](reports/release-evidence.md). Extended device/performance and live-provider measurements remain explicitly unclaimed.
 
 Execution was authorized on 2026-09-10. Các lựa chọn kỹ thuật trong plan là đề xuất, không phải business decision đã được người dùng xác nhận. Nhánh game/Spine cần quyết định trước khi làm adapter; không chặn lập kế hoạch phần native.
 

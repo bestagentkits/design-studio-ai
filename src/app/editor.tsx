@@ -1106,7 +1106,7 @@ export function Editor({
       );
     } catch (e) {
       setError(message(e));
-      if (!local && !["google", "mp4"].includes(format))
+      if (!local && !["google", "mp4", "motion", "png-sequence", "spritesheet"].includes(format))
         setFailedExport(format);
     } finally {
       setBusy("");

@@ -64,3 +64,7 @@ Tất cả requested native capability có evidence hoặc blocker chính xác; 
 ## Risks, security and rollback
 
 Nếu đang lưu v2 thì rollback phải giữ reader-compatible deployment. Không reset DB/rotate encryption key để sửa test. Plan/report chỉ là lịch sử, không thay evergreen product authority.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

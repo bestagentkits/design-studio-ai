@@ -59,3 +59,7 @@ Có ảnh/video thử nghiệm thực, số đo và quyết định backend; coo
 Fallback poster không đạt animation parity. Nếu runtime không đạt tiêu chí, đổi phương án ở spike; không tạo dữ liệu v2 trước khi có reader/rollback strategy.
 
 Giữ owner/asset isolation, explicit brief approval và expected revision. Không ghi credentials vào document/log/artifact; không dùng dữ liệu tài khoản thực cho test.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

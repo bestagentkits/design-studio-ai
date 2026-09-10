@@ -1,3 +1,4 @@
+import {documentWriteSchema} from '../src/shared/document-write';
 import {characterEvolutionErrors} from '../src/shared/character-validation';
 import { inspectMotion, motionInspectionSchema } from '../src/shared/motion-inspection';
 import { updateEvent } from './observability-store';
@@ -335,13 +336,7 @@ projectRoutes.patch("/:id", async (c) => {
   });
 });
 projectRoutes.put("/:id/document", async (c) => {
-  const body = z
-    .object({
-      document: documentSchema,
-      expectedRevision: z.number().int().positive(),
-      expectedBriefRevision:z.number().int().min(0).optional(),
-    })
-    .parse(await c.req.json());
+  const body = documentWriteSchema.parse(await c.req.json());
   return c.json({
     project: await saveDocument(
       c,

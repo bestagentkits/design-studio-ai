@@ -22,11 +22,11 @@ export class CharacterWebGL {
     g.uniform1f(g.getUniformLocation(this.program,'solid'),solid?1:0);g.drawArrays(g.TRIANGLES,0,indices.length);
   }
   render(c:Character,i:CharacterInstance,images:Map<string,TexImageSource>,time:number) {
+    if(c.slots.some(s=>s.blend==='multiply'))throw new Error('Multiply blending requires the Canvas2D renderer');
     const g=this.gl;if(g.isContextLost())throw new Error('Character graphics context lost');
     g.viewport(0,0,g.canvas.width,g.canvas.height);g.useProgram(this.program);g.uniform2f(g.getUniformLocation(this.program,'size'),c.width,c.height);g.clearColor(0,0,0,0);g.stencilMask(255);g.clear(g.COLOR_BUFFER_BIT|g.STENCIL_BUFFER_BIT);g.enable(g.BLEND);g.disable(g.DEPTH_TEST);
     const pose=evaluateCharacter(c,i,time),world=worldMatrices(c.bones,pose.bones),slots=[...c.slots].sort((a,b)=>pose.slots[a.id].order-pose.slots[b.id].order);
     const clips:{points:Point[];inverse:boolean;end:string}[]=[];
-    const live=new Set<string>();
     for(const slot of slots) {
       const state=pose.slots[slot.id],a=c.attachments.find(a=>a.id===state.attachment);
       if(a&&a.kind!=='bounds') {
@@ -35,7 +35,7 @@ export class CharacterWebGL {
         else {
           const assetId=a.kind==='sequence'?a.frames?.[Math.floor(time*(a.fps??12))%a.frames.length]:a.assetId,source=images.get(assetId??'');
           if(source&&assetId) {
-            live.add(assetId);let texture=this.textures.get(assetId);
+            let texture=this.textures.get(assetId);
             if(!texture||texture.source!==source){if(texture)g.deleteTexture(texture.texture);texture={source,texture:g.createTexture()!};this.textures.set(assetId,texture);g.bindTexture(g.TEXTURE_2D,texture.texture);g.pixelStorei(g.UNPACK_PREMULTIPLY_ALPHA_WEBGL,0);g.texImage2D(g.TEXTURE_2D,0,g.RGBA,g.RGBA,g.UNSIGNED_BYTE,source);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);}else g.bindTexture(g.TEXTURE_2D,texture.texture);
             g.disable(g.STENCIL_TEST);
             if(clips.length) {
@@ -48,7 +48,7 @@ export class CharacterWebGL {
               });
               g.colorMask(true,true,true,true);g.stencilMask(0);const mask=(1<<clips.length)-1;g.stencilFunc(g.EQUAL,mask,mask);g.stencilOp(g.KEEP,g.KEEP,g.KEEP);
             }
-            g.blendFunc(slot.blend==='multiply'?g.DST_COLOR:g.ONE,slot.blend==='add'?g.ONE:slot.blend==='screen'?g.ONE_MINUS_SRC_COLOR:g.ONE_MINUS_SRC_ALPHA);
+            g.blendFunc(g.ONE,slot.blend==='add'?g.ONE:slot.blend==='screen'?g.ONE_MINUS_SRC_COLOR:g.ONE_MINUS_SRC_ALPHA);
             g.uniform1f(g.getUniformLocation(this.program,'opacity'),Math.max(0,Math.min(1,state.opacity)));
             const mesh=a.mesh??c.attachments.find(x=>x.id===a.sourceMeshId)?.mesh;
             this.draw(vertices,mesh?.uv??[[0,0],[1,0],[1,1],[0,1]],mesh?.triangles??[0,1,2,0,2,3]);

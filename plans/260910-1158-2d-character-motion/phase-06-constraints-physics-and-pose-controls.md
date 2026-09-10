@@ -55,3 +55,7 @@ Kéo tay giải đúng IK; tóc/đuôi physics chuyển động thực; slider p
 ## Risks, security and rollback
 
 Physics có state; không tuyên bố evaluator thuần time nếu chưa replay/reset đúng. Baking có budget samples; không bake vô hạn để né solver lỗi.
+
+## Execution record (2026-09-10)
+
+Native implementation is present. See [contract decisions](reports/contract-decisions.md) for final technical choices and [implementation review](reports/implementation-review.md) for executed checks and explicit limitations. Original checklists above are the planning audit trail; measured performance targets and live-provider acceptance are not claimed complete.

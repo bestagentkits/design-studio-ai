@@ -14,7 +14,7 @@ Geometry is an atomic merge field. Concurrent edits to one mesh conflict even wh
 
 [character-runtime.ts](../src/shared/character-runtime.ts) evaluates setup → clips/masks → sliders → ordered constraints → fixed-step spring physics. x/y are local pixels; rotation is degrees and retains authored full turns. Keys use their outgoing easing, sparse channels use setup values, discrete attachment/order keys hold. Looping clip time is modulo duration; nonlooping clips clamp to the final key. Scene placements use inclusive end for their final pose; exported frame ranges exclude end.
 
-[character-webgl.ts](../src/shared/character-webgl.ts), [character-canvas.ts](../src/shared/character-canvas.ts), and [character-svg.ts](../src/shared/character-svg.ts) share affine and weighted vertex evaluation. Native WebGL handles textured triangles and up to eight stencil masks; Canvas2D provides context-loss/unavailable fallback. The static SVG representation retains mesh textures using clipped affine triangles. Runtime shaders are trusted application code, never document inputs.
+[character-webgl.ts](../src/shared/character-webgl.ts), [character-canvas.ts](../src/shared/character-canvas.ts), and [character-svg.ts](../src/shared/character-svg.ts) share affine and weighted vertex evaluation. Native WebGL handles textured triangles and up to eight stencil masks; Canvas2D handles multiply blending on transparent surfaces and provides context-loss/unavailable fallback. The static SVG representation retains mesh textures using clipped affine triangles. Runtime shaders are trusted application code, never document inputs.
 
 ## Agent and export workflows
 
@@ -22,7 +22,7 @@ Geometry is an atomic merge field. Concurrent edits to one mesh conflict even wh
 
 Generation `mode: motion` returns operations plus preview document and base document/brief revisions. `PUT /document` accepts `expectedBriefRevision` for atomic proposal application. Manual editing does not require brief approval. Provider success must be tested with a configured account; validation tests do not establish live provider quality.
 
-[export-contract.ts](../src/shared/export-contract.ts) owns format/range fields. `motion` returns native ZIP with embedded media/player; `png-sequence` and `spritesheet` return PNG files plus time/rectangle manifest. `start`, `end`, `fps` control sampling, with bounded frame/pixel counts. HTML/React use trusted bundled sources. Game engines, Spine file import/export and PSD parsing are separate integrations, not implied by this native format.
+[export-contract.ts](../src/shared/export-contract.ts) owns format/range fields. `motion` returns native ZIP with embedded media/player. The Character Motion importer reads only validated JSON, rejects unsafe ZIP paths and oversized expansion, and uploads embedded images through the existing owned-asset endpoint; `png-sequence` and `spritesheet` return PNG files plus time/rectangle manifest. `start`, `end`, `fps` control sampling, with bounded frame/pixel counts. HTML/React use trusted bundled sources. 3D scene composition retains the ordered SVG/3D layers from the scene renderer; standalone 3D nodes in a 2D character page use an isolated transparent scene. Game engines, Spine file import/export and PSD parsing are separate integrations, not implied by this native format.
 
 ## Verification
 
