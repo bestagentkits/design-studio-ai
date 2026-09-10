@@ -14,13 +14,13 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.1.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.2.tgz`, or install the published release directly:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.0/bestagentkits-design-studio-ai-0.3.0.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.2/bestagentkits-design-studio-ai-0.3.2.tgz
 ```
 
-The [v0.3.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.0) includes CLI and skill archives. The package is not published to the npm registry.
+The [v0.3.2 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.2) includes CLI and skill archives. The package is not published to the npm registry.
 
 The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
 

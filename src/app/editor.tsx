@@ -1,3 +1,7 @@
+import { componentIcons } from './component-icons';
+import { screenParam, useScreenState, writeScreen } from './screen-state';
+import { PanelLeftClose, PanelRightClose, PanelLeftOpen, PanelRightOpen, Presentation } from 'lucide-react';
+
 import { builtInProviders, isTextProvider, isCustomProvider } from '../shared/providers';
 import { trackClient } from './analytics';
 import './editor-ergonomics.css';
@@ -162,8 +166,8 @@ export function Editor({
       setBrief(next);
       setBriefManual(
         Boolean(
-          next?.status === "approved" &&
-          initial.document.pages.some((p) => p.nodes.length),
+          screenParam('brief') === 'editor' || (screenParam('brief') !== 'open' && next?.status === "approved" &&
+          initial.document.pages.some((p) => p.nodes.length)),
         ),
       );
       setBriefLoaded(true);
@@ -174,6 +178,7 @@ export function Editor({
   useEffect(() => {
     void loadBrief();
   }, [initial.id]);
+  useEffect(() => { const restore = () => { if (screenParam('brief') === 'open') setBriefManual(false); if (screenParam('brief') === 'editor') setBriefManual(true); }; window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, []);
   async function buildFromBrief(
     approvedBrief: DesignBrief,
     selectedProvider: string,
@@ -256,7 +261,7 @@ export function Editor({
   const [project, setProject] = useState(initial),
     [doc, setDoc] = useState<DesignDocument>(() => clone(initial.document));
   const [saved, setSaved] = useState(JSON.stringify(initial.document)),
-    [requestedPageIndex, setPageIndex] = useState(0),
+    [requestedPageIndex, setPageIndexState] = useState(() => Math.max(0, initial.document.pages.findIndex(p => p.id === screenParam("page")))),
     [selection, setSelection] = useState<string[]>([]);
   const selected = selection.at(-1) ?? null;
   const selectionRef = useRef(selection); selectionRef.current = selection;
@@ -265,8 +270,8 @@ export function Editor({
     setDirectText(null);
     setSelection(previous => additive ? toggleSelection(previous, id) : [id]);
   }
-  const [panel, setPanel] = useState("chat"),
-    [mobilePanel, setMobilePanel] = useState("canvas"),
+  const [panel, setPanel] = useScreenState("panel", "chat", ["chat", "layers", "assets"]),
+    [mobilePanel, setMobilePanel] = useScreenState("pane", "canvas", ["canvas", "chat", "inspector"]),
     [prompt, setPrompt] = useState(initial.description || "");
   const [chat, setChat] = useState<ChatMessage[]>([]),
     [chatLoaded, setChatLoaded] = useState(false),
@@ -276,23 +281,31 @@ export function Editor({
   const [busy, setBusy] = useState(""),
     [error, setError] = useState(""),
     [proposal, setProposal] = useState<DesignDocument | null>(null),
-    [exportOpen, setExportOpen] = useState(false),
+    [dialogScreen, setDialogScreen] = useScreenState("dialog", "none", ["none", "export", "checks", "code"]),
     [shareUrl, setShareUrl] = useState("");
-  const [showChecks, setShowChecks] = useState(false);
+  const exportOpen = dialogScreen === 'export', showChecks = dialogScreen === 'checks', showCode = dialogScreen === 'code';
+  const setExportOpen = (open: boolean) => setDialogScreen(open ? 'export' : 'none');
+  const setShowChecks = (open: boolean) => setDialogScreen(open ? 'checks' : 'none');
+  const setShowCode = (open: boolean) => setDialogScreen(open ? 'code' : 'none');
   const designChecks = showChecks ? inspectDesign(doc) : null;
   const [live, setLive] = useState(true);
   const [syncStatus, setSyncStatus] = useState("Live");
   const syncing = useRef(false);
   const syncBlocked = useRef(false);
 
-  const [presenting, setPresenting] = useState(false);
+  const [screenMode, setScreenMode] = useScreenState("mode", "edit", ["edit", "preview", "present"]);
+  const presenting = screenMode === 'present', preview = screenMode === 'preview';
+  const setPresenting = (value: boolean) => setScreenMode(value ? 'present' : 'edit');
+  const setPreview = (value: boolean) => setScreenMode(value ? 'preview' : 'edit');
+  const [leftPane, setLeftPane] = useScreenState('left', 'open', ['open', 'closed']);
+  const [rightPane, setRightPane] = useScreenState('right', 'open', ['open', 'closed']);
+  function setPageIndex(index: number) { setPageIndexState(index); writeScreen({ page: docRef.current.pages[index]?.id ?? null }); }
+  useEffect(() => { const restore = () => setPageIndexState(Math.max(0, docRef.current.pages.findIndex(p => p.id === screenParam('page')))); window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, []);
   const [domBounds, setDomBounds] = useState<DesignNode[]>([]);
   const [domOverlayBounds, setDomOverlayBounds] = useState<DesignNode[]>([]);
   const measureDom = useCallback((nodes: DesignNode[]) => setDomBounds(previous => JSON.stringify(previous) === JSON.stringify(nodes) ? previous : nodes), []);
   const measureOverlay = useCallback((nodes: DesignNode[]) => setDomOverlayBounds(previous => JSON.stringify(previous) === JSON.stringify(nodes) ? previous : nodes), []);
-  const [showCode, setShowCode] = useState(false),
-    [preview, setPreview] = useState(false),
-    [zoom, setZoom] = useState(1),
+  const [zoom, setZoom] = useState(1),
     [fitted, setFitted] = useState(0.55),
     [directText, setDirectText] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
@@ -356,7 +369,7 @@ export function Editor({
     return true;
   }
   const viewportReady = (briefLoaded || !!briefError) && (!brief || briefManual);
-  const { pan, resetPan } = useCanvasGestures(viewport, scale, setZoom, displayed.kind === '3d', viewportReady, () => { drag.current = null; });
+  const { pan, resetPan } = useCanvasGestures(viewport, scale, setZoom, displayed.kind === '3d', viewportReady, () => { drag.current = null; }, !doc.timeline);
   useEffect(() => {
     let active = true;
     void loadDocumentFonts(displayed).catch(error => {
@@ -715,6 +728,9 @@ export function Editor({
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName)
       )
         return;
+      if (event.code === 'Space' && doc.timeline && !event.repeat && !event.metaKey && !event.ctrlKey && !target.closest('button, a, [role="button"]')) {
+        event.preventDefault(); setPlaying(value => !value); if (time >= doc.timeline.duration) setTime(0); return;
+      }
       if (event.key === "Escape") {
         setSelected(null);
         setPreview(false);
@@ -764,7 +780,12 @@ export function Editor({
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [node, selection, pageIndex, busy, preview, proposal, directText]);
+  }, [node, selection, pageIndex, busy, preview, proposal, directText, time, doc.timeline]);
+  useEffect(() => {
+    const leave = (event: Event) => { if (dirty && !window.confirm('Leave this design without saving your changes?')) event.preventDefault(); };
+    window.addEventListener('studio:leave-project', leave);
+    return () => window.removeEventListener('studio:leave-project', leave);
+  }, [dirty]);
   function addNode(type: DesignNode["type"], extra: Partial<DesignNode> = {}) {
     const newNode: DesignNode = {
       id: uid(),
@@ -897,6 +918,19 @@ export function Editor({
       width: type === "image" ? 480 : 240,
       height: type === "image" ? 320 : 240,
     });
+  }
+  async function uploadTexture(file: File, nodeId: string) {
+    const owner = docRef.current.pages.find(p => p.nodes.some(n => n.id === nodeId));
+    const target = owner?.nodes.find(n => n.id === nodeId);
+    if (!owner || !target || target.type !== 'model3d' || isNodeProtected(owner, target) || busy || preview || proposal) return;
+    if (!file.type.startsWith('image/')) { setError('Choose an image for the texture.'); return; }
+    setBusy('Importing texture'); setError('');
+    try {
+      const body = new FormData(); body.append('file', file);
+      const { asset } = await api<{ asset: Asset }>(`/api/projects/${project.id}/assets`, { method: 'POST', body });
+      change(d => { const owner = d.pages.find(p => p.nodes.some(n => n.id === nodeId)); const target = owner?.nodes.find(n => n.id === nodeId); if (!owner || !target || isNodeProtected(owner, target)) return; d.assets.push(asset); target.scene = { ...target.scene, material: { ...target.scene?.material, textureAssetId: asset.id } }; });
+      notify('Texture applied. Save to keep your changes.');
+    } catch (e) { setError(message(e)); } finally { setBusy(''); }
   }
   async function upload(file: File) {
     setBusy("Uploading");
@@ -1470,7 +1504,7 @@ export function Editor({
         brief={brief}
         onBrief={setBrief}
         onBack={onBack}
-        onManual={() => setBriefManual(true)}
+        onManual={() => { setBriefManual(true); writeScreen({ brief: "editor" }); }}
         onSettings={onSettings}
         onGenerate={buildFromBrief}
       />
@@ -1483,7 +1517,7 @@ export function Editor({
     );
   return (
     <div
-      className={`editor-shell ${preview ? "preview-mode" : ""} mobile-${mobilePanel}`}
+      className={`editor-shell ${preview ? "preview-mode" : ""} left-${leftPane} right-${rightPane} mobile-${mobilePanel}`}
     >
       <header className="editor-header">
         <div className="editor-heading">
@@ -1543,7 +1577,7 @@ export function Editor({
             className={`button small preview-button ${preview ? "selected" : ""}`}
             onClick={() => setPreview(!preview)}
           >
-            <Play size={15} /> {preview ? "Edit" : "Preview"}
+            {preview ? <Pencil size={15}/> : <Play size={15}/>} {preview ? "Edit" : "Preview"}
           </button>
           <button
             className="button small export-button"
@@ -1575,7 +1609,7 @@ export function Editor({
         </div>
       </header>
       {brief && (
-        <button className="brief-return" onClick={() => setBriefManual(false)}>
+        <button className="brief-return" onClick={() => { setBriefManual(false); writeScreen({ brief: "open" }); }}>
           <Sparkles size={14} />
           {brief.status === "approved"
             ? "View approved scope"
@@ -1617,7 +1651,7 @@ export function Editor({
           <SlidersHorizontal size={16} /> Design
         </button>
       </div>
-      <div className="editor-workspace">
+      <div className="pane-controls"><button className="icon-button" aria-label={leftPane === 'open' ? 'Collapse left sidebar' : 'Expand left sidebar'} aria-expanded={leftPane === 'open'} onClick={() => setLeftPane(leftPane === 'open' ? 'closed' : 'open')}>{leftPane === 'open' ? <PanelLeftClose size={17}/> : <PanelLeftOpen size={17}/>}</button><span>Workspace</span><button className="icon-button" aria-label={rightPane === 'open' ? 'Collapse properties' : 'Expand properties'} aria-expanded={rightPane === 'open'} onClick={() => setRightPane(rightPane === 'open' ? 'closed' : 'open')}>{rightPane === 'open' ? <PanelRightClose size={17}/> : <PanelRightOpen size={17}/>}</button></div><div className="editor-workspace">
         <aside className="left-panel">
           <div
             className="panel-tabs"
@@ -1740,7 +1774,7 @@ export function Editor({
 
           ) : (
             <div className="assets-panel">
-              <h3>Components</h3><div className="component-catalog">{componentNames.map(name => <button key={name} onClick={() => addNode('component', { name, width: ['Table', 'Chart', 'List'].includes(name) ? 420 : 240, height: ['Table', 'Chart', 'List'].includes(name) ? 260 : 48, component: { name, system: 'shadcn', props: { label: name } } })}>{name}</button>)}</div>
+              <h3>Components</h3><div className="component-catalog">{componentNames.map(name => <button key={name} onClick={() => addNode('component', { name, width: ['Table', 'Chart', 'List'].includes(name) ? 420 : 240, height: ['Table', 'Chart', 'List'].includes(name) ? 260 : 48, component: { name, system: 'shadcn', props: { label: name } } })}>{(() => { const Icon = componentIcons[name]; return <><Icon size={19}/><span>{name}</span></>; })()}</button>)}</div>
               <button className="button" onClick={() => addNode('frame', { name: 'Auto layout', width: 480, height: 320, layout: { mode: 'flex', direction: 'column', gap: 16, padding: 24 } })}>Add layout container</button>
               <label className="asset-upload">
                 <Upload size={24} />
@@ -2055,10 +2089,10 @@ export function Editor({
                   page={page}
                   theme={displayed.theme}
                   selected={selected}
-                  doc={displayed} pageIndex={pageIndex} time={time} onUpdate={update}
-                  onPage={patch => change(d => Object.assign(d.pages[pageIndex], patch))}
-                  onSelect={(id) => {
-                    setSelected(id);
+                  doc={displayed} pageIndex={pageIndex} time={time} onUpdate={preview ? undefined : update}
+                  onPage={preview ? undefined : patch => change(d => Object.assign(d.pages[pageIndex], patch))}
+                  onSelect={(id, additive) => {
+                    selectLayer(id, additive);
                     viewport.current?.focus({ preventScroll: true });
                   }}
                 />
@@ -2283,7 +2317,7 @@ export function Editor({
                 <Plus size={19} />
               </button>
             </div>
-            <div className="zoom-controls"><label title={syncStatus}><input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)}/>Live</label>{doc.kind === 'slides' && <button onClick={() => setPresenting(true)}>Present</button>}<button onClick={() => { setZoom(1 / fitted); resetPan(); }} title="Actual size">100%</button><button onClick={() => { setZoom(1); resetPan(); }}>Fit</button>
+            <div className="zoom-controls"><label title={syncStatus}><input type="checkbox" checked={live} onChange={e => setLive(e.target.checked)}/>Live</label>{doc.kind === 'slides' && <button className="button small" onClick={() => setPresenting(true)}><Presentation size={16}/>Present</button>}<button onClick={() => { setZoom(1 / fitted); resetPan(); }} title="Actual size">100%</button><button className="icon-button" aria-label="Fit to canvas" title="Fit to canvas" onClick={() => { setZoom(1); resetPan(); }}><Maximize2 size={16}/></button>
               <button
                 className="icon-button"
                 aria-label="Zoom out"
@@ -2305,6 +2339,7 @@ export function Editor({
           </div>
         </section>
         <Inspector
+          onTexture={uploadTexture}
           doc={doc}
           page={doc.pages[pageIndex] || doc.pages[0]!}
           node={selection.length === 1 ? node : undefined}
@@ -2321,7 +2356,7 @@ export function Editor({
         {[
           ['Select multiple', 'Shift + click · layer checkboxes'], ['Select all layers', '⌘/Ctrl + A'], ['Duplicate', '⌘/Ctrl + D'], ['Delete selection', 'Delete / Backspace'],
           ['Group / ungroup', '⌘/Ctrl + G / Shift + G'], ['Nudge / larger nudge', 'Arrows / Shift + arrows'], ['Undo / redo', '⌘/Ctrl + Z / Shift + Z'],
-          ['Save', '⌘/Ctrl + S'], ['Edit text / add text', 'Enter / T'], ['Finish / cancel text', '⌘/Ctrl + Enter / Escape'], ['Deselect', 'Escape'], ['Fit canvas', '⌘/Ctrl + 0'], ['Pan canvas', 'Space + drag / middle mouse'],
+          ['Save', '⌘/Ctrl + S'], ['Edit text / add text', 'Enter / T'], ['Finish / cancel text', '⌘/Ctrl + Enter / Escape'], ['Deselect', 'Escape'], ['Fit canvas', '⌘/Ctrl + 0'], ['Pan canvas', 'Space + drag / middle mouse'], ['Play / pause motion', 'Space (canvas or timeline)'],
         ].map(([action, keys]) => <div key={action}><span>{action}</span><kbd>{keys}</kbd></div>)}
         <p>Canvas shortcuts apply while the canvas or layers have focus. Locked layers stay unchanged. Flow-layout children move through their container layout.</p>
       </div></Modal>}

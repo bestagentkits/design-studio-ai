@@ -1,3 +1,5 @@
+import { screenParam, useScreenState, writeScreen } from './screen-state';
+import { ProjectThumbnail } from './project-thumbnail';
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
@@ -202,34 +204,55 @@ export function App() {
   );
   const [settingsTab, setSettingsTab] = useState<
     "providers" | "agents" | "account"
-  >("providers");
+  >(() => ["providers", "agents", "account"].includes(screenParam("settings")) ? screenParam("settings") as "providers" | "agents" | "account" : "providers");
   const [user, setUser] = useState<User | null>(null),
     [ready, setReady] = useState(false),
     [projects, setProjects] = useState<Summary[]>([]);
   const [project, setProject] = useState<Project | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
-  const [auth, setAuth] = useState(false),
-    [settings, setSettings] = useState(false),
+  const [authScreen, setAuthScreen] = useScreenState("auth", "", ["", "signin"]);
+  const auth = authScreen === "signin";
+  const setAuth = (value: boolean) => setAuthScreen(value ? "signin" : "");
+  const
+    [settings, setSettingsState] = useState(false),
     [busy, setBusy] = useState(false);
   const [prompt, setPrompt] = useState(""),
     [kind, setKind] = useState<Kind>("web"),
-    [theme, setTheme] = useState(""),
+    [theme, setTheme] = useScreenState("theme", "", ["", ...themes.map(t => t.id)]),
     [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all"),
     [sort, setSort] = useState("updated"),
     [view, setView] = useState<"grid" | "list">("grid"),
     [tab, setTabState] = useState<WorkspaceTab>(() => workspaceTab(location.pathname));
+  const openingProject = useRef(0);
+  const lastLocation = useRef(location.href);
+  function setSettings(value: boolean) { setSettingsState(value); writeScreen({ settings: value ? settingsTab : null }); }
   function setTab(next: WorkspaceTab) {
     navigateWorkspace(next);
     setTabState(next);
     setProject(null);
   }
   useEffect(() => {
-    const restore = () => { setTabState(workspaceTab(location.pathname)); setProject(null); };
+    const restore = () => {
+      const id = screenParam('project');
+      if (project && id !== project.id && !window.dispatchEvent(new Event('studio:leave-project', { cancelable: true }))) {
+        history.pushState(history.state, '', lastLocation.current); window.dispatchEvent(new PopStateEvent('popstate')); return;
+      }
+      lastLocation.current = location.href;
+      openingProject.current++;
+      setTabState(workspaceTab(location.pathname));
+      if (!id) setProject(null);
+      else if (id !== project?.id && user) void open(id, false);
+      const settings = screenParam('settings');
+      setSettingsState(['providers', 'agents', 'account'].includes(settings) && !!user);
+      if (['providers', 'agents', 'account'].includes(settings)) setSettingsTab(settings as typeof settingsTab);
+    };
+    const rememberLocation = () => { lastLocation.current = location.href; };
+    window.addEventListener('studio:navigation', rememberLocation);
     window.addEventListener("popstate", restore);
-    return () => window.removeEventListener("popstate", restore);
-  }, []);
+    return () => { window.removeEventListener("popstate", restore); window.removeEventListener("studio:navigation", rememberLocation); };
+  }, [project?.id, user]);
   useEffect(() => {
     const frame = requestAnimationFrame(() => document.querySelector('.main-header nav [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
     return () => cancelAnimationFrame(frame);
@@ -340,12 +363,13 @@ export function App() {
       api<{ providers: Provider[] }>("/api/providers")
         .then((d) => setProviders(d.providers))
         .catch((e) => setError(message(e)));
+      if (['providers', 'agents', 'account'].includes(screenParam('settings'))) setSettingsState(true);
     } else setProjects([]);
   }, [user]);
   useEffect(() => {
     if (!agentsRequested || !ready) return;
     const url = new URL(location.href);
-    url.searchParams.delete("settings");
+    url.searchParams.set("settings", "agents");
     history.replaceState(
       history.state,
       "",
@@ -407,6 +431,7 @@ export function App() {
       if (!user) setAuth(true);
       return;
     }
+    writeScreen({ template: template || selectedKind });
     setDraft({
       kind: selectedKind,
       name: "",
@@ -420,16 +445,21 @@ export function App() {
       template,
     });
   }
-  function showProject(next: Project) {
+  useEffect(() => {
+    const restore = () => {
+      const id = screenParam("template");
+      if (!id) { setDraft(null); return; }
+      const preset = templates.find(t => t.id === id);
+      const selectedKind = preset?.kind || kinds.find(k => k.id === id)?.id;
+      if (selectedKind) setDraft(current => current?.template === preset?.id && current?.kind === selectedKind ? current : { kind: selectedKind, name: "", prompt: "", audience: "", theme: preset?.themeId || themes[0].id, template: preset?.id });
+    };
+    if (screenParam("template")) restore(); window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, []);
+  function showProject(next: Project, push = true) {
     setProject(next);
     void trackClient({ event: 'project_open', page: 'editor', projectId: next.id });
-    const url = new URL(location.href);
-    url.searchParams.set("project", next.id);
-    history.replaceState(
-      history.state,
-      "",
-      url.pathname + url.search + url.hash,
-    );
+    if (push) writeScreen({ project: next.id, page: null, panel: null, mode: null, inspector: null, settings: null, slide: null, view: null, pane: null, brief: null, dialog: null, template: null, auth: null, library: null });
   }
   useEffect(() => {
     if (!ready || resumeStarted.current) return;
@@ -440,7 +470,7 @@ export function App() {
       return;
     }
     resumeStarted.current = true;
-    void open(id);
+    void open(id, false);
   }, [ready, user]);
   useEffect(() => {
     if (!pendingInterview || !user || creationRunning.current || !prompt.trim())
@@ -530,17 +560,14 @@ export function App() {
       setBusy(false);
     }
   }
-  async function open(id: string) {
+  async function open(id: string, push = true) {
+    const request = ++openingProject.current;
     setBusy(true);
     setError("");
     try {
-      showProject(
-        (
-          await api<{ project: Project }>(
-            `/api/projects/${encodeURIComponent(id)}`,
-          )
-        ).project,
-      );
+      const response = await api<{ project: Project }>(`/api/projects/${encodeURIComponent(id)}`);
+      if (request !== openingProject.current) return;
+      showProject(response.project, push);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -601,13 +628,7 @@ export function App() {
           onBack={() => {
             setProject(null);
             setOpeningBriefRequest("");
-            const url = new URL(location.href);
-            url.searchParams.delete("project");
-            history.replaceState(
-              history.state,
-              "",
-              url.pathname + url.search + url.hash,
-            );
+            writeScreen({ project: null, page: null, panel: null, mode: null, inspector: null, slide: null, view: null, pane: null, brief: null, dialog: null });
             refresh().catch((e) => setError(message(e)));
           }}
           onSettings={() => {
@@ -682,7 +703,7 @@ export function App() {
               )}
             </div>
           </header>
-          <main className="home-main">
+          <main className="home-main"><div className="home-atmosphere" aria-hidden="true"><i/><i/><i/><span>+</span><span>◌</span></div>
             {tab !== "themes" && tab !== "activity" && (
               <section className="creation-section">
                 <div className="intro-label">
@@ -830,7 +851,7 @@ export function App() {
                 </div>
                 <p className="quiet-note">
                   Open any design to edit its color palette, fonts, and corner
-                  radius in the Theme inspector.
+                  radius in the Theme inspector. Inspired presets adapt selected visual foundations to the studio’s Ant/shadcn components; they are not official framework implementations.
                 </p>
               </section>
             ) : (
@@ -906,7 +927,7 @@ export function App() {
                                   ? template?.name || k.name
                                   : k.name}
                               </strong>
-                              <small>{k.description}</small>
+                              <small>{tab === "templates" ? template?.description || k.description : k.description}</small>
                             </span>
                             <ArrowRight size={15} />
                           </div>
@@ -1040,15 +1061,7 @@ export function App() {
                                 <div
                                   className={`project-thumbnail thumb-${item.kind}`}
                                 >
-                                  {item.document ? (
-                                    <div
-                                      dangerouslySetInnerHTML={{
-                                        __html: renderSvg(item.document),
-                                      }}
-                                    />
-                                  ) : (
-                                    <Icon size={32} strokeWidth={1.3} />
-                                  )}
+                                  <ProjectThumbnail id={item.id} revision={item.revision} name={item.name} />
                                 </div>
                                 <div className="project-detail">
                                   <strong>{item.name}</strong>
@@ -1150,7 +1163,7 @@ export function App() {
               ? "Import your design"
               : "Give your idea a little direction"
           }
-          onClose={() => !busy && setDraft(null)}
+          onClose={() => { if (!busy) { setDraft(null); writeScreen({ template: null }); } }}
         >
           <div className="modal-body brief-form">
             <p className="modal-description">

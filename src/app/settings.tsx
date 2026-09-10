@@ -1,3 +1,4 @@
+import { useScreenState } from './screen-state';
 import { useEffect, useState } from "react";
 import { ProviderSettings } from './provider-settings';
 import {
@@ -49,9 +50,7 @@ export function Settings({
   onBeforeGitHubLink: () => void;
   initialTab?: "providers" | "agents" | "account";
 }) {
-  const [tab, setTab] = useState<"providers" | "agents" | "account">(
-      initialTab,
-    ),
+  const [tab, setTab] = useScreenState('settings', initialTab, ['providers', 'agents', 'account'], true),
     [providers, setProviders] = useState<Provider[]>([]),
     [tokens, setTokens] = useState<Token[]>([]);
   const [tokenName, setTokenName] = useState(''), [newToken, setNewToken] = useState('');

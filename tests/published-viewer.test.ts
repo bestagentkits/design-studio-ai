@@ -62,11 +62,11 @@ test('published interactive documents run inside the real sandboxed response', {
       page.on('pageerror', error => errors.push(error.message));
       try {
         await open(page, await publish(doc));
-        const host = page.locator('[data-studio-object="sphere-object"]');
-        await expect(host.locator('canvas')).toBeVisible();
-        await expect(page.locator('[data-node-id="sphere-object"]')).toHaveAttribute('visibility', 'hidden');
+        const host = page.locator('[data-studio-page="0"]');
+        await expect(host.locator('canvas[data-scene-layer="3d"]')).toBeVisible();
+        await expect(page.locator('[data-node-id="sphere-object"]')).toHaveCount(0);
         await expect(host).not.toContainText('could not load');
-        const screenshot = await host.locator('canvas').screenshot();
+        const screenshot = await host.locator('canvas[data-scene-layer="3d"]').screenshot();
         const shades = await page.evaluate(async png => {
           const image = new Image(); image.src = `data:image/png;base64,${png}`; await image.decode();
           const sample = document.createElement('canvas'); sample.width = image.width; sample.height = image.height;
