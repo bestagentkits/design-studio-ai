@@ -55,7 +55,8 @@ jobs:
       - name: Check this is still the dev head
         id: head
         run: |
-          if [ "$(git ls-remote origin refs/heads/dev | cut -f1)" = "$GITHUB_SHA" ]; then
+          remote_head=$(git ls-remote --exit-code origin refs/heads/dev | cut -f1)
+          if [ "$remote_head" = "$GITHUB_SHA" ]; then
             echo 'current=true' >> "$GITHUB_OUTPUT"
           else
             echo 'Skipping superseded dev commit.'
@@ -92,8 +93,18 @@ jobs:
             assert.equal(response.status, 200);
             return response.json();
           };
-          assert.equal((await read('/api/health')).ok, true);
-          assert.equal((await read('/.well-known/oauth-protected-resource/mcp')).resource, origin + '/mcp');
-          assert.equal((await read('/.well-known/oauth-authorization-server')).authorization_endpoint, origin + '/oauth/authorize');
-          console.log('Beta health and OAuth discovery passed.');
+          // A newly provisioned custom domain may still be propagating DNS and TLS.
+          for (let attempt = 1; ; attempt++) {
+            try {
+              assert.equal((await read('/api/health')).ok, true);
+              assert.equal((await read('/.well-known/oauth-protected-resource/mcp')).resource, origin + '/mcp');
+              assert.equal((await read('/.well-known/oauth-authorization-server')).authorization_endpoint, origin + '/oauth/authorize');
+              console.log('Beta health and OAuth discovery passed.');
+              break;
+            } catch (error) {
+              if (attempt >= 12) throw error;
+              console.log(`Beta not ready (attempt ${attempt}/12); retrying in 10 seconds.`);
+              await new Promise(resolve => setTimeout(resolve, 10000));
+            }
+          }
           NODE
