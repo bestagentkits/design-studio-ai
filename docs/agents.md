@@ -108,3 +108,7 @@ Visual presets reference [Ant Design](https://ant.design/docs/react/customize-th
 ## Provider connections
 
 Use the shared [provider guide](providers.md#official-and-custom-connections) for official DeepSeek, Gemini/OpenAI/Leonardo/Grok image generation and custom API connections. API-key MCP clients can call `list_provider_connections` to find saved custom IDs without receiving credentials. REST `/api/schema` exposes provider IDs and configuration/generation schemas; MCP and WebMCP use the same IDs. Saved custom IDs start with `custom-`. Credential management remains account/API-key only; MCP OAuth and WebMCP can generate with configured providers but cannot change credentials. CLI `providers set --help` describes base URL, API format and auth options; inject credentials through environment variables or stdin. Model catalog fallback is not proof of provider capability.
+
+## Character motion
+
+See [character motion](character-motion.md) and discover current operation schemas. `dsa motion PROJECT_ID --node NODE_ID --time 1` / MCP `inspect_motion` reads poses. Motion generation returns baseRevision/baseBriefRevision; carry both into the explicit document write (`expectedRevision`, `expectedBriefRevision`). Frame exports accept `--start`, `--end`, `--fps`; `motion`, `png-sequence`, and `spritesheet` return ZIPs. Native motion is not a Spine interchange format.

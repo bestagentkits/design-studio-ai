@@ -18,7 +18,7 @@ Cloudflare runs that handler with D1, R2, static assets, and Browser Rendering. 
 
 | Contract | Machine-owned authority |
 | --- | --- |
-| Document v1, projects, themes, nodes, pages, assets, timelines, semantic validation | [schema.ts](../src/shared/schema.ts); `dsa schema` |
+| Document v1/v2, projects, themes, nodes, pages, assets, timelines, semantic validation | [schema.ts](../src/shared/schema.ts); `dsa schema` |
 | Targeted edits and timeline interpolation | [operations.ts](../src/shared/operations.ts); `dsa schema --operations` |
 | Explicitly selected starter templates, themes, and blocks | [catalog.ts](../src/shared/catalog.ts) |
 | Safe HTML/SVG and presentation interpretation | [render.ts](../src/shared/render.ts) |
@@ -59,7 +59,7 @@ JSON errors use `{error:{code,message,details?}}` without secrets. Routes valida
 | OAuth discovery, consent, PKCE, tokens | [oauth.ts](../server/oauth.ts) |
 | Streamable HTTP tools/resources | [mcp.ts](../server/mcp.ts) |
 
-Export POST `/api/projects/:id/export` accepts `{format,pageIndex?,expectedRevision?}`. POST/DELETE `/api/projects/:id/preview` and `/share` are naming-specific aliases for the immutable public snapshot workflow; they return `{url,revision}` on creation and `{ok:true}` on removal. Media POST `/api/projects/:id/media` accepts the [typed provider payload](providers.md); fal jobs are polled through the project media-job route. Clients should discover tool schemas/CLI help instead of maintaining separate document adapters.
+Export POST `/api/projects/:id/export` accepts `{format,pageIndex?,expectedRevision?,start?,end?,fps?}`. POST/DELETE `/api/projects/:id/preview` and `/share` are naming-specific aliases for the immutable public snapshot workflow; they return `{url,revision}` on creation and `{ok:true}` on removal. Media POST `/api/projects/:id/media` accepts the [typed provider payload](providers.md); fal jobs are polled through the project media-job route. Clients should discover tool schemas/CLI help instead of maintaining separate document adapters.
 
 ## Ownership, secrets, and publication
 
@@ -112,3 +112,7 @@ Sanitized client events use a strict allowlist and remain distinguishable from s
 [Deployment](deployment.md) covers secrets, migrations, storage, browsers, backups, and rollback. [Tests](../tests) cover schema/operations, content safety, tenant isolation, revisions, OAuth, publication, CLI subprocesses, provider requests, and exports. Browser checks exercise desktop/touch workflows. External credential-dependent success is separate from local contract validation.
 
 Release evidence and pending checks live in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md). A build, filename, or configured key does not establish deployment, format validity, or provider success.
+
+## Native character motion
+
+[Character motion](character-motion.md) documents the v2 schema, shared operations, GPU/Canvas/SVG evaluators, proposal guards and portable/frame exports. The existing project kind and document revision remain independent from schema version.

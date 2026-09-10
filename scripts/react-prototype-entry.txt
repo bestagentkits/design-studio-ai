@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import {motionDuration} from './shared/motion-duration';
+import { useState,useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { DocumentView, usesDom } from './app/document-view';
 import { renderSvg } from './shared/render';
@@ -7,10 +8,14 @@ import document from '../document.json';
 
 const design = document as unknown as DesignDocument;
 function App() {
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(0),[time,setTime]=useState(0),[playing,setPlaying]=useState(false);const duration=motionDuration(design);
+  useEffect(()=>{setPlaying(false);setTime(0);},[index]);
+  useEffect(()=>{if(!playing)return;let frame=0,previous=performance.now();const tick=(now:number)=>{setTime(t=>Math.min(duration,t+(now-previous)/1000));previous=now;frame=requestAnimationFrame(tick);};frame=requestAnimationFrame(tick);return()=>cancelAnimationFrame(frame);},[playing,duration]);
+  useEffect(()=>{if(time>=duration)setPlaying(false);},[time,duration]);
   return <main style={{ maxWidth: design.pages[index].width, margin: '0 auto' }}>
     {design.pages.length > 1 && <nav aria-label="Prototype pages">{design.pages.map((p, i) => <button key={p.id} onClick={() => setIndex(i)} aria-current={i === index ? 'page' : undefined}>{p.name}</button>)}</nav>}
-    {usesDom(design.pages[index]) ? <DocumentView doc={design} pageIndex={index} navigate={id => { const next = design.pages.findIndex(p => p.id === id); if (next >= 0) setIndex(next); }}/> : <div dangerouslySetInnerHTML={{ __html: renderSvg(design, index) }}/>}
+    {duration>0&&<nav aria-label="Motion controls"><button onClick={()=>{if(time>=duration)setTime(0);setPlaying(!playing);}}>{playing?'Pause':'Play animation'}</button><input aria-label="Animation time" type="range" min="0" max={duration} step=".01" value={time} onChange={e=>{setPlaying(false);setTime(e.target.valueAsNumber);}}/></nav>}
+    {usesDom(design.pages[index]) ? <DocumentView doc={design} pageIndex={index} time={time} playback={playing} navigate={id => { const next = design.pages.findIndex(p => p.id === id); if (next >= 0) setIndex(next); }}/> : <div dangerouslySetInnerHTML={{ __html: renderSvg(design, index,time) }}/>}
   </main>;
 }
 createRoot(window.document.getElementById('root')!).render(<App/>);

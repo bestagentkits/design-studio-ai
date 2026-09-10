@@ -1,3 +1,5 @@
+import {exportOptionsSchema as optionsSchema} from '../src/shared/export-contract';
+import { createMotionArchive } from '../src/shared/motion-export';
 import { updateEvent } from './observability-store';
 import { withSpan } from './observability';
 import { Hono } from 'hono';
@@ -15,8 +17,8 @@ import { interactiveHtml } from './published-html';
 // Both adapters expose the small browser surface used here; the renderer itself is shared.
 export interface ExportBrowser { newPage(): Promise<any>; close(): Promise<void> }
 export const exportRoutes = new Hono<Env>();
-const optionsSchema = z.object({ format: z.enum(['json', 'svg', 'html', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf']), pageIndex: z.number().int().min(0).default(0), expectedRevision: z.number().int().positive().optional() });
-const mimeTypes = { json: 'application/json', svg: 'image/svg+xml', html: 'text/html', png: 'image/png', pdf: 'application/pdf', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', webm: 'video/webm', mp4: 'video/mp4', react: 'application/zip', glb: 'model/gltf-binary', gltf: 'model/gltf+json' };
+
+const mimeTypes = { motion:'application/zip', 'png-sequence':'application/zip', spritesheet:'application/zip', json: 'application/json', svg: 'image/svg+xml', html: 'text/html', png: 'image/png', pdf: 'application/pdf', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', webm: 'video/webm', mp4: 'video/mp4', react: 'application/zip', glb: 'model/gltf-binary', gltf: 'model/gltf+json' };
 
 /** Fetch only generated Google Fonts CSS and its fixed-origin font files, before browser isolation. */
 export async function embeddedDocumentFonts(doc: DesignDocument) {
@@ -68,8 +70,9 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
   const doc = documentSchema.parse(JSON.parse(row.document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
   if (options.format === 'react' && !['web', 'wireframe'].includes(doc.kind)) fail(400, 'unsupported_export', 'React source export is available for Web/App and wireframe projects.');
+  if (['glb', 'gltf'].includes(options.format) && doc.pages[options.pageIndex].nodes.some(node=>node.character)) fail(400,'unsupported_export','Character motion uses the native motion package; GLB/glTF cannot preserve 2D rigs.');
   if (['glb', 'gltf'].includes(options.format) && !doc.pages[options.pageIndex].nodes.some(node => node.type === 'model3d')) fail(400, 'unsupported_export', 'Scene export requires a 3D object on the selected page.');
-  const extension = options.format === 'react' ? 'zip' : options.format;
+  const extension = ['react','motion','png-sequence','spritesheet'].includes(options.format) ? 'zip' : options.format;
   const headers = { 'Content-Type': mimeTypes[options.format], 'Content-Disposition': `attachment; filename="${row.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}"`, 'Cache-Control': 'private,no-store', 'X-Content-Type-Options': 'nosniff' };
   if (options.format === 'json') { const output = JSON.stringify(doc, null, 2); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
   await validateAssets(c, doc, row.id);
@@ -78,8 +81,10 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
     const renderNodes = selectedPages.flatMap(page => page.nodes.filter(node => node.visible !== false));
     const totalPixels = selectedPages.reduce((sum, page) => sum + page.width * page.height, 0) + renderNodes.filter(node => node.type === 'model3d').reduce((sum, node) => sum + node.width * node.height, 0);
     if (renderNodes.some(node => node.width * node.height > 16777216) || totalPixels > 67108864) fail(413, 'render_budget_exceeded', 'Reduce page or object dimensions; a render may contain at most 64 megapixels in total and 16 megapixels per object.');
+    const characterMedia=doc.characters?.flatMap(c=>c.attachments.flatMap(a=>[a.assetId,...(a.frames??[])])).filter(Boolean)??[];
+    const characterUrls=doc.assets.filter(a=>characterMedia.includes(a.id)).map(a=>a.url);
     const media = renderNodes.flatMap(node => [node.src, doc.assets.find(asset => asset.id === node.scene?.material?.textureAssetId)?.url]);
-    if (media.some(url => url && !url.startsWith('/api/assets/') && !url.startsWith('data:'))) fail(400, 'import_asset_required', 'Import external media into the project before cloud rendering. Cloud renderers have no external network access.');
+    if ([...media,...characterUrls].some(url => url && !url.startsWith('/api/assets/') && !url.startsWith('data:'))) fail(400, 'import_asset_required', 'Import external media into the project before cloud rendering. Cloud renderers have no external network access.');
   }
   let embeddedSize = 0;
   const embedded = new Map<string, string>();
@@ -99,6 +104,11 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
   for (const asset of doc.assets) asset.url = await embed(asset.url);
   if (options.format === 'svg') { const output = renderSvg(doc, options.pageIndex); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
   if (options.format === 'html') { const output = await interactiveHtml(c, doc); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
+  if (options.format === 'motion') {
+    const runtime=await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-viewer.js`));if(!runtime?.ok)fail(503,'renderer_not_built','Build the viewer before exporting.');
+    if(doc.assets.some(a=>!a.url.startsWith('data:')))fail(400,'import_asset_required','Import all assets before portable export.');
+    const output=await createMotionArchive(doc,await runtime.text());span.set({outputBytes:output.byteLength});return new Response(new Uint8Array(output).buffer,{headers});
+  }
   if (options.format === 'react') {
     await rateLimit(c, `export:${owner(c)}`, 20);
     const runtime = await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-react-runtime.json`));
@@ -110,7 +120,7 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
   if (!bindings.BROWSER && !bindings.EXPORT_BROWSER) fail(503, 'renderer_not_configured', 'Enable the Cloudflare Browser Rendering binding or install Chromium for self-hosting.');
   if (doc.pages.some(p => p.width * p.height > 16777216)) fail(413, 'canvas_too_large', 'Render exports support up to 16 megapixels per page.');
   await rateLimit(c, `export:${owner(c)}`, 20);
-  const fonts = ['png', 'pdf', 'pptx', 'webm', 'mp4'].includes(options.format) ? await embeddedDocumentFonts(doc) : null;
+  const fonts = ['png', 'pdf', 'pptx', 'webm', 'mp4','png-sequence','spritesheet'].includes(options.format) ? await embeddedDocumentFonts(doc) : null;
   let browser: ExportBrowser | undefined;
   try {
     browser = bindings.EXPORT_BROWSER ? await bindings.EXPORT_BROWSER() : await puppeteer.launch(bindings.BROWSER!);
@@ -134,7 +144,11 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
     if (!bundle?.ok) fail(503, 'renderer_not_built', 'Build the renderer bundle before exporting.');
     await page.addScriptTag({ content: await bundle.text() });
     let output: Uint8Array;
-    if (['pptx', 'webm', 'mp4', 'glb', 'gltf'].includes(options.format)) {
+    if(['png-sequence','spritesheet'].includes(options.format)){
+      const end=options.end??doc.timeline?.duration??2;const count=Math.ceil((end-options.start)*options.fps);
+      if(count<1||count>300||current.width*current.height*count>67108864)fail(413,'render_budget_exceeded','Use 1–300 frames and at most 64 megapixels in total.');
+      const encoded=await page.evaluate(({doc,index,format,start,end,fps}:any)=>(globalThis as any).studioRenderer.motionFrames(doc,index,format,start,end,fps),{doc,index:options.pageIndex,format:options.format,start:options.start,end,fps:options.fps});output=Buffer.from(encoded,'base64');
+    } else if (['pptx', 'webm', 'mp4', 'glb', 'gltf'].includes(options.format)) {
       const encoded = await page.evaluate(async ({ document, pageIndex, format }: { document: DesignDocument; pageIndex: number; format: string }) => {
         const renderer = (globalThis as any).studioRenderer;
         return format === 'pptx' ? renderer.pptx(document) : format === 'glb' || format === 'gltf' ? renderer.scene(document, pageIndex, format) : renderer.video(document, pageIndex, format);

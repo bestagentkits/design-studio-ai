@@ -1,0 +1,26 @@
+[
+  {
+    "browser": "chromium",
+    "version": "153.0.8010.12",
+    "p95": 187.30000000074506,
+    "vertices": 5184,
+    "keys": 10000,
+    "triangles": 8192
+  },
+  {
+    "browser": "firefox",
+    "version": "155.0",
+    "p95": 415,
+    "vertices": 5184,
+    "keys": 10000,
+    "triangles": 8192
+  },
+  {
+    "browser": "webkit",
+    "version": "26.6",
+    "p95": 2343,
+    "vertices": 5184,
+    "keys": 10000,
+    "triangles": 8192
+  }
+]

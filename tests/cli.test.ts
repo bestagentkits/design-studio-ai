@@ -93,7 +93,7 @@ test('standalone built executable prints help and version without checkout depen
 });
 
 test('schema and templates use the actual shared document format', async () => {
-  const schema = await json(['schema']); assert.equal(schema.schema.properties.schemaVersion.const, 1);
+  const schema = await json(['schema']); assert.deepEqual(schema.schema.properties.schemaVersion.anyOf.map((v: {const:number})=>v.const), [1,2]);
   const operationSchema = await json(['schema', '--operations']); assert.equal(operationSchema.schema.type, 'array');
   const catalog = await json(['templates', 'list']);
   for (const template of catalog.templates) {

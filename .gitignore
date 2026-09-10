@@ -18,3 +18,5 @@ data/
 
 public/studio-geometry-worker.js
 public/studio-react-runtime.json
+
+public/studio-character-worker.js

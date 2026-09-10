@@ -10,6 +10,7 @@ An agent-first design workspace for web interfaces, slides, reports, wireframes,
 
 - Responsive project library with search, filters, sorting, duplication, and saved designs.
 - Structured flex/grid layouts, nested groups, Ant and shadcn-style components, versioned reusable design systems, and live human/agent editing.
+- Native [2D character motion](docs/character-motion.md): bones, skins, weighted meshes, per-property clips, constraints, physics and scene blending.
 - Mesh/UV/rigging tools, textured animated 3D scenes, multi-layer keyframe editing, presentation modes, font/model discovery and interactive API docs.
 - BYOK text, image, speech, music/effects, and video generation, plus supported source-media edits. See [providers](docs/providers.md).
 - JSON, HTML, SVG, PNG, PDF, PowerPoint, WebM, supported MP4 recording, React prototype ZIP, GLB/glTF, and authorized Google Slides export.

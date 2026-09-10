@@ -116,3 +116,9 @@ Discover current `projects export --help` before choosing a format; older instal
 Publish when already authorized by the user's request, using `publish PROJECT_ID`. CLI `preview` and `share` (MCP `preview_project` and `share_project`) also create public frozen snapshots, including referenced assets; they are not private editor previews. Use local inspection when public exposure is outside the requested scope. `unpublish`, `unpreview`, and `unshare` each remove all public snapshots for that project. Public publishing permission does not imply permission to publish unrelated projects or reveal secrets.
 
 Report the project/artifact URL or output path, what was changed, verification performed, and any actual remaining configuration or format limitation. Do not claim provider generation, deployment, export fidelity, or publication without observed success.
+
+## Native 2D character motion
+
+Discover live v2 document and operation schemas. Use `dsa motion PROJECT_ID` or MCP `inspect_motion` to inspect IDs, then named character operations for focused edits. Keep setup poses separate from clip keys. Attachments reference asset IDs; import remote artwork before portable export. Skins reuse rig/clips; placements and controls belong to each node instance.
+
+`generate --mode motion` returns validated operations, a preview document and baseRevision/baseBriefRevision. Apply only after explicit review, preserving both revisions via document PUT expectedRevision/expectedBriefRevision. On conflict, re-read and reconcile; never retry with a guessed revision. `motion`, `png-sequence` and `spritesheet` exports are ZIPs; frame ranges use --start/--end/--fps and exclude the end frame. Native Studio packages do not imply Spine or game-engine format support. See the live /docs/motion guide.
