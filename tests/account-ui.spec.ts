@@ -5,7 +5,7 @@ test.use({ screenshot: 'off' });
 test('agent-settings link authenticates first and manages real revocable API credentials', async ({ page, baseURL }) => {
   await page.goto('/?auth_error=email_exists');
   await expect(page.getByRole('alert')).toContainText('Sign in with your password');
-  await expect(page).toHaveURL(new URL('/', baseURL!).href);
+  await expect(page).toHaveURL(new URL('/?auth=signin', baseURL!).href);
   await page.goto('/?settings=agents');
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Create an account', exact: true }).click();

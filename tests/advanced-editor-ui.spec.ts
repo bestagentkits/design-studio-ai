@@ -40,7 +40,7 @@ test('primitive converts to editable geometry, extrudes, unwraps and saves weigh
   const project = await setup(page, baseURL!, doc);
   try {
     await prepare(page, info); await layer(page, info, 'Study cube'); await panel(page, info, 'Canvas');
-    await expect(page.locator('.scene-view canvas')).toBeVisible(); await expect(page.locator('.scene-error')).toHaveCount(0);
+    await expect(page.locator('.scene-view canvas[data-scene-layer="3d"]')).toBeVisible(); await expect(page.locator('.scene-error')).toHaveCount(0);
     await page.getByRole('button', { name: 'Mesh / UV / Rig', exact: true }).click();
     const mesh = page.locator('.mesh-tools');
     await mesh.getByRole('button', { name: 'Convert primitive to editable mesh' }).click();

@@ -1,3 +1,4 @@
+import { mountSceneComposition } from '../shared/scene-composition';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
@@ -10,27 +11,29 @@ import { DocumentView, usesDom } from './document-view';
 import { loadDocumentFonts } from '../shared/font-loading';
 
 /** Render trusted components with browser layout before capture. Call dispose after capture. */
-export async function mountExportPage(doc: DesignDocument, index = 0, time = 0) {
+export async function mountExportPage(doc: DesignDocument, index = 0, time = 0, offscreen = false) {
   const page = doc.pages[index], host = document.createElement('section');
   host.style.cssText = `position:relative;width:${page.width}px;height:${page.height}px;overflow:hidden;flex:none;break-after:page`;
+  if (offscreen) { host.style.position = "fixed"; host.style.left = "-30000px"; host.style.top = "0"; }
   document.body.append(host);
+  let composition: ReturnType<typeof mountSceneComposition> | undefined;
   let root: ReturnType<typeof createRoot> | undefined;
   let renderer: THREE.WebGLRenderer | undefined, scene: THREE.Scene | undefined, camera: THREE.PerspectiveCamera | undefined;
   try {
     await loadDocumentFonts(doc);
-    if (page.scene || page.nodes.some(n => n.scene)) {
+    if (doc.kind === '3d' || page.scene || page.nodes.some(n => n.scene)) {
       const built = await buildScene(doc, index, time); scene = built.scene; camera = built.camera;
-      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
       renderer.setPixelRatio(1); renderer.setSize(page.width, page.height);
-      renderer.render(scene, built.camera); host.append(renderer.domElement);
+      host.append(renderer.domElement); composition = mountSceneComposition(host, doc, index, renderer, scene, built.camera); composition.draw(time);
     } else if (usesDom(page)) {
       root = createRoot(host); flushSync(() => root!.render(createElement(DocumentView, { doc, pageIndex: index, time })));
     } else host.innerHTML = renderSvg(doc, index, time);
     await document.fonts.ready;
     await Promise.all(Array.from(host.querySelectorAll('img')).map(img => img.decode()));
     await new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
-    return { host, draw: (time: number) => { if (scene && renderer && camera) { animateScene(scene, doc, index, time); renderer.render(scene, camera); } }, dispose: () => { root?.unmount(); if (scene) disposeScene(scene); renderer?.dispose(); renderer?.forceContextLoss(); host.remove(); } };
-  } catch (error) { root?.unmount(); if (scene) disposeScene(scene); renderer?.dispose(); renderer?.forceContextLoss(); host.remove(); throw error; }
+    return { host, draw: (time: number) => { if (scene && renderer && camera) { animateScene(scene, doc, index, time); composition?.draw(time); } }, dispose: () => { composition?.dispose(); root?.unmount(); if (scene) disposeScene(scene); renderer?.dispose(); renderer?.forceContextLoss(); host.remove(); } };
+  } catch (error) { composition?.dispose(); root?.unmount(); if (scene) disposeScene(scene); renderer?.dispose(); renderer?.forceContextLoss(); host.remove(); throw error; }
 }
 export async function captureExportPage(doc: DesignDocument, index = 0, time = 0) {
   const mounted = await mountExportPage(doc, index, time);

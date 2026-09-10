@@ -4,7 +4,7 @@ Design Studio AI exposes one shared document contract through REST, network MCP,
 
 ## Install and connect
 
-Install the [released CLI tarball](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz) with `npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.2.0/bestagentkits-design-studio-ai-0.2.0.tgz`. The package is not published to the npm registry.
+Follow the [CLI installation instructions](../README.md#agent-access) for the released tarball. The package is not published to the npm registry.
 
 To build from source, install dependencies with `npm ci` and `npm ci --prefix packages/cli`, then run `npm run build --prefix packages/cli`. From `packages/cli`, run `npm pack`; install the resulting tarball with `npm install -g <path-to-tarball>`. The build also generates `dist/document.schema.json` and `dist/operations.schema.json`.
 
@@ -95,6 +95,12 @@ The CLI is the scoped agentization deliverable in [release phase](../plans/2026-
 
 CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build prerequisites in [repository verification guidance](../AGENTS.md#run-the-appropriate-checks). They build and execute the distributable in real subprocesses, inspect schema/template output, and exercise authenticated project editing against the SQLite-backed handler. Renderer/server tests cover actual binary export. External provider and Google success require separate credential-dependent checks. Release evidence belongs in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
-The [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) provides the CLI tarball and agent-skill ZIP. GitHub release distribution is separate from npm registry publication.
-
 Build the complete installable skill archive with `npm run pack:skill`. The [packaging script](../scripts/package-skill.mjs) includes the entrypoint and all design-kind references in `dist/design-studio-ai-skill.zip`.
+
+## Catalog and editor parity
+
+Discover built-in templates and themes through REST `/api/catalog`, `dsa templates list`, `dsa themes list`, or the available MCP/WebMCP catalog tools. The shared [catalog](../src/shared/catalog.ts) owns discovery; [presets](../src/shared/catalog-presets.ts) supply starting points that still need the user's content and review. A visual theme does not add a component library or a working business backend.
+
+For edits corresponding to the component and scene inspectors, discover the [operation schema](../src/shared/operations.ts) with `dsa schema --operations`. Use `update-node` for component properties or scene materials, `update-page` for camera/light settings, and `reparent-node` for layer order or nesting. Preserve the other fields from the object you read when sending a nested `component` or `scene` change: these objects are replaced, not recursively merged. Keep texture assets in the target project and use its owned asset ID. The [3D skill reference](../skills/design-studio-ai/references/3d.md) covers composition and export review.
+
+Visual presets reference [Ant Design](https://ant.design/docs/react/customize-theme), [shadcn/ui](https://ui.shadcn.com/docs/theming), [Material 3](https://m3.material.io/styles/color/roles), [IBM Carbon](https://carbondesignsystem.com/elements/color/overview/), and [Atlassian](https://atlassian.design/foundations/color). They are adaptations to the studio’s supported renderers, not official distributions of those systems.

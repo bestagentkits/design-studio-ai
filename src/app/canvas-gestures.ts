@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-export function useCanvasGestures(viewport: RefObject<HTMLDivElement | null>, scale: number, setZoom: (fn: (zoom: number) => number) => void, disabled: boolean, ready = true, cancelDrag?: () => void) {
+export function useCanvasGestures(viewport: RefObject<HTMLDivElement | null>, scale: number, setZoom: (fn: (zoom: number) => number) => void, disabled: boolean, ready = true, cancelDrag?: () => void, spacePan = true) {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const current = useRef({ scale, pan }); current.current = { scale, pan };
   const cancel = useRef(cancelDrag); cancel.current = cancelDrag;
@@ -35,13 +35,13 @@ export function useCanvasGestures(viewport: RefObject<HTMLDivElement | null>, sc
       } else if (space || e.buttons === 4) { e.preventDefault(); e.stopPropagation(); setPan(p => ({ x: p.x + e.clientX - previous.x, y: p.y + e.clientY - previous.y })); }
     };
     const up = (e: PointerEvent) => { pointers.delete(e.pointerId); previousDistance = 0; };
-    const keydown = (e: KeyboardEvent) => { if (e.code === 'Space' && !e.defaultPrevented && !e.isComposing && !document.querySelector('dialog[open], [popover]:popover-open') && host.contains(e.target as Node) && !(e.target as HTMLElement).closest('input,textarea,select,[contenteditable],button,[role=combobox]')) { space = true; e.preventDefault(); } };
+    const keydown = (e: KeyboardEvent) => { if (spacePan && e.code === 'Space' && !e.defaultPrevented && !e.isComposing && !document.querySelector('dialog[open], [popover]:popover-open') && host.contains(e.target as Node) && !(e.target as HTMLElement).closest('input,textarea,select,[contenteditable],button,[role=combobox]')) { space = true; e.preventDefault(); } };
     const keyup = (e: KeyboardEvent) => { if (e.code === 'Space') space = false; };
     const blur = () => { space = false; pointers.clear(); };
     host.addEventListener('wheel', wheel, { passive: false });
     host.addEventListener('pointerdown', down, true); host.addEventListener('pointermove', move, true); window.addEventListener('pointerup', up); window.addEventListener('pointercancel', up);
     window.addEventListener('keydown', keydown); window.addEventListener('keyup', keyup); window.addEventListener('blur', blur);
     return () => { host.removeEventListener('wheel', wheel); host.removeEventListener('pointerdown', down, true); host.removeEventListener('pointermove', move, true); window.removeEventListener('pointerup', up); window.removeEventListener('pointercancel', up); window.removeEventListener('keydown', keydown); window.removeEventListener('keyup', keyup); window.removeEventListener('blur', blur); };
-  }, [disabled, viewport, setZoom, ready]);
+  }, [disabled, viewport, setZoom, ready, spacePan]);
   return { pan, resetPan: () => setPan({ x: 0, y: 0 }) };
 }

@@ -58,7 +58,7 @@ test('selecting a 3D object retains a stable keyboard editing focus', async ({ p
   expect(created.status()).toBe(201);
   const { project } = await created.json();
   await page.goto(`/?project=${project.id}`);
-  const canvas = page.locator('.scene-view canvas');
+  const canvas = page.locator('.scene-view canvas:not([data-scene-layer])');
   await expect(canvas).toBeVisible();
   await canvas.click();
   await expect(page.locator('.canvas-viewport')).toBeFocused();

@@ -1,3 +1,5 @@
+import { ComponentInspector } from './component-inspector';
+import { useScreenState } from './screen-state';
 import { LayoutInspector, InteractionInspector } from './layout-inspector';
 import { DesignSystemLibrary } from './design-system-library';
 import { FontPicker } from './font-picker';
@@ -21,6 +23,7 @@ const SceneInspector = lazy(() => import('./scene-inspector').then(module => ({ 
 import { navigateButtonGroup } from "./keyboard-navigation";
 
 type Props = {
+  onTexture?: (file: File, nodeId: string) => Promise<void>;
   doc: DesignDocument;
   page: DesignPage;
   node?: DesignNode;
@@ -33,6 +36,7 @@ type Props = {
   removePage: () => void;
 };
 export function Inspector({
+  onTexture,
   doc,
   page,
   node,
@@ -44,7 +48,7 @@ export function Inspector({
   duplicatePage,
   removePage,
 }: Props) {
-  const [tab, setTab] = useState("design");
+  const [tab, setTab] = useScreenState("inspector", "design", ["design", "theme", "page"]);
   // The selection may show an interpolated pose; durable edits must preserve
   // the stored scene/bind pose and unrelated animated style properties.
   const storedNode = node && doc.pages.flatMap(p => p.nodes).find(n => n.id === node.id);
@@ -60,8 +64,8 @@ export function Inspector({
     });
   }
   return (
-    <aside className="inspector">
-      {doc.kind === '3d' && <Suspense fallback={null}><SceneInspector doc={doc} page={page} node={storedNode} update={update} pageUpdate={pageUpdate}/></Suspense>}
+    <aside className="inspector">{storedNode?.component && <ComponentInspector doc={doc} key={storedNode.id} node={storedNode} update={update}/>}
+      {doc.kind === '3d' && <Suspense fallback={null}><SceneInspector onTexture={onTexture} doc={doc} page={page} node={storedNode?.type === 'model3d' ? storedNode : undefined} update={update} pageUpdate={pageUpdate}/></Suspense>}
       <div
         className="panel-tabs"
         onKeyDown={(event) => navigateButtonGroup(event)}

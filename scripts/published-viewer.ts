@@ -1,3 +1,4 @@
+import { mountSceneComposition } from '../src/shared/scene-composition';
 import { createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { buildScene, disposeScene, animateScene } from '../src/shared/scene-runtime';
@@ -22,18 +23,20 @@ if (source?.textContent) {
       section.replaceChildren();
       const root = createRoot(section); roots.set(index, root); root.render(createElement(DocumentView, { doc, pageIndex: index, navigate: (id: string) => { const next = doc.pages.findIndex(p => p.id === id); sections.forEach((el, i) => { el.hidden = i !== next; }); } }));
     }
-    if (page.scene || page.nodes.some(n => n.scene)) {
+    if (doc.kind === '3d' || page.scene || page.nodes.some(n => n.scene)) {
       section.replaceChildren();
       void (async () => {
         try {
           const { scene, camera, target } = await buildScene(doc, index);
-          const renderer = new THREE.WebGLRenderer({ antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); section.append(renderer.domElement);
+          const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true }); renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); section.append(renderer.domElement);
           const controls = new OrbitControls(camera, renderer.domElement); controls.target.copy(target); controls.enableDamping = true;
-          const resize = () => { const width = section.clientWidth || page.width, height = width * page.height / page.width; renderer.setSize(width, height); camera.aspect = width / height; camera.updateProjectionMatrix(); };
+          const resize = () => { const width = section.clientWidth || page.width, height = width * page.height / page.width; section.style.height = `${height}px`; renderer.setSize(width, height); camera.aspect = width / height; camera.updateProjectionMatrix(); };
           const observer = new ResizeObserver(resize); observer.observe(section); resize();
-          scenePaint.set(index, time => animateScene(scene, doc, index, time));
-          renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
-          window.addEventListener('pagehide', () => { observer.disconnect(); controls.dispose(); disposeScene(scene); renderer.setAnimationLoop(null); renderer.dispose(); renderer.forceContextLoss(); }, { once: true });
+          const composition = mountSceneComposition(section, doc, index, renderer, scene, camera);
+          let sceneTime = 0;
+          scenePaint.set(index, time => { sceneTime = time; animateScene(scene, doc, index, time); });
+          renderer.setAnimationLoop(() => { controls.update(); composition.draw(sceneTime); });
+          window.addEventListener('pagehide', () => { composition.dispose(); observer.disconnect(); controls.dispose(); disposeScene(scene); renderer.setAnimationLoop(null); renderer.dispose(); renderer.forceContextLoss(); }, { once: true });
         } catch { section.textContent = 'The 3D scene could not load. Open in a browser with WebGL enabled.'; }
       })();
       continue;
