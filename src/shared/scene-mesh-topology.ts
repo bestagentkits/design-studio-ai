@@ -1,4 +1,5 @@
 import { meshDistance } from './mesh-distance';
+import { orientClosedMesh } from './mesh-orientation';
 import { geometryFor, meshData } from './scene-runtime';
 import * as T from 'three';
 import type { MeshData } from './design-capabilities';
@@ -53,5 +54,5 @@ export function remesh(nodes: DesignNode[], resolution: number, symmetry: boolea
     for(const t of tetra){const inside=t.filter(i=>ds[i]<0),outside=t.filter(i=>ds[i]>=0);if(!inside.length||!outside.length)continue;if(inside.length===1||outside.length===1){const one=inside.length===1?inside[0]:outside[0],rest=inside.length===1?outside:inside;tri(edge(one,rest[0]),edge(one,rest[1]),edge(one,rest[2]));}else {const [a,b]=inside,[c,d]=outside,A=edge(a,c),B=edge(a,d),C=edge(b,c),D=edge(b,d);tri(A,B,C);tri(B,D,C);}}
   }
   if(!indices.length)throw new Error('Resolution missed the surface; enlarge the shapes or raise resolution');
-  const mesh={positions,indices};relax(mesh,2,.15);return mesh;
+  const mesh={positions,indices};relax(mesh,2,.15);orientClosedMesh(mesh);return mesh;
 }

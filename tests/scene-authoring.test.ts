@@ -24,3 +24,13 @@ test('rigid accessories bake transforms, follow poses and inherit generated clip
 test('topology and paint reject invalid authoring order without partial changes',()=>{let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'paint',nodeId:'body',uv:[.5,.5],radius:.1,color:'#ff0000'});const before=JSON.stringify(doc);assert.throws(()=>command(doc,{action:'uv-pack',nodeId:'body'}),/Clear texture paint/);assert.equal(JSON.stringify(doc),before);doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});assert.throws(()=>command(doc,{action:'relax',nodeId:'body'}),/topology/);});
 
 test('triangle BVH remeshing reconstructs closed document meshes',()=>{let doc=setup();doc.pages[0].nodes[0].data={geometry:'box'};doc=command(doc,{action:'convert',nodeId:'body'});const next=command(doc,{action:'remesh',nodeIds:['body'],outputId:'retopo',resolution:16,symmetry:true});const report=inspectScene(next).pages[0].nodes.find(n=>n.id==='retopo')!;assert.deepEqual(report.issues,[]);assert('vertices' in report&&report.vertices!>30);});
+
+test('symmetric multi-part remesh has consistent outward faces at thin limb intersections',()=>{
+  const doc=setup();
+  const parts=[[[0,1.12,-.4],[.63,.67,.95]],[[0,1.55,.32],[.52,.55,.48]],[[0,2,.63],[.84,.78,.74]],...[-.43,.43].flatMap(x=>[.43,-1].map(z=>[[x,.65,z],[.235,.54,.25]]))];
+  doc.pages[0].nodes=parts.map(([position,scale],i)=>({...doc.pages[0].nodes[0],id:`part-${i}`,scene:{position:position as [number,number,number],scale:scale as [number,number,number]}}));
+  const next=command(doc,{action:'remesh',nodeIds:doc.pages[0].nodes.map(n=>n.id),outputId:'skin',resolution:48,symmetry:true,blend:.08});
+  const report=inspectScene(next).pages[0].nodes.find(n=>n.id==='skin')!;assert.deepEqual(report.issues,[]);
+  const mesh=next.pages[0].nodes.at(-1)!.scene!.mesh!;let volume=0;
+  for(let i=0;i<mesh.indices.length;i+=3){const [a,b,c]=mesh.indices.slice(i,i+3).map(j=>new T.Vector3().fromArray(mesh.positions,j*3));volume+=a.dot(b.cross(c));}assert(volume>0);
+});
