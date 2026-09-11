@@ -2,6 +2,8 @@
 
 Subsequent checkpoint: GitHub source-to-PR acceptance is now complete; the actual remote file hashes match the reviewed archive. Remote PDF CPU and boundary measurements are also recorded. See [live acceptance](live-acceptance.md) and [PDF edge results](pdf-edge-budget-results.md). Historical gaps below describe the initial verification time. Google, model/MCP OAuth/write and peak-memory acceptance remain open.
 
+Latest beta checkpoint: `e020dee` passed CI verify/deploy run 34585612298. Google OAuth, Picker folder/source selection, PDF ingestion and PDF/PPTX uploads now have live evidence. Native Slides produced an empty remote presentation while the operation correctly remains `outcome_unknown`; do not replay it. See the current checkpoint and exact IDs in [live acceptance](live-acceptance.md).
+
 ## Verdict
 
 CI and isolated beta deployment are complete. The full connector plan is **not complete**: implementation and automated checks do not satisfy its remaining live-provider and runtime acceptance requirements. No scope was removed and no production release is claimed.
