@@ -1,10 +1,16 @@
 # Live acceptance — 2026-09-11
 
+## Provider-side Google revocation — 2026-09-11 17:38 ICT
+
+Removed all links for the dedicated Design Studio AI Beta app from the intended work account on Google Account linked-app settings. The app disappeared from the linked-app list. With the previous stored token, real Picker returned Google HTTP 403. Independently, inspecting the existing Google source binding through Studio returned “The provider returned HTTP 401”, request `99b72756-de3f-462f-8a6f-8df9ef54cfc3`; no new source was imported or external write executed. This establishes provider-side revocation enforcement for that connection. Studio still displayed its last known connected status until reconnect; this observation does not claim asynchronous revocation detection.
+
+Completed the same-account reconnect through Google consent with only selected-file access. Studio reports connected; a read-only D1 query confirms connection revision 8 and one credential record. Old snapshots remain historical copies. This checkpoint closes the provider-side revoke/read-denial evidence gap, not multi-account isolation, refresh-token expiry behavior, image/text ingestion, model-tool acceptance or external MCP OAuth/write acceptance.
+
 ## Latest delivery checkpoint
 
 Code `2aa334537ad67d4132ab36f06aab6f107e0d50a9` passed [CI 34588960778](https://github.com/bestagentkits/design-studio-ai/actions/runs/34588960778), including verify and deploy. Cloudflare lists version `4063ec41-d1c5-485e-9ed9-e1b2283baff9` at 100%, annotated with that exact SHA; beta health returns ok=true. Production is unchanged. All older checkpoints below are chronological evidence, not current pending-status authority.
 
-Remaining live evidence: authorized model/tool loop and continuation budgets; external MCP OAuth/write/revoke; Google second-account isolation, provider-side revocation, image/plain-text sources and independent downloaded export bytes. Google local disconnect/reconnect and Docs source ingestion passed as recorded below. Image upload was attempted through Drive, but the browser did not expose a usable file chooser and native Codex-app access was denied by the computer-use tool; no upload or image-source acceptance is claimed. Provider/model and external MCP endpoint details have been requested and are pending. Overall plan remains in progress.
+Remaining live evidence: authorized model/tool loop and continuation budgets; external MCP OAuth/write/revoke; Google second-account isolation, image/plain-text sources and independent downloaded export bytes. Google local disconnect/reconnect and Docs source ingestion passed as recorded below. Image upload was attempted through Drive, but the browser did not expose a usable file chooser and native Codex-app access was denied by the computer-use tool; no upload or image-source acceptance is claimed. Provider/model and external MCP endpoint details have been requested and are pending. Overall plan remains in progress.
 
 ## Google disconnect/reconnect checkpoint
 
@@ -16,7 +22,7 @@ Native export is now verified for a supported three-page slide design: project `
 
 Google Docs source `11P8TeO0_5Q6ILlhUkiqYcT5sIafNlRU3XFd0vAdDsNU` was explicitly selected through Picker and imported as snapshot `6e0ef600-08c5-47ae-b47b-8ed2dee6dccc`. Its actual stored 178 bytes match SHA-256 `5984aa24c4f8362201f54940e998fce84bc3b4ed6c7b143499675f62882c1324`; the authored Vietnamese sentence survives UTF-8 extraction. A new empty document was initially opened by Google's default personal account before the intended work account was explicitly selected; that empty document is `1qRL1aABboAIje01vJdVfnrbK4Vg1Hv64hszMsURFaII`. It is not source evidence and no content was entered there.
 
-All 369 unit/integration tests pass after the layout/component repair; typecheck and application/docs build pass. Additional focused tests cover layout coordinates without mutating the saved design, oversized creation metadata, default-slide deletion, and rejection of unsupported components. Original uncertain operations remain unchanged; no blind replay or manual success marking was used. Remaining live gates still include provider/model and external OAuth/write MCP credentials, second Google account isolation, provider-side revocation, image/text source coverage and independent remote-download byte comparison.
+All 369 unit/integration tests pass after the layout/component repair; typecheck and application/docs build pass. Additional focused tests cover layout coordinates without mutating the saved design, oversized creation metadata, default-slide deletion, and rejection of unsupported components. Original uncertain operations remain unchanged; no blind replay or manual success marking was used. Remaining live gates still include provider/model and external OAuth/write MCP credentials, second Google account isolation, image/text source coverage and independent remote-download byte comparison.
 
 ## Slides response diagnosis — 2026-09-11 10:15 UTC
 
