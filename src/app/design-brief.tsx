@@ -452,7 +452,7 @@ export function DesignBriefWorkspace({
               <summary>
                 Edit original request <ChevronDown size={14} />
               </summary>
-              <Field label="Original request">
+              <Field label="Reuse a prompt">
                 <select
                   defaultValue=""
                   disabled={!!busy}
@@ -469,6 +469,8 @@ export function DesignBriefWorkspace({
                     </option>
                   ))}
                 </select>
+              </Field>
+              <Field label="Original request">
                 <textarea
                   value={request}
                   disabled={!!busy}
