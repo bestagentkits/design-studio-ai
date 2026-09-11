@@ -1,4 +1,6 @@
-import { boardSketchOutline } from './board-sketch';
+import { connectorPath } from './diagram-curve';
+import { diagramFontCss } from './diagram-font-data';
+import { boardSketchOutline, boardShapeSvg, sketchPath } from './board-sketch';
 import { diagramConnectorPoints, diagramLabelPoint, diagramEndpoint, DiagramRoutingError } from './diagram-routing';
 import { diagramHiddenIds } from './diagram-layout';
 import { diagramNodeSvg } from './diagram-render';
@@ -39,10 +41,8 @@ export function boardElementSvg(board: Board, element: BoardElement, doc: Design
     const d = e.commands.map(c => c.op === 'Z' ? 'Z' : c.op === 'C' ? `C ${c.x1} ${c.y1} ${c.x2} ${c.y2} ${c.x} ${c.y}` : c.op === 'Q' ? `Q ${c.x1} ${c.y1} ${c.x} ${c.y}` : `${c.op} ${c.x} ${c.y}`).join(' ');
     body = `<path d="${d}" ${style}/>`;
   } else if (e.type === 'shape' || e.type === 'frame') {
-    body = e.type === 'shape' && e.shape === 'ellipse' ? `<ellipse cx="${e.width / 2}" cy="${e.height / 2}" rx="${e.width / 2}" ry="${e.height / 2}" ${style}/>`
-      : e.type === 'shape' && ['diamond', 'triangle'].includes(e.shape) ? `<polygon points="${e.shape === 'diamond' ? `${e.width / 2},0 ${e.width},${e.height / 2} ${e.width / 2},${e.height} 0,${e.height / 2}` : `${e.width / 2},0 ${e.width},${e.height} 0,${e.height}`}" ${style}/>`
-        : `<rect width="${e.width}" height="${e.height}" rx="${e.type === 'shape' ? e.radius : 0}" ${style}/>`;
-    if (e.type === 'frame') body += `<text y="-10" font-family="Arial" font-size="16" fill="${esc(e.stroke)}">${esc(e.label)}</text>`;
+    body = boardShapeSvg(e);
+    if (e.type === 'frame' && !e.diagram) body += `<text y="-10" font-family="Arial" font-size="16" fill="${esc(e.stroke)}" stroke="${esc(board.background === 'none' ? '#ffffff' : board.background)}" stroke-width="8" stroke-linejoin="round" paint-order="stroke">${esc(e.label)}</text>`;
   } else if (e.type === 'text') {
     body = `<text fill="${esc(e.stroke)}" font-family="${esc(e.fontFamily)}" font-size="${e.fontSize}" text-anchor="${e.align === 'center' ? 'middle' : e.align === 'right' ? 'end' : 'start'}">${e.text.split('\n').map((line, i) => `<tspan x="${e.align === 'center' ? e.width / 2 : e.align === 'right' ? e.width : 0}" y="${(i * 1.3 + 1) * e.fontSize}">${esc(line)}</tspan>`).join('')}</text>`;
   } else if (e.type === 'connector') {
@@ -53,8 +53,8 @@ export function boardElementSvg(board: Board, element: BoardElement, doc: Design
       points = [diagramEndpoint(board, e.start), diagramEndpoint(board, e.end)]; routeWarning = error.message;
     }
     const a = points[0], b = points.at(-1)!;
-    const d = e.routing === 'curve' && points.length === 2 ? `M ${a.x} ${a.y} C ${(a.x + b.x) / 2} ${a.y} ${(a.x + b.x) / 2} ${b.y} ${b.x} ${b.y}` : points.map((p, i) => `${i ? 'L' : 'M'} ${p.x} ${p.y}`).join(' ');
-    body = `${routeWarning ? `<title>${esc(routeWarning)}</title>` : ''}<path ${routeWarning ? 'data-route-warning="true" stroke-dasharray="6 4"' : ''} d="${d}" fill="none" stroke="${esc(e.stroke)}" stroke-width="${e.strokeWidth}" stroke-linecap="round" stroke-linejoin="round"/>`;
+    const d = connectorPath(board, e, points);
+    body = `${routeWarning ? `<title>${esc(routeWarning)}</title><g data-route-warning="true" stroke-dasharray="6 4">` : ''}${sketchPath(e, d, false)}${routeWarning ? '</g>' : ''}`;
     for (const [head, point, neighbor] of [[e.startArrow, a, points[1]], [e.endArrow, b, points.at(-2)!]] as const) {
       if (head === 'dot') body += `<circle cx="${point.x}" cy="${point.y}" r="${e.strokeWidth * 2}" fill="${esc(e.stroke)}"/>`;
       if (head === 'arrow') {
@@ -63,7 +63,7 @@ export function boardElementSvg(board: Board, element: BoardElement, doc: Design
       }
     }
     const labelPoint = diagramLabelPoint(points, e.labelPosition);
-    if (e.label) body += `<text x="${labelPoint.x}" y="${labelPoint.y - 8}" text-anchor="middle" font-family="${esc(e.labelFontFamily)}" font-size="${e.labelFontSize}" fill="${esc(e.stroke)}">${esc(e.label)}</text>`;
+    if (e.label) body += `<text x="${labelPoint.x}" y="${labelPoint.y - 8}" text-anchor="middle" font-family="${esc(e.labelFontFamily)}" font-size="${e.labelFontSize}" fill="${esc(e.labelColor ?? e.stroke)}" stroke="${esc(board.background === 'none' ? '#ffffff' : board.background)}" stroke-width="8" stroke-linejoin="round" paint-order="stroke">${esc(e.label)}</text>`;
     return wrap(`<g data-board-element="${esc(e.id)}" opacity="${opacity}">${body}</g>`);
   } else if ('assetId' in e || e.type === 'painting') {
     if (e.type === 'painting') {
@@ -85,5 +85,5 @@ export function boardElementSvg(board: Board, element: BoardElement, doc: Design
   return wrap(`<g data-board-element="${esc(e.id)}" transform="translate(${e.x} ${e.y}) rotate(${e.rotation} ${e.width / 2} ${e.height / 2}) translate(${e.flipX ? e.width : 0} ${e.flipY ? e.height : 0}) scale(${e.flipX ? -1 : 1} ${e.flipY ? -1 : 1})" opacity="${opacity}">${body}</g>`);
 }
 export function boardSvg(board: Board, doc: DesignDocument, crop: BoardBounds, width: number, height: number): string {
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${crop.x} ${crop.y} ${crop.width} ${crop.height}" preserveAspectRatio="none" overflow="hidden"><rect x="${crop.x}" y="${crop.y}" width="${crop.width}" height="${crop.height}" fill="${esc(board.background)}"/>${board.elements.map(e => boardElementSvg(board, e, doc)).join('')}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${crop.x} ${crop.y} ${crop.width} ${crop.height}" preserveAspectRatio="none" overflow="hidden"><style>${esc(diagramFontCss)}</style><rect x="${crop.x}" y="${crop.y}" width="${crop.width}" height="${crop.height}" fill="${esc(board.background)}"/>${board.elements.map(e => boardElementSvg(board, e, doc)).join('')}</svg>`;
 }

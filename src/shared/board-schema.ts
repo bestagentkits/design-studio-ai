@@ -13,7 +13,15 @@ const base = z.object({
   opacity: z.number().min(0).max(1).default(1), visible: z.boolean().default(true), locked: z.boolean().default(false),
   parentId: creativeId.optional(), diagram: diagramNodeSchema.optional(), flipX: z.boolean().default(false), flipY: z.boolean().default(false),
 });
-const styled = base.extend({ stroke: creativeColor, fill: creativeColor, strokeWidth: z.number().min(.1).max(256), roughness: z.number().min(0).max(3).default(0), seed: z.number().int().min(0).max(0xffffffff).default(1) });
+export const diagramStyleSchema = z.object({
+  roughness: z.number().min(0).max(3).default(1), bowing: z.number().min(0).max(6).default(1),
+  fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).default('solid'), hachureAngle: z.number().min(-180).max(180).default(-41), hachureGap: z.number().min(2).max(40).default(8),
+  fillOpacity: z.number().min(0).max(1).default(1), strokeStyle: z.enum(['solid', 'dashed', 'dotted']).default('solid'),
+  stroke: creativeColor.default('#26352d'), fill: creativeColor.default('#edf2ef'), strokeWidth: z.number().min(.1).max(256).default(2),
+  fontFamily: z.string().min(1).max(200).default('Patrick Hand'), fontSize: z.number().min(8).max(128).default(24),
+  textColor: diagramNodeSchema.shape.textColor, align: z.enum(['left', 'center', 'right']).default('center'),
+});
+const styled = base.extend({ bowing: z.number().min(0).max(6).default(1), fillStyle: z.enum(['solid', 'hachure', 'cross-hatch']).default('solid'), hachureAngle: z.number().min(-180).max(180).default(-41), hachureGap: z.number().min(2).max(40).default(8), fillOpacity: z.number().min(0).max(1).default(1), strokeStyle: z.enum(['solid', 'dashed', 'dotted']).default('solid'), stroke: creativeColor, fill: creativeColor, strokeWidth: z.number().min(.1).max(256), roughness: z.number().min(0).max(3).default(0), seed: z.number().int().min(0).max(0xffffffff).default(1) });
 export const boardEndpointSchema = z.object({
   point: boardPointSchema,
   binding: z.object({ elementId: creativeId, anchor: z.object({ x: z.number().min(0).max(1), y: z.number().min(0).max(1) }), port: z.string().max(80).optional() }).optional(),
@@ -32,7 +40,7 @@ export const boardElementSchema = z.discriminatedUnion('type', [
   styled.extend({ type: z.literal('text'), text: z.string().max(20000), fontFamily: z.string().max(200), fontSize: z.number().min(1).max(1000), align: z.enum(['left', 'center', 'right']).default('left') }),
   base.extend({ type: z.literal('group') }),
   styled.extend({ type: z.literal('frame'), label: z.string().max(200) }),
-  styled.extend({ type: z.literal('connector'), start: boardEndpointSchema, end: boardEndpointSchema, routing: z.enum(['straight', 'elbow', 'curve']), bends: z.array(boardPointSchema).max(128), startArrow: z.enum(['none', 'arrow', 'dot']), endArrow: z.enum(['none', 'arrow', 'dot']), label: z.string().max(2000).default(''), labelFontFamily: z.string().max(200).default('Arial'), labelFontSize: z.number().min(8).max(128).default(16), labelPosition: z.number().min(0).max(1).default(.5) }),
+  styled.extend({ type: z.literal('connector'), start: boardEndpointSchema, end: boardEndpointSchema, routing: z.enum(['straight', 'elbow', 'curve']), bends: z.array(boardPointSchema).max(128), startArrow: z.enum(['none', 'arrow', 'dot']), endArrow: z.enum(['none', 'arrow', 'dot']), label: z.string().max(2000).default(''), labelFontFamily: z.string().max(200).default('Arial'), labelFontSize: z.number().min(8).max(128).default(16), labelPosition: z.number().min(0).max(1).default(.5), labelColor: creativeColor.optional() }),
   base.extend({ type: z.literal('image'), assetId: creativeId }),
   base.extend({ type: z.literal('sticker'), assetId: creativeId, attribution: z.string().max(2000) }),
   base.extend({ type: z.literal('emoji'), assetId: creativeId, unicode: z.string().min(1).max(64), variant: z.string().max(80).optional(), attribution: z.string().max(2000).optional() }),
@@ -42,6 +50,8 @@ export const boardElementSchema = z.discriminatedUnion('type', [
 export const boardSchema = z.object({
   id: creativeId, name: z.string().max(200), elements: z.array(boardElementSchema).max(5000),
   background: creativeColor.default('#ffffff'),
+  diagramDefaults: diagramStyleSchema.optional(),
+  diagramPresets: z.array(z.object({ name: z.string().min(1).max(80), style: diagramStyleSchema })).max(24).optional(),
   mindMap: z.array(z.object({ elementId: creativeId, parentId: creativeId.optional(), collapsed: z.boolean().default(false), pinned: z.boolean().default(false) })).max(5000).optional(),
 });
 export type Board = z.infer<typeof boardSchema>;

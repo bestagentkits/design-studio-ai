@@ -14,7 +14,7 @@ branch: "codex/board-paint-diagrams"
 
 # Board, advanced Paint, Elements and diagrams
 
-Implementation authorized on 2026-09-10; the improved drawing demo was approved on 2026-09-11. Production source now includes Board selection/transforms/paste, four diagram families, Elements/GIFs, advanced Paint, semantic raster commands and time-aware export integration. Broad acceptance and release gates remain in progress; this plan does not claim deployment. Current evidence: [Board/diagrams](reports/diagram-board-delivery.md), [Elements/runtime](reports/elements-runtime-delivery.md), [advanced Paint and measured workloads](reports/advanced-paint-delivery.md), [earlier persistence integration](reports/production-integration.md). Release target: v0.4.0; commit, CI and deployment must be verified separately.
+Implementation authorized on 2026-09-10; the improved drawing demo was approved on 2026-09-11. Production source now includes Board selection/transforms/paste, four diagram families, Elements/GIFs, advanced Paint, semantic raster commands and time-aware export integration. v0.4.0 was merged, released and deployed on 2026-09-11; see [release verification](reports/release-verification.md). Broader physical-device and complete artifact-matrix acceptance remains open. Current evidence: [Board/diagrams](reports/diagram-board-delivery.md), [Elements/runtime](reports/elements-runtime-delivery.md), [advanced Paint and measured workloads](reports/advanced-paint-delivery.md), [earlier persistence integration](reports/production-integration.md). Release: v0.4.0, merge 012c4e3; exact-head CI and Cloudflare deployment verified separately in the release record.
 
 ## Outcome and boundaries
 
@@ -57,7 +57,7 @@ Shared files make phases 04–06 logically independent after 03 but not safe for
 
 ## Current local evidence
 
-[Checklist reconciliation](reports/implementation-checklist-reconciliation.md) records the desktop Board/Paint run (5/5), the earlier 294-test local Node suite and the production CreativeWorkspace probe. At 500/2000 elements, Chromium frame-interval p95 was 17.3/17.5 ms; this measures a standalone scripted pan workload, not physical-device or input-to-pixel latency. The post-merge full Node suite passed 298 tests; post-merge Creative acceptance passed 18 Chromium desktop/mobile executions, 7 Firefox and 7 WebKit executions. See [release verification](reports/release-verification.md). Exact-head CI, release and deployment remain separate pending gates.
+[Checklist reconciliation](reports/implementation-checklist-reconciliation.md) records the desktop Board/Paint run (5/5), the earlier 294-test local Node suite and the production CreativeWorkspace probe. At 500/2000 elements, Chromium frame-interval p95 was 17.3/17.5 ms; this measures a standalone scripted pan workload, not physical-device or input-to-pixel latency. The post-merge full Node suite passed 298 tests; post-merge Creative acceptance passed 18 Chromium desktop/mobile executions, 7 Firefox and 7 WebKit executions. See [release verification](reports/release-verification.md). Exact-head PR/main CI passed 298 Node tests and 107 Chromium E2E executions; v0.4.0 is deployed. Remaining acceptance limits are recorded separately.
 
 ## Open evidence
 
