@@ -8,7 +8,7 @@
 ### Overall Assessment
 Implementation broadly follows the accepted native-only direction. The shared validators still own server/client contracts, style patch defaults are handled with `patchShape`, font CSS is escaped for exported SVG, and focused node tests pass locally.
 
-Re-review update: the previously reported endpoint reconnect, connector inline typography, and agent/CLI documentation gaps are resolved in the pending diff. Final focused review of geometric diagram hit-testing and optional source-aware binding found no new blocking issue.
+Re-review update: the previously reported endpoint reconnect, connector inline typography, and agent/CLI documentation gaps are resolved in the pending diff. Final focused review of geometric diagram hit-testing, connector edge hit-testing, and optional source-aware binding found no new blocking issue.
 
 ### Critical Issues
 None found.
@@ -29,6 +29,7 @@ None.
 - Connector label editor did not inherit connector label style. Resolved: inline editor now uses `labelFontFamily` and `labelFontSize` for connectors (`src/app/diagram-inline-editor.tsx:4-9`).
 - Connector label color needed to be canonical, not a render-only side effect. Verified: connector schema adds optional `labelColor`, `diagram-edge` can patch it, style defaults map `textColor` into connector labels, SVG uses `labelColor ?? stroke`, and unit coverage asserts default label color rendering (`src/shared/board-schema.ts:43`, `src/shared/diagram-operations.ts:23`, `src/shared/diagram-style.ts:12`, `src/shared/board-render.ts:66`, `tests/diagram-quality.test.ts:77-83`).
 - WebKit did not expose some hatched/transparent node interiors through DOM hit-testing. Verified: `diagramHitTarget` now geometrically tests visible semantic node interiors in topmost board order, and `CreativeWorkspace` uses it for transparent-node selection and connector drops (`src/shared/diagram-hit-testing.ts:3-12`, `src/app/creative-workspace.tsx:99-113`, `src/app/creative-workspace.tsx:170-174`). Unit coverage checks transparent/hatched hit targets and hidden branches (`tests/diagram-quality.test.ts:87-93`).
+- Thin connectors can be hard to select at mobile zoom when DOM hit regions miss the path. Verified: `diagramEdgeHitTarget` samples the actual connector route, falls back to endpoint-to-endpoint distance only when routing errors, and scales tolerance from screen pixels through the current SVG transform. `CreativeWorkspace` skips this fallback for explicit handles so endpoint/segment/port drags keep precedence (`src/shared/diagram-hit-testing.ts:17-23`, `src/app/creative-workspace.tsx:101-104`). Unit coverage checks hit tolerance against the sampled curved connector (`tests/diagram-quality.test.ts:101-105`).
 - Center connector drops picked a naive nearest port, causing unwanted paths through the target. Verified: `nearestDiagramBinding` accepts an optional source point and uses it only for interior drops, while near-edge drops keep their precise chosen port (`src/shared/diagram-routing.ts:16-25`, `tests/diagram-quality.test.ts:95-99`).
 - Agent/CLI guidance sync gap. Resolved: `docs/agents.md` and `packages/cli/README.md` now document `diagram-style`, `diagram-update`, `diagram-edge`, selection semantics, label color and live-schema discovery (`docs/agents.md:105-107`, `packages/cli/README.md:80-82`).
 - Generated font/data file intentionally excluded from deep manual review because it is a large generated artifact.
@@ -45,8 +46,8 @@ None.
 - Linting Issues: not measured.
 - Verification run by reviewer: `npx tsx --test tests/diagram-quality.test.ts tests/diagrams.test.ts` passed, 23/23 tests, 0 failures.
 - Ad hoc labelColor probe with `npx tsx --eval` verified `diagram-edge` persists `labelColor` and `boardSvg` renders it in connector label fill.
-- Final focused verification run by reviewer: `npx tsx --test tests/diagram-quality.test.ts` passed, 11/11 tests, 0 failures.
+- Final focused verification run by reviewer: `npx tsx --test tests/diagram-quality.test.ts` passed, 12/12 tests, 0 failures.
 
 ### Unresolved Questions
-- Parent reported full 306-test run passed before the last small fixes, and all-browser UI 8/8 passed with SVG XML parse and image decode; final post-fix parent outputs were not available to this reviewer.
+- Parent reported WebKit reconnect 2/2 passed, local focused/typecheck/build passed, and final merged full tests running; final merged full-test output was not available to this reviewer.
 - Actual final export artifact visual inspection was not observed in this review.

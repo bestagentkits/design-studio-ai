@@ -9,7 +9,7 @@ Deliver the full scope in [issue](issue.md): polished editable diagrams, handwri
 1. [x] Extend compatible diagram/style schemas and shared operations; deterministic Rough.js rendering and self-hosted measured typography.
 2. [x] Improve port-aware routing, label geometry, templates and content-aware layouts.
 3. [x] Add editable defaults/presets, contextual style controls, inline text and visual edge handles.
-4. [ ] Verify representative diagrams, interactions, persistence and exports; update owning docs/discovery; run typecheck/tests/build.
+4. [x] Verify representative diagrams, interactions, persistence and exports; update owning docs/discovery; run typecheck/tests/build.
 5. [ ] Review final change, record evidence and release using existing authorization when gates pass.
 
 ## Inspection and review
@@ -19,4 +19,4 @@ React 19/TypeScript/Vite, Zod canonical schema, shared SVG renderer, semantic op
 All issue criteria apply. Visual review uses actual native output, not static mockups. Exact browser/device/export coverage recorded at completion. User has no physical iPad; do not claim Pencil verification.
 
 ## Current verification
-Shared implementation and authoring complete. Focused tests pass; cross-browser SVG decode and authoring pass before final review fixes. Final revision checks and release pending. Evidence will be recorded in reports/delivery.md.
+Implementation, review and merged local checks complete: 323 tests, typecheck/build/CLI/skill packaging passed. Release pending. See [delivery evidence](reports/delivery.md).

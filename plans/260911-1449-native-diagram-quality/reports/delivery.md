@@ -1,6 +1,6 @@
 # Native diagram delivery — issue #32
 
-Status: verification in progress; not yet deployed.
+Status: local verification complete on merged code; GitHub release pending.
 
 ## Spec compliance
 - Native shared canonical board document retained; no Excalidraw editor dependency or separate store.
@@ -17,15 +17,18 @@ Status: verification in progress; not yet deployed.
 - Kept public font inventory stable while avoiding unnecessary bundled-font fetches in the editor.
 - Locked ancestor children included as layout obstacles; rotated endpoints exit routing bounds.
 - Independent connector label color/font settings preserved; direct port creation uses defaults.
-- Endpoint overlay hit-through and inline connector typography fixed from reviewer findings; browser regression test verifies persisted endpoint binding.
+- Endpoint overlay hit-through, geometry hit testing for transparent/hatched nodes, zoom-sized edge tolerance, incoming-side center binding and inline connector typography fixed from reviewer findings; browser regression test verifies persisted endpoint binding.
 - User-flow Yes/No label positions separated after inspecting actual native screenshots.
 
-## Evidence so far
-- Full unit/integration suite: 306 passed before final label-color/review fixes; final suite pending.
+## Local evidence
+- Merged main `585a7be` into implementation; code head `5ae3786`.
+- `npm run build:cli`, `npm run typecheck`, `npm test`: 323 passed, zero failures.
+- `npm run build`, `npm run pack:skill`, `git diff --check`: passed. Public docs and machine indexes regenerated from source.
 - Creative regression browser suite: 26 passed (Chromium desktop/mobile; five affected specs).
-- Diagram suite: 8 passed across Chromium desktop/mobile, Firefox desktop and WebKit mobile before endpoint regression addition; final rerun pending.
-- Focused diagram quality: 9 passed after label color and rotated/locked tests.
-- Native screenshots inspected for all four families; SVG XML parsing and image.decode exercised, PNG and Chromium PDF artifacts produced.
+- Focused diagram quality: 12 passed after all review fixes; reviewer independently rechecked these tests.
+- Native screenshots inspected for all four families; SVG XML parsing and image.decode exercised, PNG and Chromium PDF artifacts produced. Mind-map PDF raster inspected with Vietnamese text intact.
+- Final diagram authoring/reconnect/save/export suite: 8/8 passed across Chromium desktop/mobile, Firefox desktop and WebKit mobile on merged code.
+- Final review has no open Critical/High/Medium finding in reviewed paths.
 
 ## Boundaries
 - No physical iPad/Apple Pencil available. WebKit mobile tests are not hardware validation.
