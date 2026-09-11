@@ -246,3 +246,15 @@ test('removing the source binding invalidates an approved tool on a different bi
   assert.equal(await db.prepare("SELECT id FROM project_source_snapshots WHERE id='source-snapshot'").first(), null);
   await assert.rejects(claim(env, session, op.id, 2, tool), error('revision_conflict'));
 });
+
+
+test('changed tool description invalidates exact approval without consuming it', async t => {
+  const { env, api, decision, db } = await setup(t);
+  const operation = await prepare(env, api, input(), tool);
+  assert.equal((await decision(operation.id)).status, 200);
+  await assert.rejects(claim(env, api, operation.id, 2, { ...tool, description: 'Changed remote action instructions' }), error('schema_changed'));
+  const approval = await db.prepare('SELECT consumed_at FROM connector_approvals WHERE operation_id=?').bind(operation.id).first<{consumed_at:string|null}>();
+  assert.equal(approval!.consumed_at, null);
+  const stored = await db.prepare('SELECT status,revision FROM connector_operations WHERE id=?').bind(operation.id).first<{status:string;revision:number}>();
+  assert.equal(stored!.status, 'pending'); assert.equal(stored!.revision, 2);
+});

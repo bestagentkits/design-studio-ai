@@ -75,5 +75,5 @@ export async function validateOperationTool(input: ConnectorTool, args: unknown)
     if (error instanceof ConnectorSchemaError && error.code === 'schema_budget_exceeded') fail(413, 'limit_exceeded', 'Tool schema validation exceeds the execution budget.');
     fail(409, 'schema_changed', 'This tool schema contains unsupported constraints. Choose a supported tool.');
   }
-  return { tool, fingerprint: await connectorFingerprint({ fingerprint: tool.fingerprint, name: tool.remoteName, effect: tool.effect, schema: tool.inputSchema }) };
+  return { tool, fingerprint: await connectorFingerprint({ fingerprint: tool.fingerprint, name: tool.remoteName, description: tool.description, effect: tool.effect, schema: tool.inputSchema }) };
 }

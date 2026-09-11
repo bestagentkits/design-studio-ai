@@ -38,7 +38,7 @@ export async function readMcpCatalog(scope: McpRequestScope) {
     try { inspectConnectorSchema(remote.inputSchema); if (remote.outputSchema) inspectConnectorSchema(remote.outputSchema); }
     catch { schemaSupported = false; }
     const definition = connectorToolSchema.parse({ connectionId: scope.connectionId, remoteName: remote.name, description: remote.description ?? '', inputSchema: remote.inputSchema,
-      effect: 'unknown', fingerprint: await connectorFingerprint({ connectionId: scope.connectionId, name: remote.name, inputSchema: remote.inputSchema, outputSchema: remote.outputSchema ?? null }) });
+      effect: 'unknown', fingerprint: await connectorFingerprint({ connectionId: scope.connectionId, name: remote.name, description: remote.description ?? '', inputSchema: remote.inputSchema, outputSchema: remote.outputSchema ?? null }) });
     tools.push({ ...definition, id: `${scope.connectionId}:${remote.name}`, schemaSupported });
   }
   const resources = await Promise.all(rawResources.map(async remote => { const value = resourceSchema.parse(remote); return { ...value, id: `${scope.connectionId}:${value.uri}`, connectionId: scope.connectionId, fingerprint: await connectorFingerprint({ connectionId: scope.connectionId, ...value }) }; }));
