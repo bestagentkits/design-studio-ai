@@ -22,3 +22,5 @@ Design reviewed against existing owners: server/projects.ts owns saved revisions
 - Patch release 0.3.3 packages the added CLI command and synchronized skill. CI and production evidence will be recorded after deployment.
 
 Release verification: CI now runs `scripts/smoke-thumbnails.mjs` after production deploy. It checks actual D1/R2/Browser Rendering cache behavior using disposable data with project/account cleanup; local execution is intentionally skipped without cleanup credentials.
+
+Full E2E rerun: 41 desktop and 40 mobile cases passed (three device-specific skips). Updated the older feedback assertion from client data URLs to revision URLs plus decoded PNG dimensions. Its initial failure restarted a Playwright worker and exhausted signup limits; the corrected full run passes without changing rate limits or test isolation.
