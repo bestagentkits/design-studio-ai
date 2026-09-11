@@ -1,22 +1,22 @@
 # Character workflow completion — issue #31
 
-Status: in progress
+Status: complete
 
 Outcome: deliver every tracked P0/P1/P2 section of #31, deploy, and verify the real Mochi workflow through WebMCP and reopened GLB artifacts.
 Constraints: no AK skills; shared contracts across UI/REST/MCP/WebMCP/CLI; preserve existing documents, private projects and credentials; actual geometry and rendering; additive persistence changes. Retopology evaluation must not misrepresent triangular remeshing as anatomical quads.
 Non-goals: paid generation providers, publishing private projects, unrelated feature expansion.
 
 ## Work and acceptance
-- [ ] Durable operation lifecycle: owner-scoped save/export IDs, idempotency, progress, recovery, artifacts, all clients. Test uncertain response and restart/concurrent retry.
-- [ ] Shared skeleton resource, explicit legacy conversion, compatible binds and export reuse. Compare pose and actual GLB counts.
-- [ ] Named clip editor and commands: loops/blend/speed/amplitude/rest pose, deterministic boundaries, undo and export parity.
-- [ ] Viewport rig handles and weight brushes with locks, normalization and rest/pose separation.
-- [ ] Persistent IK/stance constraints, pole/limits/ground transforms, baked export; measure contact error.
-- [ ] Structured clickable diagnostics with regions/times, before/after and full-animation/multi-angle agent operations.
-- [ ] Sculpt/refinement/edge loops with preserved weights/UV/morphs and original recovery. Document anatomical quad-retopology evaluation.
-- [ ] Seam editing, distortion checker, texture layers and normal/roughness maps, resource limits and export verification.
-- [ ] Contract/docs/discovery parity and focused plus broad tests, cross-browser UI, review.
-- [ ] PR exact-head CI, merge/deploy verification, live Mochi demonstration, close #31 with evidence.
+- [x] Durable operation lifecycle: owner-scoped save/export IDs, idempotency, progress, recovery, artifacts, all clients. Test uncertain response and restart/concurrent retry.
+- [x] Shared skeleton resource, explicit legacy conversion, compatible binds and export reuse. Compare pose and actual GLB counts.
+- [x] Named clip editor and commands: loops/blend/speed/amplitude/rest pose, deterministic boundaries, undo and export parity.
+- [x] Viewport rig handles and weight brushes with locks, normalization and rest/pose separation.
+- [x] Persistent IK/stance constraints, pole/limits/ground transforms, baked export; measure contact error.
+- [x] Structured clickable diagnostics with regions/times, before/after and full-animation/multi-angle agent operations.
+- [x] Sculpt/refinement/edge loops with preserved weights/UV/morphs and original recovery. Document anatomical quad-retopology evaluation.
+- [x] Seam editing, distortion checker, texture layers and normal/roughness maps, resource limits and export verification.
+- [x] Contract/docs/discovery parity and focused plus broad tests, cross-browser UI, review.
+- [x] PR exact-head CI, merge/deploy verification, live Mochi demonstration, close #31 with evidence.
 
 ## Current inspection
 Baseline main includes #23/#30. Creative saves already have transactional receipts but only for v2 painted documents; generalize rather than duplicate. Existing exports execute inline. Existing attachment data copies bones/tracks, so sharing must be explicit and verify identical legacy animation before deduplication.
@@ -46,3 +46,7 @@ The pending receipt-retention SQL narrowing is an optional storage-policy refine
 Main PR #35 integrated at e456d39. All 333 unit/integration tests, typecheck, build and skill packaging passed. PR #36 opened. Desktop Paint, public docs, keyboard and diagram rechecks passed; Character Motion passed unchanged on isolated retry after a single connection reset. Mobile checks found a real header overlap after adding Operations; a wrapping two-row mobile header and labeled compact Operations icon fix it. Independent review found no blockers; affected UI rerun remains in progress. The superseded CI run was cancelled before merge.
 
 Header fix verification: typecheck/build/skill packaging passed; mobile thumbnail 2/2, studio feedback 6/6, keyboard 3 passed/1 existing skip, scene authoring 1/1 on unchanged isolated retry after one export-click timeout. Other mobile rechecks passed. Local transient connection/export timing failures are recorded, not removed from assertions; final CI must run the complete suite.
+
+## Production acceptance
+
+Completed through PR #36 and deployment 1a23d4a. See [delivery evidence](delivery-evidence.md). Both PR and main CI passed 333 unit/integration tests and 117 E2E tests (3 configured skips). Live WebMCP save replay/reconcile/reload and both actual export jobs passed. The original Mochi page remains unchanged. The optional blocked receipt-retention narrowing was not applied; conservative retention preserves recovery and is not a missing issue #31 feature.
