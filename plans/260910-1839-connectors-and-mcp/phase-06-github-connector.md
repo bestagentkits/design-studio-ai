@@ -61,7 +61,7 @@ Use a GitHub App for selected repositories without changing the current GitHub l
 - [x] Add selected repo/file sources pinned to immutable SHA.
 - [x] Produce reviewed real React file diffs and branch/PR writes.
 - [x] Add webhook revocation and partial-write reconciliation.
-- [ ] Complete provider-specific UX/reference and acceptance tests.
+- [x] Complete provider-specific UX/reference and acceptance tests. Live selected-source and reviewed PR evidence is in [live acceptance](reports/live-acceptance.md); lost-response reconciliation remains controlled-test evidence.
 
 ## Validation and success
 
