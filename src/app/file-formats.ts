@@ -1,4 +1,5 @@
 import { publicCreativeProjection } from '../shared/public-creative-projection';
+import {documentSchema} from '../shared/schema';
 import type { DesignDocument, DesignNode } from "../shared/schema";
 import { renderHtml, renderSvg } from "../shared/render";
 import { createDocument } from "../shared/catalog";
@@ -94,6 +95,7 @@ export async function exportDesign(
     download(`${name}-react.zip`, new Blob([new Uint8Array(await createReactArchive(doc, await response.json()))]), 'application/zip'); return;
   }
   if (format === 'glb' || format === 'gltf') {
+    if(page.nodes.some(n=>n.character))throw new Error('Use the native motion package to preserve 2D characters; GLB/glTF cannot represent them.');
     const { exportScene } = await import('../shared/scene-runtime');
     const output = await exportScene(doc, pageIndex, format === 'glb');
     download(`${name}.${format}`, output instanceof ArrayBuffer ? new Blob([output]) : JSON.stringify(output, null, 2), format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'); return;
@@ -247,16 +249,7 @@ export async function importDesign(
   const text = await file.text(),
     name = file.name.replace(/\.[^.]+$/, "");
   if (/\.json$/i.test(file.name)) {
-    const doc = JSON.parse(text) as DesignDocument;
-    if (
-      ![1, 2].includes(doc.schemaVersion) ||
-      !Array.isArray(doc.pages) ||
-      !doc.pages.length ||
-      !doc.theme
-    )
-      throw new Error(
-        "Use a Design Studio document JSON with schemaVersion 1 or 2 and at least one page.",
-      );
+    const doc = documentSchema.parse(JSON.parse(text));
     return {
       document: doc,
       notice:

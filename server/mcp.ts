@@ -1,4 +1,5 @@
 import { documentSaveSchema } from '../src/shared/document-save-contract';
+import { motionInspectionSchema } from '../src/shared/motion-inspection';
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   McpServer,
@@ -14,7 +15,7 @@ import { mutateDocument, operationsSchema } from "../src/shared/operations";
 import { renderHtml, renderSvg } from "../src/shared/render";
 import { fail, origin, owner, unb64 } from "./security";
 import { projectRow, saveDocument, storeAsset } from "./projects";
-import { mediaInputSchema } from './providers';
+import { mediaInputSchema, textProviderSchema } from './providers';
 import { interviewSchema, answerSchema, scopeSchema } from '../src/shared/brief';
 import { mergeRequestSchema } from '../src/shared/collaboration-contract';
 import { withSpan, telemetryEnv, type TelemetrySpan } from './observability';
@@ -59,7 +60,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.3.0" },
+    { name: "design-studio-ai", version: "0.3.2" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -96,6 +97,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   };
   registerDesignSystemTools(server, callApi);
   registerObservabilityTools(server, callApi);
+  server.registerTool('inspect_motion',{description:'Read rig IDs, clips, skins, constraints and an optional sampled pose. No provider call.',inputSchema:{projectId:z.string(),...motionInspectionSchema.shape}},async ({projectId,...query})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/motion?${new URLSearchParams(Object.entries(query).filter(([,v])=>v!==undefined).map(([k,v])=>[k,String(v)]))}`));
   server.registerTool(
     'merge_design',
     { description: 'Merge your edited document against the exact base read earlier. Independent changes are retained; same-field conflicts require reconciliation. Never change the base to bypass a conflict.', inputSchema: { projectId: z.string(), ...mergeRequestSchema.shape } },
@@ -123,7 +125,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   );
   server.registerTool(
     'interview_design_brief',
-    {description:'Ask the owner-configured BYOK provider to prepare contextual questions or a scope from saved answers. Incurs provider usage. Updates the brief only if its revision is unchanged.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().positive(),provider:z.enum(['openai','anthropic','gemini','openrouter']),model:z.string().min(1).max(200).optional()}},
+    {description:'Ask the owner-configured BYOK provider to prepare contextual questions or a scope from saved answers. Incurs provider usage. Updates the brief only if its revision is unchanged.', inputSchema:{projectId:z.string(),expectedRevision:z.number().int().positive(),provider:textProviderSchema,model:z.string().min(1).max(200).optional()}},
     async ({projectId,...body}) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/brief/interview`,body),
   );
   server.registerTool(
@@ -412,14 +414,15 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         "Render the saved design on the cloud and return actual file bytes. PNG is a visual preview. PPTX preserves legacy editable text/shapes and rasterizes structured layouts. React returns runnable frontend source ZIP; GLB/glTF return scene geometry and animation. Video supports up to 60 seconds. Import external media into the project first.",
       inputSchema: {
         projectId: z.string(),
-        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf"]),
+        start:z.number().min(0).optional(),end:z.number().positive().optional(),fps:z.number().int().min(1).max(60).optional(),
+        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf", "motion", "png-sequence", "spritesheet"]),
         pageIndex: z.number().int().min(0).default(0),
         expectedRevision: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true },
     },
-    async ({ projectId, format, pageIndex, expectedRevision }) => {
-      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision }) }, telemetryEnv(c, toolSpan.getStore()));
+    async ({ projectId, format, pageIndex, expectedRevision, start, end, fps }) => {
+      const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/export`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify({ format, pageIndex, expectedRevision, start, end, fps }) }, telemetryEnv(c, toolSpan.getStore()));
       if (!response.ok) return { isError: true, ...result(await response.json()) };
       if (['json', 'html', 'svg'].includes(format)) return result({ format, content: await response.text() });
       const bytes = await response.arrayBuffer();
@@ -436,8 +439,9 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         "Ask a configured BYOK text provider to propose a complete design. Can incur provider charges. Does not save; use update_document after reviewing.",
       inputSchema: {
         projectId: z.string(),
+        mode:z.enum(['document','motion']).optional(),
         prompt: z.string().min(1).max(12000),
-        provider: z.enum(["openai", "anthropic", "gemini", "openrouter"]),
+        provider: textProviderSchema,
         model: z.string().optional(),
         expectedRevision: z.number().int().positive(),
       },

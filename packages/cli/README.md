@@ -14,13 +14,13 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.0.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.2.tgz`, or install the published release directly:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.0/bestagentkits-design-studio-ai-0.3.0.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.2/bestagentkits-design-studio-ai-0.3.2.tgz
 ```
 
-The [v0.3.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.0) includes CLI and skill archives. The package is not published to the npm registry.
+The [v0.3.2 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.2) includes CLI and skill archives. The package is not published to the npm registry.
 
 The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
 
@@ -55,7 +55,7 @@ Usage `null` means unavailable, not zero. Measured-call counts and coverage desc
 
 `preview PROJECT_ID` and `share PROJECT_ID` create a public immutable snapshot and return its URL. `unpreview` and `unshare` remove all public snapshots for the project. These commands are aliases for the same publication storage and ownership checks as `publish`/`unpublish`; they do not expose unsaved private editor state.
 
-`projects export` requests actual files from the authenticated server; its help owns the format list. React ZIP supplies a runnable frontend prototype without a business backend. GLB/glTF supply supported scene geometry and animation. Binary formats require `--output FILE` (or `--out FILE`). PNG/PDF/PPTX, video and 3D exports need a configured cloud/self-host browser renderer; JSON/HTML/SVG and React ZIP do not. Unsupported encoders and missing bindings return explicit errors. `--revision` binds export to the inspected revision. Motion is capped at 60 seconds; cloud rendering mixes imported audio/video. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
+`projects export` requests actual files from the authenticated server; its help owns the format list. React ZIP supplies a runnable frontend prototype without a business backend. GLB/glTF supply supported scene geometry and animation. Binary formats require `--output FILE` (or `--out FILE`). PNG/PDF/PPTX, video and 3D exports need a configured cloud/self-host browser renderer; JSON/HTML/SVG and React ZIP do not. Unsupported encoders and missing bindings return explicit errors. `--revision` binds export to the inspected revision. Video recording is capped at 60 seconds; cloud rendering mixes imported audio/video. PowerPoint preserves editable text/primitives and rasterizes complex nodes.
 
 `render --file design.json --format svg` performs offline static rendering with optional `--page` and `--time`, preserves references, and does not fetch private media. Offline 3D representations are static; server HTML can include the trusted interactive 3D/timeline viewer, and binary outputs render real WebGL. Remote media must be imported before cloud binary export. JSON imports preserve the editable format; arbitrary HTML/SVG import belongs to the browser parser. Google Slides requires real authorization and supported text/shapes/HTTPS images; complex unsupported nodes fail explicitly.
 
@@ -78,3 +78,9 @@ For concurrent editing, retain the exact document and revision you read. `projec
 ## Creative documents
 
 The bundled schema reads v1/v2 and exposes board/painting operations through `schema --operations`. Preserve v2 roots when applying edits; painting replacement requires its observed generation and owned PNG tiles. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. See [creative tools](../../docs/creative-tools.md) for persistence, public projections and current integration limits.
+
+## Native character motion
+
+`dsa motion PROJECT_ID --node NODE_ID --time 1` inspects an instance; omit the node to list reusable rigs/clips/skins. Use live `schema --operations` for named character, channel, key and bake edits. Character documents use schema v2; saving v1 over v2 is rejected.
+
+`generate --mode motion` returns a bounded operation proposal and base document/brief revisions. Review it before applying with `projects document put --revision N --brief-revision B`. Native `motion` export is a ZIP; `png-sequence` and `spritesheet` use `--start`, `--end`, `--fps`, with an exclusive end boundary. These are Studio formats, not Spine/game-engine interchange. See [motion guide](https://studio.agentkit.best/docs/motion) for import, constraints and current export limits.

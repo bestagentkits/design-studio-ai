@@ -1,4 +1,6 @@
 import { boardSvg } from './board-render';
+
+import { characterSvg } from './character-svg';
 import { resolveLayout } from './layout';
 import { ease } from './easing';
 import { documentFontFamilies, googleFontsStylesheetUrl } from './font-loading';
@@ -77,7 +79,7 @@ export function wrappedLines(value: string, width: number, size: number): string
   }
   return lines;
 }
-function nodeSvg(n: DesignNode, doc: DesignDocument): string {
+function nodeSvg(n: DesignNode, doc: DesignDocument, time = 0): string {
   if (n.visible === false) return '';
   const s = n.style ?? {}, theme = doc.theme;
   const fill = escapeHtml(resolveColor(s.fill ?? (n.type === 'text' ? '$text' : '$surface'), theme));
@@ -107,6 +109,9 @@ function nodeSvg(n: DesignNode, doc: DesignDocument): string {
     const labels = Array.isArray(n.data?.labels) ? n.data.labels : [];
     const maximum = Math.max(1, ...values), gap = n.width / Math.max(values.length, 1);
     markup = values.map((value, i) => { const h = value / maximum * (n.height - 45); return `<rect x="${gap * i + 10}" y="${n.height - 45 - h}" width="${Math.max(0, gap - 24)}" height="${h}" rx="4" fill="${fill}"/><text x="${gap * i + 10}" y="${n.height - 14}" font-family="Arial" font-size="14" fill="${escapeHtml(resolveColor('$text', theme))}">${escapeHtml(String(labels[i] ?? value).slice(0, 30))}</text>`; }).join('');
+  } else if (n.type === 'character' && n.character) {
+    const character=doc.characters?.find(c=>c.id===n.character!.characterId);
+    if(character) markup=`<svg width="${n.width}" height="${n.height}" viewBox="0 0 ${character.width} ${character.height}" overflow="visible">${characterSvg(character,n.character,doc.assets,time,n.id)}</svg>`;
   } else if (n.type === 'model3d') {
     const color = escapeHtml(resolveColor(n.data?.color ?? '$accent', theme));
     markup = `<ellipse cx="${n.width / 2}" cy="${n.height * 0.86}" rx="${n.width * 0.3}" ry="${n.height * 0.055}" fill="#000000" opacity="0.12"/><ellipse cx="${n.width / 2}" cy="${n.height * 0.46}" rx="${n.width * 0.29}" ry="${n.height * 0.31}" fill="none" stroke="${color}" stroke-width="${n.width * 0.14}" transform="rotate(-28 ${n.width / 2} ${n.height / 2})"/><text x="${n.width / 2}" y="${n.height - 3}" text-anchor="middle" font-size="12" fill="${escapeHtml(resolveColor('$muted', theme))}">3D scene · Open editor for interactive rendering</text>`;
@@ -127,7 +132,7 @@ export function renderSvg(doc: DesignDocument, pageIndex = 0, time = 0): string 
   // parent offsets only after evaluating the animated pose.
   const page = sourcePage ? resolveLayout({ ...sourcePage, nodes: sourcePage.nodes.map(node => interpolateNode(node, doc, time)) }) : undefined;
   if (!page) throw new Error('Page does not exist');
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}" role="img" aria-label="${escapeHtml(page.name)}"><rect width="100%" height="100%" fill="${escapeHtml(resolveColor(page.background, doc.theme, '#ffffff'))}"/>${page.nodes.map(n => nodeSvg(n, doc)).join('')}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${page.width}" height="${page.height}" viewBox="0 0 ${page.width} ${page.height}" role="img" aria-label="${escapeHtml(page.name)}"><rect width="100%" height="100%" fill="${escapeHtml(resolveColor(page.background, doc.theme, '#ffffff'))}"/>${page.nodes.map(n => nodeSvg(n, doc, time)).join('')}</svg>`;
 }
 export function renderHtml(doc: DesignDocument, viewer?: { script: string; nonce?: string }): string {
   const fontUrl = googleFontsStylesheetUrl(documentFontFamilies(doc));

@@ -22,8 +22,10 @@ const port = Number(process.env.E2E_PORT || 8791);
 const origin = `http://127.0.0.1:${port}`;
 await new Promise((accept, reject) => { const probe = net.createServer(); probe.once('error', reject); probe.listen(port, '127.0.0.1', () => probe.close(accept)); });
 const directory = await mkdtemp(join(tmpdir(), 'studio-e2e-'));
+// The isolated test server uses this reserved origin for settings persistence only.
+const testProviderOrigins = 'https://browser-provider.example';
 const env = { ...process.env, PORT: String(port), APP_URL: origin, HOST: '127.0.0.1', DATA_DIR: directory, ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: randomBytes(32).toString('base64'), E2E_BASE_URL: origin };
-const server = spawn(process.execPath, ['--import', 'tsx', 'server/node.ts'], { env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+const server = spawn(process.execPath, ['--import', 'tsx', 'server/node.ts'], { env: { ...env, PROVIDER_ALLOWED_ORIGINS: testProviderOrigins }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
 let listening = false, startupOutput = '';
 server.stdout.on('data', data => { startupOutput += data.toString(); listening = startupOutput.includes(`Design Studio AI listening on ${origin}`); process.stdout.write(data); });
 server.stderr.on('data', data => process.stderr.write(data));

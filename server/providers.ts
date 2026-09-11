@@ -1,75 +1,20 @@
+import {motionProposalSchema,motionProposalContext,parseMotionProposal} from '../src/shared/motion-proposal';
+import { operationsSchema, mutateDocument } from '../src/shared/operations';
+import { buildTextRequest } from './text-provider-request';
+import { mediaInputSchema, generationInputSchema } from '../src/shared/provider-requests';
+import { buildImageRequest, decodeImageResult, imageMime, leonardoJob } from './image-providers';
 import { withSpan, providerUsage, completeMediaSpan, errorCode } from './observability';
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Context } from "hono";
 import type { Env } from "./types";
-import { decrypt, encrypt, fail, id, now, owner, unb64, rateLimit } from "./security";
+import { fail, id, now, owner, rateLimit } from "./security";
 import { projectRow, storeAsset, validateAssets } from "./projects";
 import { documentSchema } from "../src/shared/schema";
 import type { DesignBrief } from '../src/shared/brief';
-const defaults: Record<string, { baseUrl: string; model: string }> = {
-  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-4.1" },
-  anthropic: {
-    baseUrl: "https://api.anthropic.com/v1",
-    model: "claude-sonnet-4-20250514",
-  },
-  gemini: {
-    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    model: "gemini-2.5-flash",
-  },
-  openrouter: {
-    baseUrl: "https://openrouter.ai/api/v1",
-    model: "openai/gpt-4.1",
-  },
-  fal: {
-    baseUrl: "https://queue.fal.run",
-    model: "fal-ai/kling-video/v2.5-turbo/pro/text-to-video",
-  },
-};
-interface Provider {
-  provider: string;
-  encrypted_key: string;
-  base_url: string;
-  model: string;
-}
-function allowedBase(c: Context<Env>, provider: string, base: string) {
-  const config = defaults[provider];
-  if (!config) fail(400, "unsupported_provider", "Unknown provider.");
-  const url = new URL(base);
-  const allowed = [
-    new URL(config.baseUrl).origin,
-    ...(c.env.PROVIDER_ALLOWED_ORIGINS ?? "").split(",").filter(Boolean),
-  ];
-  if (
-    url.protocol !== "https:" ||
-    url.username ||
-    url.password ||
-    url.search ||
-    url.hash ||
-    !allowed.includes(url.origin)
-  )
-    fail(
-      400,
-      "invalid_provider_url",
-      "Provider base URL must use an operator-allowlisted HTTPS origin.",
-    );
-  return base.replace(/\/+$/, "");
-}
-export async function providerConfig(c: Context<Env>, provider: string) {
-  const row = await c.env.DB.prepare(
-    "SELECT * FROM providers WHERE user_id=? AND provider=?",
-  )
-    .bind(owner(c), provider)
-    .first<Provider>();
-  if (!row)
-    fail(
-      400,
-      "provider_unconfigured",
-      "Add your provider API key in Settings first.",
-    );
-  allowedBase(c, provider, row.base_url);
-  return { ...row, key: await decrypt(c.env, row.encrypted_key) };
-}
+import { providerConfig, providerHeaders, providerRoutes } from './provider-connections';
+import { providerCatalog as defaults, textProviderSchema, isCustomProvider } from '../src/shared/providers';
+export { providerConfig, providerRoutes, textProviderSchema };
 export async function limitedBytes(
   response: Response,
   limit = 24 * 1024 * 1024,
@@ -129,69 +74,17 @@ export async function upstream(
   }
   return response;
 }
-async function jsonResponse(response: Response) {
+export async function jsonResponse(response: Response) {
   try {
-    return JSON.parse(new TextDecoder().decode(await limitedBytes(response)));
+    const result = JSON.parse(new TextDecoder().decode(await limitedBytes(response, 29 * 1024 * 1024)));
+    if (!result || typeof result !== 'object' || Array.isArray(result)) fail(502, 'invalid_provider_response', 'Provider returned an invalid response object.');
+    return result;
   } catch (error) {
     if (error instanceof SyntaxError)
       fail(502, "invalid_provider_response", "Provider returned invalid JSON.");
     throw error;
   }
 }
-export const providerRoutes = new Hono<Env>();
-providerRoutes.get("/", async (c) => {
-  const rows = await c.env.DB.prepare(
-    "SELECT provider,base_url,model FROM providers WHERE user_id=?",
-  )
-    .bind(owner(c))
-    .all<Provider>();
-  return c.json({
-    providers: rows.results.map((row) => ({
-      provider: row.provider,
-      baseUrl: row.base_url,
-      model: row.model,
-      configured: true,
-      apiKey: "••••••••",
-    })),
-  });
-});
-providerRoutes.put("/:provider", async (c) => {
-  const provider = c.req.param("provider");
-  const body = z
-    .object({
-      apiKey: z.string().min(8).max(4096),
-      baseUrl: z.string().url().optional(),
-      model: z.string().min(1).max(200).optional(),
-    })
-    .parse(await c.req.json());
-  if (!defaults[provider])
-    fail(400, "unsupported_provider", "Unknown provider.");
-  const baseUrl = allowedBase(
-    c,
-    provider,
-    body.baseUrl ?? defaults[provider].baseUrl,
-  );
-  const model = body.model ?? defaults[provider].model;
-  await c.env.DB.prepare(
-    "INSERT INTO providers(user_id,provider,encrypted_key,base_url,model) VALUES(?,?,?,?,?) ON CONFLICT(user_id,provider) DO UPDATE SET encrypted_key=excluded.encrypted_key,base_url=excluded.base_url,model=excluded.model",
-  )
-    .bind(owner(c), provider, await encrypt(c.env, body.apiKey), baseUrl, model)
-    .run();
-  return c.json({
-    provider,
-    baseUrl,
-    model,
-    configured: true,
-    apiKey: "••••••••",
-  });
-});
-providerRoutes.delete("/:provider", async (c) => {
-  await c.env.DB.prepare("DELETE FROM providers WHERE user_id=? AND provider=?")
-    .bind(owner(c), c.req.param("provider"))
-    .run();
-  return c.json({ ok: true });
-});
-export const textProviderSchema = z.enum(['openai', 'anthropic', 'gemini', 'openrouter']);
 export async function completeText(c: Context<Env>, body: {
   provider: z.infer<typeof textProviderSchema>; model?: string; system: string; prompt: string; maxTokens?: number;
 }) {
@@ -199,73 +92,11 @@ export async function completeText(c: Context<Env>, body: {
   const config = await providerConfig(c, body.provider);
   const model = body.model ?? config.model;
   span.set({ model });
-  const system = body.system;
-  let result: any;
-  let output: string = "";
-  if (body.provider === "anthropic") {
-    result = await jsonResponse(
-      await upstream(`${config.base_url}/messages`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": config.key,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: body.maxTokens ?? 16000,
-          system,
-          messages: [{ role: "user", content: body.prompt }],
-        }),
-      }),
-    );
-    output =
-      result.content
-        ?.filter((c: any) => c.type === "text")
-        .map((c: any) => c.text)
-        .join("") ?? "";
-  } else if (body.provider === "gemini") {
-    if (!/^[a-zA-Z0-9._-]+$/.test(model))
-      fail(400, "invalid_model", "Invalid Gemini model.");
-    result = await jsonResponse(
-      await upstream(`${config.base_url}/models/${model}:generateContent`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": config.key,
-        },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: system }] },
-          contents: [{ role: "user", parts: [{ text: body.prompt }] }],
-          generationConfig: { responseMimeType: "application/json", ...(body.maxTokens ? { maxOutputTokens: body.maxTokens } : {}) },
-        }),
-      }),
-    );
-    output =
-      result.candidates?.[0]?.content?.parts
-        ?.map((p: any) => p.text ?? "")
-        .join("") ?? "";
-  } else {
-    result = await jsonResponse(
-      await upstream(`${config.base_url}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${config.key}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: system },
-            { role: "user", content: body.prompt },
-          ],
-          response_format: { type: "json_object" },
-          ...(body.maxTokens ? { max_tokens: body.maxTokens } : {}),
-        }),
-      }),
-    );
-    output = result.choices?.[0]?.message?.content ?? "";
-  }
+  const request = buildTextRequest(config, { ...body, model });
+  const result = await jsonResponse(await upstream(request.url, request.init));
+  const output = config.protocol === 'anthropic' ? result.content?.filter((c: any) => c.type === 'text').map((c: any) => c.text).join('') ?? ''
+    : config.protocol === 'gemini' ? result.candidates?.[0]?.content?.parts?.filter((p: any) => !p.thought).map((p: any) => p.text ?? '').join('') ?? ''
+    : result.choices?.[0]?.message?.content ?? '';
   span.set(providerUsage(result.usage ?? result.usageMetadata, body.provider));
   if (typeof output === 'string') span.set({ outputBytes: new TextEncoder().encode(output).length });
   if (typeof output !== 'string') fail(502, 'invalid_provider_response', 'Provider did not return text content.');
@@ -276,15 +107,18 @@ export async function completeText(c: Context<Env>, body: {
 export const generationRoutes = new Hono<Env>();
 generationRoutes.post("/:id/generate", async (c) => {
   const row = await projectRow(c, c.req.param("id"));
-  const body = z.object({ prompt: z.string().trim().min(1).max(12000), provider: textProviderSchema, model: z.string().min(1).max(200).optional(), expectedRevision: z.number().int().positive() }).parse(await c.req.json());
+  const body = generationInputSchema.parse(await c.req.json());
   if (body.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Reload the project before generating.');
   const savedBrief = await c.env.DB.prepare('SELECT brief,revision FROM design_briefs WHERE project_id=? AND user_id=?').bind(row.id, owner(c)).first<{ brief: string; revision: number }>();
   const brief = savedBrief ? JSON.parse(savedBrief.brief) as DesignBrief : null;
   if (brief && (brief.status !== 'approved' || !brief.scope || !brief.approvedAt)) fail(409, 'brief_not_approved', 'Review and explicitly approve the project scope before generating.');
+  const motion=body.mode==='motion'||(body.mode!=='document'&&!!JSON.parse(row.document).characters?.length);
   const system = 'You edit canonical DesignDocument v1 or v2 JSON, preserving the input schemaVersion. For v2 preserve all boards, paintings, asset IDs, layer manifests and generation identities unless explicitly instructed. Never fabricate paint pixel hashes or composites; pixel changes require owned PNG tiles. Return only the complete valid document, no prose or markdown. Preserve id and kind and existing useful content unless asked. Nodes have finite pixel x,y,width,height; type frame,group,component,text,image,shape,icon,chart,model3d,video,audio,board,artwork. Prefer structured flex/grid page and container layout for Web/App designs: layout has mode, direction row/column, gap,padding,align,justify,wrap,columns. sizing width/height uses fixed/hug/fill. Explicit absolute containers use local child coordinates; containers with no layout keep legacy page-space coordinates. Components use component:{name,system:antd or shadcn,props:{label,...}}; available names Button,Checkbox,Input,InputNumber,Slider,Image,Avatar,List,Statistics,Chart,Table,Select,Switch,Textarea,Card,Badge,Progress,Tabs,Dialog,Radio. Parent IDs must exist on the same page. Text belongs in text, styles in style. Timeline keyframes support linear,easeIn,easeOut,easeInOut,bounce,spring,step or a cubic bezier tuple. Mesh geometry/UV/materials/bones belong in scene; preserve existing mesh data unless specifically editing it. Never return executable code, scripts, event handlers, or javascript URLs. Preserve schemaVersion, theme, pages, assets and metadata. '
     + (brief ? `The user explicitly approved this scope. Fulfill its objective, audience, direction, deliverables, constraints and acceptance criteria: ${JSON.stringify(brief.scope)}. ` : '')
     + 'Current document: ' + row.document;
-  const { output, usage } = await completeText(c, { provider: body.provider, model: body.model, system, prompt: body.prompt });
+  const motionContext=motionProposalContext(documentSchema.parse(JSON.parse(row.document)));
+  const motionSystem='Return only a JSON array of bounded document operations. Preserve all unrelated artwork, keys, skins and IDs. Build editable bones, clips and constraints; never return code. Existing assets only. The user will review before applying. Operations schema: '+JSON.stringify(z.toJSONSchema(motionProposalSchema))+' Current approved scope: '+JSON.stringify(brief?.scope??null)+' Current document (media URLs omitted): '+JSON.stringify(motionContext);
+  const { output, usage } = await completeText(c, { provider: body.provider, model: body.model, system:motion?motionSystem:system, prompt: body.prompt });
   const currentBrief = await c.env.DB.prepare('SELECT revision FROM design_briefs WHERE project_id=? AND user_id=?').bind(row.id, owner(c)).first<{ revision: number }>();
   if ((currentBrief?.revision ?? 0) !== (savedBrief?.revision ?? 0)) fail(409, 'revision_conflict', 'The brief changed during generation. Review its latest scope before generating again.');
   let draft: unknown;
@@ -299,6 +133,8 @@ generationRoutes.post("/:id/generate", async (c) => {
       "Provider did not return a valid document. Your project was not changed.",
     );
   }
+  let operations:unknown;
+  if(motion){try{operations=parseMotionProposal(documentSchema.parse(JSON.parse(row.document)),draft);draft=mutateDocument(documentSchema.parse(JSON.parse(row.document)),operations);}catch{fail(502,'invalid_generation','Motion operations failed validation. Your project was not changed.');}}
   const parsed = documentSchema.safeParse(draft);
   if (!parsed.success)
     fail(
@@ -312,23 +148,16 @@ generationRoutes.post("/:id/generate", async (c) => {
       "invalid_generation",
       "Provider changed document identity. Your project was not changed.",
     );
-  await validateAssets(c, parsed.data);
+  if(parsed.data.schemaVersion<JSON.parse(row.document).schemaVersion)fail(502,'invalid_generation','Provider downgraded the document.');
+  if((await projectRow(c,row.id)).revision!==row.revision)fail(409,'revision_conflict','Project changed during generation.');
+  await validateAssets(c, parsed.data,row.id);
   return c.json({
-    document: parsed.data,
+    document: parsed.data, operations, baseRevision:row.revision, baseBriefRevision:savedBrief?.revision??0,
     usage,
   });
 });
 
-export const mediaInputSchema = z.object({
-  kind: z.enum(["image", "audio", "video"]),
-  prompt: z.string().trim().min(1).max(4000),
-  provider: z.enum(["openai", "fal"]),
-  model: z.string().min(1).max(200).optional(),
-  voice: z.enum(["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer"]).optional(),
-  sourceAssetId: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(120).optional(),
-  durationSeconds: z.number().int().min(1).max(190).optional(),
-  strength: z.number().min(0).max(1).optional(),
-});
+export { mediaInputSchema } from '../src/shared/provider-requests';
 type MediaInput = z.infer<typeof mediaInputSchema>;
 interface MediaSource { name: string; mimeType: string; bytes: ArrayBuffer }
 const falModels = {
@@ -346,6 +175,12 @@ export function buildMediaRequest(body: MediaInput, source?: MediaSource): { mod
   if (body.sourceAssetId && !source) fail(400, "source_asset_required", "The selected source asset is unavailable.");
   const sourceKind = source?.mimeType.split('/')[0];
   if (source && source.bytes.byteLength > 20 * 1024 * 1024) fail(413, "source_too_large", "Source media must be at most 20 MB.");
+  if (body.provider !== 'openai' && body.provider !== 'fal') {
+    if (!['gemini', 'grok', 'leonardo'].includes(body.provider)) fail(400, 'unsupported_capability', 'Custom media requires a configured OpenAI or Gemini API format.');
+    if (body.kind !== 'image' || source) fail(400, 'unsupported_capability', 'This connection supports prompt-only image generation. Choose OpenAI or fal for source editing.');
+    if (body.voice !== undefined || body.durationSeconds !== undefined || body.strength !== undefined) fail(400, 'unsupported_option', 'Voice, duration and strength do not apply to image generation.');
+    return buildImageRequest(body.provider as 'gemini' | 'grok' | 'leonardo', body.prompt, body.model);
+  }
   if (body.provider === "openai") {
     if (body.kind === "video") fail(400, "unsupported_capability", "Choose fal for video generation or editing.");
     if (body.durationSeconds !== undefined || body.strength !== undefined) fail(400, "unsupported_option", "Duration and strength controls apply to supported fal models.");
@@ -354,6 +189,7 @@ export function buildMediaRequest(body: MediaInput, source?: MediaSource): { mod
       const model = body.model ?? "gpt-4o-mini-tts";
       return { model, path: "/audio/speech", payload: { model, input: body.prompt, voice: body.voice ?? "coral", response_format: "mp3" } };
     }
+    if (body.voice !== undefined) fail(400, 'unsupported_option', 'The voice selector applies only to speech.');
     const model = body.model ?? "gpt-image-1";
     if (!source) return { model, path: "/images/generations", payload: { model, prompt: body.prompt, size: "1024x1024", n: 1 } };
     if (!["image/png", "image/jpeg", "image/webp"].includes(source.mimeType)) fail(400, "invalid_source_type", "Image editing requires an owned PNG, JPEG, or WebP asset.");
@@ -421,33 +257,39 @@ generationRoutes.post("/:id/media", async c => {
   const project = await projectRow(c, c.req.param("id"));
   const body = mediaInputSchema.parse(await c.req.json());
   const source = await sourceAsset(c, project.id, body.sourceAssetId);
-  const request = buildMediaRequest(body, source);
-  return withSpan(c, { kind: 'provider', action: body.provider === 'fal' ? 'provider.media.job' : `provider.media.${body.kind}`, projectId: project.id, provider: body.provider, model: request.model }, async span => {
+  return withSpan(c, { kind: 'provider', action: ['fal', 'leonardo'].includes(body.provider) ? 'provider.media.job' : `provider.media.${body.kind}`, projectId: project.id, provider: body.provider, model: body.model }, async span => {
   const config = await providerConfig(c, body.provider);
+  let requestBody = body;
+  if (isCustomProvider(body.provider)) {
+    if (config.protocol === 'anthropic' || body.kind !== 'image' || source) fail(400, 'unsupported_capability', 'Custom connections support prompt-only images using OpenAI or Gemini API format.');
+    requestBody = { ...body, provider: config.protocol, model: body.model ?? config.model };
+  } else if (['grok', 'leonardo'].includes(body.provider)) requestBody = { ...body, model: body.model ?? config.model };
+  const request = buildMediaRequest(requestBody, source);
+  if (isCustomProvider(body.provider) && config.protocol === 'openai' && !/^(gpt-image-|chatgpt-image-)/.test(request.model)) (request.payload as Record<string, unknown>).response_format = 'b64_json';
+  span.set({ model: request.model });
   await rateLimit(c, `media:${owner(c)}`, 30);
   const multipart = request.payload instanceof FormData;
   const response = await upstream(`${config.base_url}${request.path}`, {
     method: "POST",
-    headers: { Authorization: `${body.provider === 'fal' ? 'Key' : 'Bearer'} ${config.key}`, ...(multipart ? {} : { 'Content-Type': 'application/json' }) },
+    headers: { ...providerHeaders(config), ...(multipart ? {} : { 'Content-Type': 'application/json' }) },
     body: multipart ? request.payload as FormData : JSON.stringify(request.payload),
   });
-  if (body.provider === "fal") {
+  if (body.provider === "fal" || body.provider === 'leonardo') {
     const result = await jsonResponse(response);
+    result.request_id = body.provider === 'leonardo' ? result.sdGenerationJob?.generationId : result.request_id;
     if (typeof result.request_id !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(result.request_id)) fail(502, "invalid_provider_response", "Provider returned no valid request ID.");
     const jobId = id();
     await c.env.DB.prepare('INSERT INTO media_jobs(id,user_id,project_id,provider,remote_id,model,kind,created_at,observability_span_id) VALUES(?,?,?,?,?,?,?,?,?)')
-      .bind(jobId, owner(c), project.id, 'fal', result.request_id, request.model, body.kind, now(), span.event.id).run();
+      .bind(jobId, owner(c), project.id, body.provider, result.request_id, request.model, body.kind, now(), span.event.id).run();
     span.pending = true;
     return c.json({ job: { id: jobId, status: 'queued' } }, 202);
   }
   if (body.kind === 'audio') { const bytes = await limitedBytes(response, 20 * 1024 * 1024); span.set({ outputBytes: bytes.byteLength }); return c.json({ asset: await storeAsset(c, project.id, 'Generated speech.mp3', 'audio/mpeg', bytes) }); }
-  const result = await jsonResponse(response), encoded = result.data?.[0]?.b64_json;
-  span.set(providerUsage(result.usage));
-  if (typeof encoded !== 'string' || encoded.length > 28 * 1024 * 1024) fail(502, 'invalid_provider_response', 'Image provider did not return bounded image bytes. Choose a model supporting base64 output.');
-  let bytes: ArrayBuffer;
-  try { bytes = unb64(encoded).buffer as ArrayBuffer; } catch { fail(502, 'invalid_provider_response', 'Image provider returned invalid base64.'); }
-  span.set({ outputBytes: bytes.byteLength });
-  return c.json({ asset: await storeAsset(c, project.id, source ? 'Edited image.png' : 'Generated image.png', 'image/png', bytes) });
+  const result = await jsonResponse(response);
+  span.set(providerUsage(result.usage ?? result.usageMetadata, body.provider));
+  const image = decodeImageResult(result, config.protocol);
+  span.set({ outputBytes: image.bytes.byteLength });
+  return c.json({ asset: await storeAsset(c, project.id, `${source ? 'Edited' : 'Generated'} image.${image.extension}`, image.mimeType, image.bytes) });
   });
 });
 
@@ -466,24 +308,40 @@ export function falResultFile(result: unknown, kind: MediaInput['kind']): { url:
 generationRoutes.get("/:id/media/:jobId", async c => {
   await projectRow(c, c.req.param('id'));
   const job = await c.env.DB.prepare('SELECT * FROM media_jobs WHERE id=? AND user_id=? AND project_id=?')
-    .bind(c.req.param('jobId'), owner(c), c.req.param('id')).first<{model:string;remote_id:string;kind:MediaInput['kind'];result_asset:string|null;observability_span_id:string|null}>();
+    .bind(c.req.param('jobId'), owner(c), c.req.param('id')).first<{provider:string;model:string;remote_id:string;kind:MediaInput['kind'];result_asset:string|null;observability_span_id:string|null}>();
   if (!job) fail(404, 'not_found', 'Media job not found.');
   if (job.result_asset) { const asset = JSON.parse(job.result_asset); await completeMediaSpan(c, job.observability_span_id, { outputBytes: asset.size }); return c.json({ status: 'completed', asset }); }
-  const config = await providerConfig(c, 'fal');
-  const endpoint = job.model.split('/').slice(0, 2).join('/');
-  const headers = { Authorization: `Key ${config.key}` };
-  const status = await jsonResponse(await upstream(`${config.base_url}/${endpoint}/requests/${job.remote_id}/status`, { headers }));
-  if (status.status === 'IN_QUEUE' || status.status === 'IN_PROGRESS') return c.json({ status: status.status === 'IN_PROGRESS' ? 'processing' : 'queued' });
-  if (status.status !== 'COMPLETED') { await completeMediaSpan(c, job.observability_span_id, { errorCode: 'media_generation_failed' }); fail(502, 'media_generation_failed', 'Provider job failed or returned an unknown status. Check source requirements and retry generation if appropriate.'); }
-  const result = await jsonResponse(await upstream(`${config.base_url}/${endpoint}/requests/${job.remote_id}`, { headers }));
+  const config = await providerConfig(c, job.provider);
+  if (!/^[a-zA-Z0-9_-]+$/.test(job.remote_id)) fail(502, 'invalid_provider_response', 'Invalid stored provider job ID.');
+  const headers = providerHeaders(config);
+  let result: any;
+  let file: { url: string; mimeType?: string };
   try {
-  const file = falResultFile(result, job.kind ?? 'video');
+  if (job.provider === 'leonardo') {
+    result = await jsonResponse(await upstream(`${config.base_url}/generations/${job.remote_id}`, { headers }));
+    const state = leonardoJob(result);
+    if (state.status === 'processing') return c.json({ status: 'processing' });
+    file = { url: state.url! };
+  } else if (job.provider === 'fal') {
+    const endpoint = job.model.split('/').slice(0, 2).join('/');
+    const status = await jsonResponse(await upstream(`${config.base_url}/${endpoint}/requests/${job.remote_id}/status`, { headers }));
+    if (status.status === 'IN_QUEUE' || status.status === 'IN_PROGRESS') return c.json({ status: status.status === 'IN_PROGRESS' ? 'processing' : 'queued' });
+    if (status.status !== 'COMPLETED') fail(502, 'media_generation_failed', 'Provider job failed or returned an unknown status.');
+    result = await jsonResponse(await upstream(`${config.base_url}/${endpoint}/requests/${job.remote_id}`, { headers }));
+    file = falResultFile(result, job.kind ?? 'video');
+  } else fail(400, 'unsupported_provider', 'Unsupported media job provider.');
   const response = await upstream(file.url, {});
   const headerMime = response.headers.get('Content-Type')?.split(';')[0];
-  const mime = headerMime && headerMime !== 'application/octet-stream' ? headerMime : file.mimeType ?? ({ image: 'image/jpeg', audio: 'audio/wav', video: 'video/mp4' }[job.kind ?? 'video']);
+  let mime = headerMime && headerMime !== 'application/octet-stream' ? headerMime : file.mimeType ?? ({ image: 'image/jpeg', audio: 'audio/wav', video: 'video/mp4' }[job.kind ?? 'video']);
   const extensions: Record<string,string> = {'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif','audio/wav':'wav','audio/mpeg':'mp3','audio/ogg':'ogg','video/mp4':'mp4','video/webm':'webm'};
   if (!extensions[mime] || !mime.startsWith(`${job.kind ?? 'video'}/`)) { await response.body?.cancel(); fail(502, 'invalid_media_type', 'Provider output media type does not match the requested kind.'); }
-  const asset = await storeAsset(c, c.req.param('id'), `Generated ${job.kind ?? 'video'}.${extensions[mime]}`, mime, await limitedBytes(response, 20 * 1024 * 1024));
+  const bytes = await limitedBytes(response, 20 * 1024 * 1024);
+  if (job.provider === 'leonardo') {
+    const detected = imageMime(new Uint8Array(bytes));
+    if (headerMime && headerMime !== 'application/octet-stream' && detected !== mime) fail(502, 'invalid_media_type', 'Leonardo image bytes do not match the media type.');
+    mime = detected;
+  }
+  const asset = await storeAsset(c, c.req.param('id'), `Generated ${job.kind ?? 'video'}.${extensions[mime]}`, mime, bytes);
   const saved = await c.env.DB.prepare('UPDATE media_jobs SET result_asset=? WHERE id=? AND user_id=? AND result_asset IS NULL')
     .bind(JSON.stringify(asset), c.req.param('jobId'), owner(c)).run();
   if (!saved.meta.changes) {
@@ -499,7 +357,7 @@ generationRoutes.get("/:id/media/:jobId", async c => {
   await completeMediaSpan(c, job.observability_span_id, { outputBytes: asset.size, usage: result.usage });
   return c.json({ status: 'completed', asset });
   } catch (error) {
-    await completeMediaSpan(c, job.observability_span_id, { usage: result.usage, errorCode: errorCode(error) });
+    await completeMediaSpan(c, job.observability_span_id, { usage: result?.usage, errorCode: errorCode(error) });
     throw error;
   }
 });

@@ -1,3 +1,4 @@
+import { applyTemplatePreset, extraTemplates, systemThemes } from './catalog-presets';
 import { uid, type DesignDocument, type DesignNode, type DesignPage, type ProjectKind, type Theme } from './schema';
 import { structuredPage } from './structured-templates';
 
@@ -6,7 +7,8 @@ export const themes: Theme[] = [
   { id: 'nocturne', name: 'Nocturne', colors: { background: '#151824', surface: '#242A3D', text: '#F2EFFA', muted: '#ADA9C4', accent: '#C4B1F0', primary: '#C4B1F0', secondary: '#71969A', border: '#353C52' }, fonts: { heading: 'Georgia', body: 'Arial' }, spacing: [4, 8, 16, 24, 32, 48, 64, 96], radius: 16 },
   { id: 'swiss', name: 'Swiss', colors: { background: '#FAFAF7', surface: '#E9E9E3', text: '#141414', muted: '#62625C', accent: '#E7412A', primary: '#E7412A', secondary: '#E5D635', border: '#D5D5CC' }, fonts: { heading: 'Arial', body: 'Arial' }, spacing: [4, 8, 16, 24, 32, 48, 64, 96], radius: 0 },
   { id: 'moss', name: 'Moss', colors: { background: '#EAF0E5', surface: '#D5E0C9', text: '#233B2B', muted: '#687B65', accent: '#44744C', primary: '#44744C', secondary: '#C9AD77', border: '#BCCAB5' }, fonts: { heading: 'Georgia', body: 'Arial' }, spacing: [4, 8, 16, 24, 32, 48, 64, 96], radius: 24 },
-  { id: 'cobalt', name: 'Cobalt', colors: { background: '#F0F3FC', surface: '#DCE4F7', text: '#132A56', muted: '#63779B', accent: '#255BDF', primary: '#255BDF', secondary: '#FDCE5B', border: '#C2CFE9' }, fonts: { heading: 'Arial', body: 'Arial' }, spacing: [4, 8, 16, 24, 32, 48, 64, 96], radius: 8 }
+  { id: 'cobalt', name: 'Cobalt', colors: { background: '#F0F3FC', surface: '#DCE4F7', text: '#132A56', muted: '#63779B', accent: '#255BDF', primary: '#255BDF', secondary: '#FDCE5B', border: '#C2CFE9' }, fonts: { heading: 'Arial', body: 'Arial' }, spacing: [4, 8, 16, 24, 32, 48, 64, 96], radius: 8 },
+  ...systemThemes
 ];
 export interface Template { id: string; name: string; kind: ProjectKind; description: string; themeId: string; category: string }
 export const templates: Template[] = [
@@ -17,7 +19,8 @@ export const templates: Template[] = [
   { id: 'object-study', name: 'Another dimension', kind: '3d', description: 'A material and light study. Orbit, sculpt, and compose.', themeId: 'cobalt', category: '3D scene' },
   { id: 'motion-title', name: 'Make your words move', kind: 'video', description: 'A short kinetic title with an editable timeline.', themeId: 'nocturne', category: 'Motion & video' },
   { id: 'design-system', name: 'The essentials, in harmony', kind: 'report', description: 'A practical design system with tokens and components.', themeId: 'swiss', category: 'Design system' },
-  { id: 'insight-report', name: 'Clarity from complexity', kind: 'report', description: 'An editorial report with a chart and key findings.', themeId: 'atelier', category: 'Report' }
+  { id: 'insight-report', name: 'Clarity from complexity', kind: 'report', description: 'An editorial report with a chart and key findings.', themeId: 'atelier', category: 'Report' },
+  ...extraTemplates
 ];
 
 const text = (name: string, x: number, y: number, width: number, height: number, size = 32, heading = false): DesignNode => ({ id: 'text-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 80), type: 'text', name: name.slice(0, 40), text: name, x, y, width, height, style: { fontSize: size, fill: '$text', fontFamily: heading ? '$heading' : '$body', lineHeight: 1.2 } });
@@ -77,5 +80,5 @@ export function createDocument(kind: ProjectKind = 'web', name = 'Untitled desig
   if (kind === 'web' || kind === 'wireframe') pages = [structuredPage(kind === 'wireframe')];
   const doc: DesignDocument = { schemaVersion: 1, id: uid(), name, kind, theme, pages, assets: [], metadata: { createdAt: now, updatedAt: now } };
   if (kind === 'video') doc.timeline = { duration: 6, fps: 30, tracks: [{ id: uid(), nodeId: pages[0].nodes[1].id, keyframes: [{ time: 0, values: { opacity: 0, y: 275 } }, { time: 1.5, values: { opacity: 1, y: 215 } }, { time: 5, values: { opacity: 1, y: 215 } }, { time: 6, values: { opacity: 0, y: 190 } }] }, { id: uid(), nodeId: pages[0].nodes[0].id, keyframes: [{ time: 0, values: { x: 1040, rotation: 0 } }, { time: 6, values: { x: 940, rotation: 180 } }] }] };
-  return doc;
+  return applyTemplatePreset(doc, templateId);
 }

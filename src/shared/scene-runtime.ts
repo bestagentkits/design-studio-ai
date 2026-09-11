@@ -40,7 +40,28 @@ export async function buildScene(doc: DesignDocument, pageIndex = 0, time = 0) {
     const n = interpolateNode(raw, doc, time), materialConfig = n.scene?.material;
     let object: THREE.Object3D;
     if (n.type === 'group') object = new THREE.Group();
-    else if (n.src && !n.scene?.mesh) object = (await new GLTFLoader().loadAsync(n.src)).scene;
+    else if (n.src && !n.scene?.mesh) {
+      object = (await new GLTFLoader().loadAsync(n.src)).scene;
+      // Imported meshes retain authored materials until the user supplies overrides.
+      if (materialConfig) {
+        const asset = doc.assets.find(a => a.id === materialConfig.textureAssetId);
+        let texture: THREE.Texture | undefined;
+        try { if (asset) { texture = await new THREE.TextureLoader().loadAsync(asset.url); texture.flipY = false; texture.colorSpace = THREE.SRGBColorSpace; } }
+        catch (error) { disposeScene(object); throw error; }
+        object.traverse(child => { if (!(child instanceof THREE.Mesh)) return;
+          for (const item of Array.isArray(child.material) ? child.material : [child.material]) {
+            if (!(item instanceof THREE.MeshStandardMaterial)) continue;
+            if (materialConfig.color) item.color.set(resolveColor(materialConfig.color, doc.theme));
+            if (materialConfig.metalness !== undefined) item.metalness = materialConfig.metalness;
+            if (materialConfig.roughness !== undefined) item.roughness = materialConfig.roughness;
+            if (materialConfig.wireframe !== undefined) item.wireframe = materialConfig.wireframe;
+            if (materialConfig.doubleSided !== undefined) item.side = materialConfig.doubleSided ? THREE.DoubleSide : THREE.FrontSide;
+            if (texture) { item.map?.dispose(); item.map = texture; }
+            item.needsUpdate = true;
+          }
+        });
+      }
+    }
     else {
       const material = new THREE.MeshStandardMaterial({ color: resolveColor(materialConfig?.color ?? n.style?.fill ?? n.data?.color ?? '$accent', doc.theme), metalness: materialConfig?.metalness ?? Number(n.data?.metalness ?? .15), roughness: materialConfig?.roughness ?? Number(n.data?.roughness ?? .35), wireframe: materialConfig?.wireframe, side: materialConfig?.doubleSided ? THREE.DoubleSide : THREE.FrontSide, opacity: n.opacity ?? 1, transparent: (n.opacity ?? 1) < 1 });
       pendingMaterial = material;

@@ -30,7 +30,7 @@ dsa projects get PROJECT_ID
 
 The get result contains `{project:{id,revision,document,...}}`. Save the observed revision with the working document. Read actual page and node IDs; never invent IDs for existing elements.
 
-For browser WebMCP, discover `studio_capabilities` and read `studio_get_design` before editing the open canvas. `studio_apply_operations` edits local state; Live mode autosaves, otherwise call `studio_save_design` explicitly. Tools named `studio_api_…` act on saved server state, so save and verify the revision before using them to export or publish local edits. WebMCP is experimental; use network MCP or CLI when the browser does not expose it. The [public reference](https://studio.agentkit.best/docs/webmcp) explains inputs and boundaries; use the configured server's reference when self-hosting.
+For browser WebMCP, registered operation/document inputs are compact envelopes; fetch the full nested schemas through `studio_capabilities` before composing payloads. Execution still validates the complete shared contracts. Discover `studio_capabilities` and read `studio_get_design` before editing the open canvas. `studio_apply_operations` edits local state; Live mode autosaves, otherwise call `studio_save_design` explicitly. Tools named `studio_api_…` act on saved server state, so save and verify the revision before using them to export or publish local edits. WebMCP is experimental; use network MCP or CLI when the browser does not expose it. The [public reference](https://studio.agentkit.best/docs/webmcp) explains inputs and boundaries; use the configured server's reference when self-hosting.
 
 ## Choose the design-kind guidance
 
@@ -93,7 +93,7 @@ Preserve trace/parent IDs and coverage information when explaining a failure. `r
 
 Use `assets upload PROJECT_ID --file image.png`, then add the returned asset to the document and use its URL in an image node. Upload alone does not place it on the canvas. Asset MIME types and size limits are enforced by the server. Use `assets list` and `assets download` to inspect stored results.
 
-Provider keys use `providers set openai --key-env OPENAI_API_KEY`, or `--key-stdin`; never write secrets into prompts, design documents, or committed files. `media generate` supports OpenAI image generation/editing and speech, plus fal images, video generation/editing, and music/sound effects with source-audio transformation. Use `--source-asset ID` for an asset owned by this project; the source is sent to the chosen provider without being automatically published. Select only compatible models and respect the user's provider-spend authorization.
+Provider keys use `providers set openai --key-env OPENAI_API_KEY`, or `--key-stdin`; never write secrets into prompts, design documents, or committed files. `generate` and `brief interview` also support the official `deepseek` provider and configured `custom-<slug>` connections. Use `list_provider_connections` with API-key MCP access (or `dsa providers list`) to discover saved custom IDs. Custom connections require a name, allowlisted HTTPS base URL, model, API format (OpenAI/Anthropic/Gemini compatible) and authentication method (bearer/api-key/basic/none); see `dsa providers set --help`. Never pass raw credentials through agent tool arguments; the human can configure Settings or supply CLI environment/stdin credentials. `media generate` supports prompt-only Gemini, Grok and Leonardo images, custom OpenAI/Gemini compatible images, and OpenAI image generation/editing and speech, plus fal images, video generation/editing, and music/sound effects with source-audio transformation. Use `--source-asset ID` for an asset owned by this project; the source is sent to the chosen provider without being automatically published. Select only compatible models and respect the user's provider-spend authorization.
 
 ```sh
 dsa media generate PROJECT_ID --kind image --provider openai --source-asset ASSET_ID --prompt-file edit.txt
@@ -101,7 +101,7 @@ dsa media generate PROJECT_ID --kind audio --provider fal --duration 30 --prompt
 dsa media status PROJECT_ID JOB_ID
 ```
 
-`--duration` applies to supported video/music modes. `--strength` from 0 to 1 applies only to fal source-image/source-audio transformations; `--voice` is for OpenAI speech. Inspect command help and provider errors for incompatible options. All fal modes return queued jobs: poll to the final status and inspect the asset before placing it in a document. Never report a queued job as completed media or replace a failed call with an invented result.
+`--duration` applies to supported video/music modes. `--strength` from 0 to 1 applies only to fal source-image/source-audio transformations; `--voice` is for OpenAI speech. Inspect command help and provider errors for incompatible options. All fal modes and Leonardo image generation return queued jobs: poll to the final status and inspect the asset before placing it in a document. Never report a queued job as completed media or replace a failed call with an invented result.
 
 ## Inspect quality and deliver
 
@@ -120,3 +120,9 @@ Report the project/artifact URL or output path, what was changed, verification p
 ## Boards and paint
 
 Read the live v1/v2 schema and preserve boards, paintings and immutable asset references. Use shared board-element operations and generation-checked painting replacement; never fabricate pixel hashes or derived composites. Upload real 512×512 RGBA8 PNG tiles before referencing them. Keep the original project revision and painting generation; same-painting pixel/settings changes conflict. An exact painting-save retry is idempotent while its receipt is retained; never change a payload under the same operationId. Public projections omit private paint source and hidden board elements. JSON remains editable private source. Use authenticated export when creative media is not embedded locally. Typed capabilities and current workspace controls differ; inspect the configured server rather than promising unfinished diagram/library tools.
+
+## Native 2D character motion
+
+Discover live v2 document and operation schemas. Use `dsa motion PROJECT_ID` or MCP `inspect_motion` to inspect IDs, then named character operations for focused edits. Keep setup poses separate from clip keys. Attachments reference asset IDs; import remote artwork before portable export. Skins reuse rig/clips; placements and controls belong to each node instance.
+
+`generate --mode motion` returns validated operations, a preview document and baseRevision/baseBriefRevision. Apply only after explicit review, preserving both revisions via document PUT expectedRevision/expectedBriefRevision. On conflict, re-read and reconcile; never retry with a guessed revision. `motion`, `png-sequence` and `spritesheet` exports are ZIPs; frame ranges use --start/--end/--fps and exclude the end frame. Native Studio packages do not imply Spine or game-engine format support. See the live /docs/motion guide.

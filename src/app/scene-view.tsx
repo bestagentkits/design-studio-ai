@@ -1,3 +1,4 @@
+import { mountSceneComposition } from '../shared/scene-composition';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -8,7 +9,7 @@ import { MeshTools } from './mesh-tools';
 import { download } from './api';
 
 export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0, time = 0, onUpdate, onPage }: {
-  page: DesignPage; theme: Theme; selected: string | null; onSelect: (id: string) => void; doc?: DesignDocument; pageIndex?: number; time?: number;
+  page: DesignPage; theme: Theme; selected: string | null; onSelect: (id: string, additive?: boolean) => void; doc?: DesignDocument; pageIndex?: number; time?: number;
   onUpdate?: (patch: Partial<DesignNode>) => void; onPage?: (patch: Partial<DesignPage>) => void;
 }) {
   const host = useRef<HTMLDivElement>(null), [error, setError] = useState(''), [transform, setTransform] = useState<'translate' | 'rotate' | 'scale'>('translate'), [mode, setMode] = useState('object'), [selection, select] = useState<number[]>([]), [tools, showTools] = useState(false);
@@ -18,9 +19,10 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
   useEffect(() => { select([]); }, [selected]);
   useEffect(() => {
     const element = host.current; if (!element) return;
+    let composition: ReturnType<typeof mountSceneComposition> | undefined;
     let disposed = false, scene: THREE.Scene | undefined, renderer: THREE.WebGLRenderer | undefined, orbit: OrbitControls | undefined, gizmo: TransformControls | undefined, observer: ResizeObserver | undefined;
     const cleanup = () => {
-      renderer?.setAnimationLoop(null); observer?.disconnect();
+      composition?.dispose(); renderer?.setAnimationLoop(null); observer?.disconnect();
       if (gizmo) { scene?.remove(gizmo.getHelper()); gizmo.dispose(); gizmo = undefined; }
       orbit?.dispose(); orbit = undefined;
       if (scene) { disposeScene(scene); scene = undefined; }
@@ -32,11 +34,11 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
         const built = await buildScene(handlers.current.document, pageIndex, handlers.current.time);
         if (disposed) { disposeScene(built.scene); return; }
         scene = built.scene; const { camera, objects, target } = built;
-        renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
         renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; element.appendChild(renderer.domElement);
         orbit = new OrbitControls(camera, renderer.domElement); orbit.target.copy(target); orbit.enableDamping = true; orbit.enabled = mode === 'object';
         let needsRender = true;
-        gizmo = new TransformControls(camera, renderer.domElement); gizmo.setMode(transform); scene.add(gizmo.getHelper());
+        gizmo = new TransformControls(camera, renderer.domElement); gizmo.setMode(transform); gizmo.getHelper().userData.compositionNode = selected; scene.add(gizmo.getHelper());
         gizmo.addEventListener('change', () => { needsRender = true; });
         const object = selected ? objects.get(selected) : undefined;
         if (object && mode === 'object' && onUpdate) gizmo.attach(object);
@@ -44,7 +46,7 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
         gizmo.addEventListener('dragging-changed', e => { if (orbit) orbit.enabled = mode === 'object' && !e.value; if (e.value) draggedGizmo = true; });
         gizmo.addEventListener('mouseUp', () => { if (object && draggedGizmo) handlers.current.onUpdate?.({ scene: { ...handlers.current.active?.scene, position: object.position.toArray(), rotation: [object.rotation.x, object.rotation.y, object.rotation.z].map(v => v * 180 / Math.PI) as [number, number, number], scale: object.scale.toArray() } }); });
         orbit.addEventListener('end', () => { if (!orbit || gizmo?.dragging || draggedGizmo) return; const old = page.scene ?? defaultScene; if (camera.position.distanceTo(new THREE.Vector3(...old.camera.position)) > .001 || orbit.target.distanceTo(new THREE.Vector3(...old.camera.target)) > .001) handlers.current.onPage?.({ scene: { ...old, camera: { ...old.camera, position: camera.position.toArray(), target: orbit.target.toArray() } } }); });
-        scene.add(new THREE.GridHelper(20, 20, 0x888888, 0xcccccc));
+        const grid = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc); grid.userData.compositionBackground = true; scene.add(grid);
         const mesh = object instanceof THREE.Mesh ? object : undefined;
         let vertexPoints: THREE.Points | undefined, selectedPoints: THREE.Points | undefined;
         if (mesh && mode !== 'object') {
@@ -59,7 +61,7 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
           }
           const joints: THREE.Bone[] = []; mesh.traverse(child => { if (child instanceof THREE.Bone) joints.push(child); });
           for (const bone of joints) { const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3)); const marker = new THREE.Points(geometry, new THREE.PointsMaterial({ color: '#55ddff', size: .08, depthTest: false })); marker.renderOrder = 103; bone.add(marker); }
-          const skeleton = new THREE.SkeletonHelper(mesh); for (const material of Array.isArray(skeleton.material) ? skeleton.material : [skeleton.material]) material.depthTest = false; skeleton.renderOrder = 102; scene.add(skeleton);
+          const skeleton = new THREE.SkeletonHelper(mesh); for (const material of Array.isArray(skeleton.material) ? skeleton.material : [skeleton.material]) material.depthTest = false; skeleton.renderOrder = 102; skeleton.userData.compositionNode = selected; scene.add(skeleton);
         }
         const ray = new THREE.Raycaster(), pointer = new THREE.Vector2(), local = new THREE.Vector3(), point = new THREE.Vector3();
         let pointerStart = [0, 0];
@@ -67,8 +69,11 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
         renderer.domElement.addEventListener('click', event => {
           if (!renderer || gizmo?.dragging || draggedGizmo || Math.hypot(event.clientX - pointerStart[0], event.clientY - pointerStart[1]) > 5) return;
           const rect = renderer.domElement.getBoundingClientRect(); pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1); ray.setFromCamera(pointer, camera);
-          const hit = ray.intersectObjects([...objects.values()], true).find(h => h.object instanceof THREE.Mesh); if (!hit) return;
-          const id = String(hit.object.userData.nodeId); if (id !== selected) { handlers.current.onSelect(id); select([]); return; }
+          const hit = composition?.pickHit(ray.intersectObjects([...objects.values()], true));
+          const overlay = composition?.pickOverlay(event.clientX, event.clientY, hit ? String(hit.object.userData.nodeId) : undefined);
+          if (overlay) { handlers.current.onSelect(overlay, event.shiftKey); return; }
+          if (!hit) return;
+          const id = String(hit.object.userData.nodeId); if (id !== selected) { handlers.current.onSelect(id, event.shiftKey); select([]); return; }
           if (handlers.current.mode !== 'object' && hit.face && hit.object instanceof THREE.Mesh) {
             hit.object.worldToLocal(local.copy(hit.point)); const hitMesh = hit.object, ids = [hit.face.a, hit.face.b, hit.face.c];
             let values: number[];
@@ -80,7 +85,13 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
             const previous = handlers.current.selection; select(event.shiftKey ? values.every(v => previous.includes(v)) ? previous.filter(v => !values.includes(v)) : [...new Set([...previous, ...values])] : values);
           }
         });
-        const resize = () => { renderer?.setSize(element.clientWidth, element.clientHeight); camera.aspect = element.clientWidth / Math.max(1, element.clientHeight); camera.updateProjectionMatrix(); needsRender = true; };
+        composition = mountSceneComposition(element, handlers.current.document, pageIndex, renderer, scene, camera);
+        const resize = () => {
+          // Hidden mobile panes must not resize WebGL to a zero-sized drawing buffer.
+          const width = element.clientWidth, height = element.clientHeight;
+          if (!width || !height) return;
+          renderer?.setSize(width, height); camera.aspect = width / height; camera.updateProjectionMatrix(); needsRender = true;
+        };
         observer = new ResizeObserver(resize); observer.observe(element); resize();
         let renderedTime = NaN, previousSelection: number[] | undefined;
         renderer.setAnimationLoop(() => {
@@ -99,13 +110,13 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
           // Static authoring should not continuously redraw shadows and skinned meshes.
           // Orbit damping, transforms, selection, resize and playback still invalidate the view.
           const cameraChanged = orbit.update();
-          if (needsRender || timeChanged || selectionChanged || cameraChanged) { renderer.render(scene, camera); needsRender = false; }
+          if (needsRender || timeChanged || selectionChanged || cameraChanged) { composition?.draw(current.time); needsRender = false; }
           previousSelection = current.selection;
         });
       } catch (e) { cleanup(); if (!disposed) setError(e instanceof Error ? e.message : 'WebGL unavailable'); }
     })();
     return () => { disposed = true; cleanup(); };
-  }, [page, theme, selected, transform, mode, pageIndex, doc?.assets, doc?.timeline]);
+  }, [page, theme, selected, transform, mode, pageIndex, doc?.assets, doc?.timeline, !!onUpdate]);
   return <div className="scene-workspace"><div className="scene-toolbar">{(['translate', 'rotate', 'scale'] as const).map(value => <button key={value} aria-pressed={transform === value} onClick={() => setTransform(value)}>{value}</button>)}<button aria-pressed={tools} onClick={() => showTools(!tools)}>Mesh / UV / Rig</button>{mode !== 'object' && <button onClick={() => { setMode('object'); select([]); }}>Orbit / object mode</button>}{doc && ['glb', 'gltf'].map(format => <button key={format} onClick={async () => { try { const output = await exportScene(doc, pageIndex, format === 'glb'); download(`${doc.name}.${format}`, output instanceof ArrayBuffer ? output : JSON.stringify(output), format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'); } catch (e) { setError(e instanceof Error ? e.message : 'Export failed'); } }}>Export {format.toUpperCase()}</button>)}</div>
     <div className="scene-view" ref={host}/>{error && <p className="scene-error" role="alert">{error}</p>}{tools && active?.type === 'model3d' && onUpdate && <MeshTools node={active} update={onUpdate} mode={mode} setMode={setMode} selection={selection} select={select} animatedBones={(doc?.timeline?.tracks ?? []).filter(t => t.nodeId === active.id).flatMap(t => t.keyframes.flatMap(k => Object.keys(k.values).flatMap(p => { const match = /^scene\.bones\.(\d+)\./.exec(p); return match ? [+match[1]] : []; })))}/>}
   </div>;

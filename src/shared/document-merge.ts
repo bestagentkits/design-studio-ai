@@ -20,6 +20,8 @@ export function mergeDocuments(base: DesignDocument, local: DesignDocument, remo
     }
     // Pixels/settings and connector endpoints are coupled records, not independent fields.
     if (/^paintings\[[^\]]+\]$/.test(path) || (record(l) && l.type === 'connector' && /^boards\[[^\]]+\]\.elements\[[^\]]+\]$/.test(path))) { conflicts.push(path); return r; }
+
+    if (path.endsWith('.mesh')) { conflicts.push(path); return r; }
     if (record(b) && record(l) && record(r)) {
       const result: Record<string, unknown> = {};
       for (const key of new Set([...Object.keys(b), ...Object.keys(l), ...Object.keys(r)])) {

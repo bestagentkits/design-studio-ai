@@ -14,7 +14,7 @@ import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.3.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.3.2').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
@@ -77,7 +77,7 @@ briefs.command('put <id>').description('Create/update from JSON: request, interv
   const body = z.object({request:z.string().trim().min(1).max(12000).optional(), interview:interviewSchema.optional(), answers:answerSchema.optional(), scope:scopeSchema.optional()}).strict().parse(await inputJson(options.file));
   return client().json(`${projectPath(id)}/brief`, 'PUT', {...body,expectedRevision});
 }));
-briefs.command('interview <id>').description('Ask a configured BYOK provider for contextual questions or scope; incurs provider usage').requiredOption('--revision <number>', 'Expected brief revision').requiredOption('--provider <name>', 'openai, anthropic, gemini or openrouter').option('--model <id>', 'Provider model override').action(wrap((id, options) => client().json(`${projectPath(id)}/brief/interview`, 'POST', {expectedRevision:revision(options.revision),provider:options.provider,model:options.model})));
+briefs.command('interview <id>').description('Ask a configured BYOK provider for contextual questions or scope; incurs provider usage').requiredOption('--revision <number>', 'Expected brief revision').requiredOption('--provider <name>', 'openai, anthropic, gemini, openrouter, deepseek or custom-<slug>').option('--model <id>', 'Provider model override').action(wrap((id, options) => client().json(`${projectPath(id)}/brief/interview`, 'POST', {expectedRevision:revision(options.revision),provider:options.provider,model:options.model})));
 briefs.command('approve <id>').description('Approve the reviewed scope after explicit human confirmation; no generation or publication').requiredOption('--revision <number>', 'Expected brief revision').action(wrap((id, options) => client().json(`${projectPath(id)}/brief/approve`, 'POST', {expectedRevision:revision(options.revision)})));
 projects.command('list').option('--query <text>', 'Search name/description').option('--kind <kind>', 'Filter document kind').option('--sort <sort>', 'updated, created, or name', 'updated').action(wrap(options => {
   if (!['updated', 'created', 'name'].includes(options.sort)) throw new CliError('invalid_sort', 'Sort must be updated, created, or name.');
@@ -110,7 +110,7 @@ const documents = projects.command('document').description('Read and write the c
 documents.command('merge <id>').description('Merge edits against the actual base you read; overlapping changes return conflict').requiredOption('--file <path>', 'JSON {base,document,baseRevision}, or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/merge`, 'POST', mergeRequestSchema.parse(await inputJson(options.file)))));
 documents.command('changes <id>').option('--since <revision>', 'Last observed revision', '0').action(wrap((id, options) => client().json(`${projectPath(id)}/changes?since=${nonnegativeNumber(options.since)}`)));
 documents.command('get <id>').option('--output <file>', 'Save document JSON to a file').action(async (id, options) => { await outputFile(options.output, JSON.stringify((await project(id)).document, null, 2)); });
-documents.command('put <id>').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => save(id, await documentInput(options.file), revision(options.revision))));
+documents.command('put <id>').option('--brief-revision <number>', 'Observed brief revision when applying a proposal').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => client().json(`${projectPath(id)}/document`,'PUT',{document:await documentInput(options.file),expectedRevision:revision(options.revision),...(options.briefRevision!==undefined?{expectedBriefRevision:nonnegativeNumber(options.briefRevision)}:{})})));
 documents.command('patch <id>').description('Apply shared targeted operations; reuses atomic revision-checked save').requiredOption('--file <path>', 'Operations array JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => {
   const operations = operationsSchema.parse(await inputJson(options.file)); const expected = revision(options.revision);
   const current = await project(id); ensureRevision(current, expected);
@@ -121,14 +121,14 @@ projects.command('import').description('Create a new project from canonical JSON
   return client().json('/api/projects', 'POST', { name: options.name ?? document.name, kind: document.kind, document });
 }));
 
-projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, mp4, react (ZIP), glb, or gltf').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
-  if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4, react, glb, gltf. Use google-slides for Google Slides.');
+projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, mp4, react (ZIP), glb, gltf, motion (ZIP), png-sequence (ZIP), spritesheet (ZIP)').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--start <seconds>', 'Frame export start time').option('--end <seconds>', 'Frame export end time').option('--fps <number>', 'Frame export FPS').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
+  if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf', 'motion', 'png-sequence', 'spritesheet'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4, react, glb, gltf, motion, png-sequence, spritesheet. Use google-slides for Google Slides.');
   const destination = options.output ?? options.out;
   const binary = !['json', 'html', 'svg', 'gltf'].includes(options.format);
   if (binary && (!destination || destination === '-')) throw new CliError('file_required', 'Binary exports require --output FILE.');
   const page = nonnegativeNumber(options.page);
   if (!Number.isInteger(page)) throw new CliError('invalid_page', 'Page must be a zero-based integer.');
-  const response = await client().request(`${projectPath(id)}/export`, 'POST', { format: options.format, pageIndex: page, ...(options.revision ? { expectedRevision: revision(options.revision) } : {}) });
+  const response = await client().request(`${projectPath(id)}/export`, 'POST', { format: options.format, start:options.start?nonnegativeNumber(options.start):undefined,end:options.end?nonnegativeNumber(options.end):undefined,fps:options.fps?positiveInteger(options.fps):undefined, pageIndex: page, ...(options.revision ? { expectedRevision: revision(options.revision) } : {}) });
   const content = binary ? new Uint8Array(await response.arrayBuffer()) : await response.text();
   await outputFile(destination, content, { format: options.format, mimeType: response.headers.get('Content-Type') });
 });
@@ -162,14 +162,29 @@ async function promptText(options: { prompt?: string; promptFile?: string }): Pr
   if (Boolean(options.prompt) === Boolean(options.promptFile)) throw new CliError('prompt_required', 'Supply exactly one of --prompt or --prompt-file.');
   return options.promptFile ? inputText(options.promptFile) : options.prompt!;
 }
-program.command('generate <project-id>').description('Generate a document proposal without saving it').requiredOption('--provider <id>', 'openai, anthropic, gemini, or openrouter').requiredOption('--revision <number>', 'Expected current revision').option('--model <id>', 'Model override').option('--prompt <text>', 'Design request').option('--prompt-file <path>', 'Prompt file or - for stdin').option('--output <file>', 'Save proposal JSON').action(async (id, options) => {
-  const response = await client().json(`${projectPath(id)}/generate`, 'POST', { provider: options.provider, model: options.model, expectedRevision: revision(options.revision), prompt: await promptText(options) });
+program.command('motion <project-id>').description('Inspect rigs and optionally sample a character pose').option('--character <id>', 'Character ID').option('--node <id>', 'Instance node ID').option('--time <seconds>', 'Sample time', '0').action(wrap(async(id,options)=>client().json(`${projectPath(id)}/motion?${new URLSearchParams({...(options.character?{characterId:options.character}:{}),...(options.node?{nodeId:options.node}:{}),time:String(nonnegativeNumber(options.time))})}`)));
+program.command('generate <project-id>').option('--mode <mode>', 'document or motion operations').description('Generate a document proposal without saving it').requiredOption('--provider <id>', 'openai, anthropic, gemini, openrouter, deepseek or custom-<slug>').requiredOption('--revision <number>', 'Expected current revision').option('--model <id>', 'Model override').option('--prompt <text>', 'Design request').option('--prompt-file <path>', 'Prompt file or - for stdin').option('--output <file>', 'Save proposal JSON').action(async (id, options) => {
+  const response = await client().json(`${projectPath(id)}/generate`, 'POST', { mode:options.mode, provider: options.provider, model: options.model, expectedRevision: revision(options.revision), prompt: await promptText(options) });
   if (options.output) await outputFile(options.output, JSON.stringify(response, null, 2)); else output(response);
 });
 const providers = program.command('providers').description('Configure BYOK providers; raw secrets never returned by list');
 providers.command('models <provider>').option('--query <text>', 'Model search').action(wrap((provider, options) => client().json(`/api/providers/${part(provider)}/models` + (options.query ? `?q=${encodeURIComponent(options.query)}` : ''))));
 providers.command('list').action(wrap(() => client().json('/api/providers')));
-providers.command('set <provider>').option('--key-env <variable>', 'Environment variable containing provider key').option('--key-stdin', 'Read provider key from stdin').option('--base-url <url>', 'Operator-allowlisted endpoint').option('--model <id>', 'Default model').action(wrap(async (provider, options) => client().json(`/api/providers/${part(provider)}`, 'PUT', { apiKey: await secretInput(options, `${provider.toUpperCase()}_API_KEY`), baseUrl: options.baseUrl, model: options.model })));
+providers.command('set <provider>')
+  .option('--key-env <variable>', 'Environment variable containing provider credential; Basic uses username:password')
+  .option('--key-stdin', 'Read provider credential from stdin').option('--keep-key', 'Keep the saved credential when updating metadata')
+  .option('--base-url <url>', 'Operator-allowlisted HTTPS API root').option('--model <id>', 'Default model')
+  .option('--name <name>', 'Custom provider display name (ID must be custom-<slug>)')
+  .option('--protocol <format>', 'Custom API format: openai, anthropic or gemini')
+  .option('--auth-method <method>', 'Custom authentication: bearer, api-key, basic or none')
+  .option('--auth-header <name>', 'Custom API key header, e.g. X-API-Key')
+  .action(wrap(async (provider, options) => {
+    if ((options.keepKey || options.authMethod === 'none') && (options.keyEnv || options.keyStdin)) throw new CliError('invalid_options', 'Choose credential input or --keep-key/--auth-method none, not both.');
+    return client().json(`/api/providers/${part(provider)}`, 'PUT', {
+      apiKey: options.keepKey || options.authMethod === 'none' ? undefined : await secretInput(options, `${provider.toUpperCase().replaceAll('-', '_')}_API_KEY`),
+      baseUrl: options.baseUrl, model: options.model, name: options.name, protocol: options.protocol, authMethod: options.authMethod, authHeader: options.authHeader,
+    });
+  }));
 providers.command('remove <provider>').action(wrap(provider => client().json(`/api/providers/${part(provider)}`, 'DELETE')));
 const tokens = program.command('tokens').description('Create and revoke API tokens');
 tokens.command('list').action(wrap(() => client().json('/api/tokens')));
@@ -182,7 +197,7 @@ program.command('unpreview <project-id>').description('Remove all public snapsho
 program.command('share <project-id>').description('Create a public share snapshot and return its URL').action(wrap(id => client().json(`${projectPath(id)}/share`, 'POST')));
 program.command('unshare <project-id>').description('Remove all public snapshots for a project (share alias)').action(wrap(id => client().json(`${projectPath(id)}/share`, 'DELETE')));
 const media = program.command('media').description('Generate provider image/audio/video assets');
-media.command('generate <project-id>').requiredOption('--kind <kind>', 'image, audio, or video').requiredOption('--provider <id>', 'openai for image/speech; fal for image/video/music/effects').option('--model <id>', 'Model override').option('--voice <id>', 'Audio voice').option('--source-asset <id>', 'Owned source asset for editing or transformation').option('--duration <seconds>', 'Generated media duration').option('--strength <number>', 'Transformation strength from 0 to 1').option('--prompt <text>', 'Media description or speech text').option('--prompt-file <path>', 'Prompt file or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/media`, 'POST', { kind: options.kind, provider: options.provider, model: options.model, voice: options.voice, sourceAssetId: options.sourceAsset, durationSeconds: options.duration ? positiveInteger(options.duration) : undefined, strength: options.strength === undefined ? undefined : nonnegativeNumber(options.strength), prompt: await promptText(options) })));
+media.command('generate <project-id>').requiredOption('--kind <kind>', 'image, audio, or video').requiredOption('--provider <id>', 'openai, gemini, leonardo, grok or custom-<slug> for images; openai speech; fal media').option('--model <id>', 'Model override').option('--voice <id>', 'Audio voice').option('--source-asset <id>', 'Owned source asset for editing or transformation').option('--duration <seconds>', 'Generated media duration').option('--strength <number>', 'Transformation strength from 0 to 1').option('--prompt <text>', 'Media description or speech text').option('--prompt-file <path>', 'Prompt file or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/media`, 'POST', { kind: options.kind, provider: options.provider, model: options.model, voice: options.voice, sourceAssetId: options.sourceAsset, durationSeconds: options.duration ? positiveInteger(options.duration) : undefined, strength: options.strength === undefined ? undefined : nonnegativeNumber(options.strength), prompt: await promptText(options) })));
 media.command('status <project-id> <job-id>').action(wrap((id, jobId) => client().json(`${projectPath(id)}/media/${part(jobId)}`)));
 program.command('google-slides <project-id>').description('Create a real Google Slides presentation using a short-lived Google OAuth token').option('--key-env <variable>', 'Google access token variable', 'GOOGLE_ACCESS_TOKEN').option('--key-stdin', 'Read Google access token from stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/google-slides`, 'POST', { accessToken: await secretInput(options, 'GOOGLE_ACCESS_TOKEN') })));
 program.command('api <method> <path>').description('Explicit REST escape hatch restricted to this origin /api/ routes').option('--file <path>', 'JSON request body file or - for stdin').action(wrap(async (method, path, options) => {

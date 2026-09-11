@@ -5,6 +5,10 @@ export function visitDocumentAssetIds(doc: DesignDocument, visit: (id: string) =
   for (const page of doc.pages) for (const node of page.nodes) {
     if (node.scene?.material?.textureAssetId) node.scene.material.textureAssetId = visit(node.scene.material.textureAssetId);
   }
+  for (const character of doc.characters ?? []) for (const attachment of character.attachments) {
+    if (attachment.assetId) attachment.assetId = visit(attachment.assetId);
+    if (attachment.frames) attachment.frames = attachment.frames.map(visit);
+  }
   if (doc.schemaVersion !== 2) return;
   for (const board of doc.boards) for (const element of board.elements) {
     if ('assetId' in element) element.assetId = visit(element.assetId);

@@ -4,6 +4,9 @@ import { reserveAsset } from './asset-lifecycle';
 import { publicCreativeProjection } from '../src/shared/public-creative-projection';
 import { preparePaintingAssets } from './painting-assets';
 import { ownedDocumentAssetIds, remapDocumentAssets } from '../src/shared/document-asset-references';
+import {documentWriteSchema} from '../src/shared/document-write';
+import {characterEvolutionErrors} from '../src/shared/character-validation';
+import { inspectMotion, motionInspectionSchema } from '../src/shared/motion-inspection';
 import { updateEvent } from './observability-store';
 import { Hono } from "hono";
 import { z } from "zod";
@@ -71,11 +74,12 @@ export async function saveDocument(
   projectId: string,
   document: unknown,
   expectedRevision: number,
+  expectedBriefRevision?: number,
   operationId?: string,
 ) {
   const row = await projectRow(c, projectId);
   let parsed = documentSchema.parse(document);
-  const identity = await creativeSaveIdentity(parsed, expectedRevision, operationId);
+  const identity = await creativeSaveIdentity(parsed, expectedRevision, operationId, expectedBriefRevision);
   if (identity) { const receipt = await readCreativeReceipt(c, row.id, identity); if (receipt) return receipt; }
   if (expectedRevision !== row.revision) fail(409, "revision_conflict", "Project changed. Reload before saving.");
   const stored = documentSchema.parse(JSON.parse(row.document));
@@ -86,13 +90,14 @@ export async function saveDocument(
       "invalid_document",
       "Document ID and kind must match the project.",
     );
+  const evolution=characterEvolutionErrors(JSON.parse(row.document).characters??[],parsed.characters??[]);if(evolution.length)fail(400,'invalid_topology',evolution.join('; '));
   await validateAssets(c, parsed, row.id);
   await preparePaintingAssets(c, row.id, parsed, stored);
   parsed.metadata.updatedAt = now();
   // Server-generated or restored asset references must obey the same canonical limits.
   parsed = documentSchema.parse(parsed);
   const statement = c.env.DB.prepare(
-    "UPDATE projects SET document=?,name=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=?",
+    "UPDATE projects SET document=?,name=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=? AND (? IS NULL OR COALESCE((SELECT revision FROM design_briefs WHERE project_id=projects.id AND user_id=projects.user_id),0)=?)",
   )
     .bind(
       JSON.stringify(parsed),
@@ -101,6 +106,7 @@ export async function saveDocument(
       row.id,
       owner(c),
       row.revision,
+      expectedBriefRevision ?? null, expectedBriefRevision ?? null,
     );
   const committed = serializeProject({ ...row, document: JSON.stringify(parsed), name: parsed.name, revision: row.revision + 1, updated_at: parsed.metadata.updatedAt }, origin(c));
   const results = await c.env.DB.batch([statement, ...(identity ? [
@@ -339,13 +345,14 @@ projectRoutes.patch("/:id", async (c) => {
   });
 });
 projectRoutes.put("/:id/document", async (c) => {
-  const body = documentSaveSchema.parse(await c.req.json());
+  const body = documentWriteSchema.parse(await c.req.json());
   return c.json({
     project: await saveDocument(
       c,
       c.req.param("id"),
       body.document,
       body.expectedRevision,
+      body.expectedBriefRevision,
       body.operationId,
     ),
   });
@@ -488,3 +495,5 @@ export async function published(c: Context<Env>, slug: string) {
     },
   );
 }
+
+projectRoutes.get('/:id/motion',async c=>{const row=await projectRow(c,c.req.param('id'));const input=motionInspectionSchema.parse(c.req.query());const doc=documentSchema.parse(JSON.parse(row.document));if(input.nodeId&&!doc.pages.some(p=>p.nodes.some(n=>n.id===input.nodeId&&n.character)))fail(404,'not_found','Unknown character instance');if(input.characterId&&!doc.characters?.some(x=>x.id===input.characterId))fail(404,'not_found','Unknown character');return c.json({revision:row.revision,...inspectMotion(documentSchema.parse(JSON.parse(row.document)),input)});});

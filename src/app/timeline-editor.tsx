@@ -1,3 +1,5 @@
+import { useScreenState } from './screen-state';
+import { ChevronDown, ChevronUp, Copy, ClipboardPaste, Trash2, Plus, LockKeyhole, UnlockKeyhole, Volume2, VolumeX } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { DesignDocument, DesignNode, DesignPage, Timeline } from '../shared/schema';
 import { easingSchema } from '../shared/design-capabilities';
@@ -43,6 +45,7 @@ export function moveTimelineKeys(timeline: Timeline, selected: Selection[], dest
 }
 
 export function TimelineEditor({ doc, time, seek, change }: { doc: DesignDocument; time: number; seek: (time: number) => void; change: (fn: (doc: DesignDocument) => void) => void }) {
+  const [pane, setPane] = useScreenState('timeline', 'open', ['open', 'closed']);
   const [selected, select] = useState<Selection[]>([]), [zoom, setZoom] = useState(1), [clipboard, setClipboard] = useState<Copied[]>([]), [snap, setSnap] = useState(true), [speed, setSpeed] = useState(2), [error, setError] = useState('');
   const [nodeId, setNode] = useState(''), [property, setProperty] = useState('x');
   const dragged = useRef(false), timeline = doc.timeline, nodes = doc.pages.flatMap(p => p.nodes), target = nodes.find(n => n.id === nodeId) ?? nodes[0];
@@ -76,14 +79,15 @@ export function TimelineEditor({ doc, time, seek, change }: { doc: DesignDocumen
     change(d => { let t = d.timeline!.tracks.find(t => t.id === id); if (!t) { t = { id, nodeId: target.id, keyframes: [] }; d.timeline!.tracks.push(t); } let k = t.keyframes.find(k => k.time === at); if (!k) { k = { time: at, values: {} }; t.keyframes.push(k); } k.values[property] = propertyValue(interpolateNode(target, doc, at), property, doc.pages.find(p => p.nodes.some(n => n.id === target.id))); t.keyframes.sort((a, b) => a.time - b.time); });
     select([{ trackId: id, time: at, property }]); setError('');
   };
-  return <section className="motion-editor" aria-label="Animation timeline" tabIndex={0} onKeyDown={e => {
+  return <section className={`motion-editor ${pane === "closed" ? "is-collapsed" : ""}`} aria-label="Animation timeline" tabIndex={0} onKeyDown={e => {
     if ((e.target as HTMLElement).matches('input,select,textarea')) return;
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); e.stopPropagation(); remove(); }
     if ((e.ctrlKey || e.metaKey) && ['a', 'c', 'v'].includes(e.key.toLowerCase())) { e.preventDefault(); e.stopPropagation(); if (e.key.toLowerCase() === 'a') select(timeline.tracks.flatMap(t => t.keyframes.flatMap(k => Object.keys(k.values).map(property => ({ trackId: t.id, time: k.time, property }))))); else if (e.key.toLowerCase() === 'c') copy(); else if (clipboard.length) paste(); }
   }}>
-    <div className="motion-toolbar"><strong>Animation tracks</strong><label>Layer <select aria-label="Animation layer" value={target?.id ?? ''} onChange={e => { setNode(e.target.value); setProperty('x'); }}>{nodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select></label><label>Property <select aria-label="Animation property" value={property} onChange={e => setProperty(e.target.value)}>{properties(target).map(p => <option key={p}>{p}</option>)}</select></label><button disabled={!target} onClick={add}>Add property keyframe</button>
+    <div className="motion-heading"><strong>Animation tracks</strong><small>Space to play / pause</small><button className="icon-button" aria-label={pane === 'open' ? 'Collapse timeline' : 'Expand timeline'} aria-expanded={pane === 'open'} onClick={() => setPane(pane === 'open' ? 'closed' : 'open')}>{pane === 'open' ? <ChevronDown size={16}/> : <ChevronUp size={16}/>}</button></div>
+    <div className="motion-content"><div className="motion-toolbar"><label>Layer <select aria-label="Animation layer" value={target?.id ?? ''} onChange={e => { setNode(e.target.value); setProperty('x'); }}>{nodes.map(n => <option key={n.id} value={n.id}>{n.name}</option>)}</select></label><label>Property <select aria-label="Animation property" value={property} onChange={e => setProperty(e.target.value)}>{properties(target).map(p => <option key={p}>{p}</option>)}</select></label><button title="Add property keyframe" aria-label="Add property keyframe" disabled={!target} onClick={add}><Plus size={15}/>Keyframe</button>
       <label>Zoom <input aria-label="Timeline zoom" type="range" min="1" max="8" step=".5" value={zoom} onChange={e => setZoom(+e.target.value)} /></label><label><input type="checkbox" checked={snap} onChange={e => setSnap(e.target.checked)}/>Snap to frames</label>
-      <button disabled={!live.length} onClick={copy}>Copy keyframes</button><button disabled={!clipboard.length} onClick={paste}>Paste at playhead</button><button disabled={!editable.length} onClick={remove}>Delete selected keys</button>
+      <button title="Copy keyframes" aria-label="Copy keyframes" disabled={!live.length} onClick={copy}><Copy size={15}/></button><button title="Paste at playhead" aria-label="Paste at playhead" disabled={!clipboard.length} onClick={paste}><ClipboardPaste size={15}/></button><button title="Delete selected keys" aria-label="Delete selected keys" disabled={!editable.length} onClick={remove}><Trash2 size={15}/></button>
       <label>Speed <input aria-label="Keyframe speed" type="number" min=".1" max="10" step=".1" value={speed} onChange={e => setSpeed(+e.target.value)}/></label><button disabled={editable.length < 2 || !Number.isFinite(speed) || speed < .1 || speed > 10} onClick={() => { const start = Math.min(...editable.map(s => s.time)); updateKeys(at => atTime(start + (at - start) / speed)); }}>Retime selection</button>
     </div>
     {error && <p role="alert">{error}</p>}
@@ -94,7 +98,7 @@ export function TimelineEditor({ doc, time, seek, change }: { doc: DesignDocumen
     </div>}
     <div className="motion-scroll"><div style={{ minWidth: `${zoom * 100}%` }}><div className="motion-ruler"><span>Layers / properties</span><div>{Array.from({ length: 11 }, (_, i) => <span key={i} style={{ left: `${i * 10}%` }}>{(timeline.duration * i / 10).toFixed(1)}s</span>)}</div></div>
       {timeline.tracks.map(t => { const node = nodes.find(n => n.id === t.nodeId), rows = [...new Set(t.keyframes.flatMap(k => Object.keys(k.values)))]; return <div key={t.id}>
-        <div className="motion-toolbar"><button onClick={() => change(d => { d.timeline!.tracks.find(x => x.id === t.id)!.muted = !t.muted; })} aria-label={`Mute ${node?.name}`} aria-pressed={!!t.muted}>{t.muted ? 'Unmute' : 'Mute'}</button><button onClick={() => change(d => { d.timeline!.tracks.find(x => x.id === t.id)!.locked = !t.locked; })} aria-label={`Lock ${node?.name}`} aria-pressed={!!t.locked}>{t.locked ? 'Unlock' : 'Lock'}</button><strong>{node?.name}</strong><button disabled={t.locked} onClick={() => change(d => { d.timeline!.tracks = d.timeline!.tracks.filter(x => x.id !== t.id); })}>Delete track</button></div>
+        <div className="motion-toolbar"><button onClick={() => change(d => { d.timeline!.tracks.find(x => x.id === t.id)!.muted = !t.muted; })} aria-label={`Mute ${node?.name}`} aria-pressed={!!t.muted}>{t.muted ? <VolumeX size={14}/> : <Volume2 size={14}/>}</button><button onClick={() => change(d => { d.timeline!.tracks.find(x => x.id === t.id)!.locked = !t.locked; })} aria-label={`Lock ${node?.name}`} aria-pressed={!!t.locked}>{t.locked ? <LockKeyhole size={14}/> : <UnlockKeyhole size={14}/>}</button><strong>{node?.name}</strong><button disabled={t.locked} onClick={() => change(d => { d.timeline!.tracks = d.timeline!.tracks.filter(x => x.id !== t.id); })}>Delete track</button></div>
         {rows.map(p => <div className="motion-track" key={p}><div><small>{p}</small></div><div className="motion-lane" onPointerDown={e => { if (e.target === e.currentTarget) { const box = e.currentTarget.getBoundingClientRect(); seek(atTime((e.clientX - box.left) / box.width * timeline.duration)); } }}><i className="motion-playhead" style={{ left: `${time / timeline.duration * 100}%` }}/>
           {t.keyframes.filter(k => p in k.values).map(k => { const item = { trackId: t.id, time: k.time, property: p }; return <button key={k.time} aria-label={`${node?.name} ${p} keyframe ${k.time}`} aria-pressed={live.some(s => same(s, item))} className={live.some(s => same(s, item)) ? 'active' : ''} style={{ left: `${k.time / timeline.duration * 100}%` }} onClick={e => { if (dragged.current) { dragged.current = false; return; } select(e.shiftKey ? live.some(s => same(s, item)) ? live.filter(s => !same(s, item)) : [...live, item] : [item]); seek(k.time); }}
             onKeyDown={e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); if (t.locked) return; const delta = (e.key === 'ArrowLeft' ? -1 : 1) * (e.shiftKey ? 10 : 1) / timeline.fps; updateKeys(at => at + delta, live.some(s => same(s, item)) ? editable : [item]); } }}
@@ -103,6 +107,6 @@ export function TimelineEditor({ doc, time, seek, change }: { doc: DesignDocumen
         </div></div>)}
       </div>; })}
       {!timeline.tracks.length && <p>Select a layer and property above to start animating.</p>}
-    </div></div>
+    </div></div></div>
   </section>;
 }

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const publicPaths = ['/', '/guide', '/docs', '/docs/revisions', '/docs/api', '/docs/cli', '/docs/mcp', '/docs/webmcp', '/docs/api-keys', '/docs/observability', '/docs/self-hosting'];
-const markdownPaths = ['/docs.md', '/guide.md', '/docs/index.md', '/docs/quickstart.md', '/docs/revisions.md', '/docs/api.md', '/docs/cli.md', '/docs/mcp.md', '/docs/webmcp.md', '/docs/api-keys.md', '/docs/observability.md', '/docs/self-hosting.md'];
+const publicPaths = ['/', '/guide', '/docs', '/docs/revisions', '/docs/motion', '/docs/api', '/docs/cli', '/docs/mcp', '/docs/webmcp', '/docs/api-keys', '/docs/observability', '/docs/self-hosting'];
+const markdownPaths = ['/docs.md', '/guide.md', '/docs/index.md', '/docs/quickstart.md', '/docs/revisions.md', '/docs/motion.md', '/docs/api.md', '/docs/cli.md', '/docs/mcp.md', '/docs/webmcp.md', '/docs/api-keys.md', '/docs/observability.md', '/docs/self-hosting.md'];
 async function fitsViewport(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
@@ -36,7 +36,11 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'interview', 'observabilityQuery', 'operations', 'scope']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operations', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'scope']);
+  expect(schema.documentWrite.properties.expectedBriefRevision).toBeDefined();
+  expect(schema.exportInput.properties.format.enum).toEqual(expect.arrayContaining(['motion', 'png-sequence', 'spritesheet']));
+  expect(schema.motionProposal.maxItems).toBe(100);
+  expect(schema.providerSettings.properties.authMethod.enum).toEqual(['bearer', 'api-key', 'basic', 'none']);
   expect(schema.clientEvent.additionalProperties).toBe(false);
   expect(schema.observabilityQuery.properties.scope.enum).toEqual(['owner', 'all']);
   expect(schema.designSystem.properties.components.items.properties.src).toBeDefined();

@@ -1,6 +1,8 @@
 import { duplicateCreativeEmbeds } from './creative-duplication';
 import { creativeOperationSchemas, isCreativeOperation, applyCreativeOperation } from './board-operations';
+import {characterEvolutionErrors} from './character-validation';
 import { z } from 'zod';
+import { characterOperationSchemas, characterOperationSchema, applyCharacterOperation } from './character-operations';
 import { timelineSchema, trackSchema, keyframeSchema } from './design-capabilities';
 import { documentSchema, nodeSchema, pageSchema, themeSchema, uid, type DesignDocument, type DesignPage, type DesignNode } from './schema';
 import { createBlock, themes } from './catalog';
@@ -10,6 +12,7 @@ const measuredBoundsSchema = z.object({ id: z.string(), x: z.number().finite().m
 
 export const operationSchema = z.discriminatedUnion('op', [
   ...creativeOperationSchemas,
+  ...characterOperationSchemas,
   z.object({ op: z.literal('add-node'), pageId: z.string(), node: nodeSchema }),
   z.object({ op: z.literal('update-node'), nodeId: z.string(), changes: nodeSchema.partial().omit({ id: true }) }),
   z.object({ op: z.literal('remove-node'), nodeId: z.string() }),
@@ -55,6 +58,7 @@ export function mutateDocument(document: DesignDocument, input: unknown): Design
   let doc = structuredClone(document);
   for (const action of operations) {
     if (isCreativeOperation(action)) doc = applyCreativeOperation(doc, action);
+    else if (action.op === 'bake-character' || action.op === 'upsert-character' || action.op === 'remove-character' || action.op === 'upsert-bone' || action.op === 'upsert-slot' || action.op === 'upsert-attachment' || action.op === 'upsert-skin' || action.op === 'upsert-clip' || action.op === 'upsert-constraint' || action.op === 'remove-character-item' || action.op === 'upsert-channel' || action.op === 'remove-channel' || action.op === 'upsert-motion-key' || action.op === 'remove-motion-key') { applyCharacterOperation(doc,characterOperationSchema.parse(action)); }
     else if (action.op === 'rename') doc.name = action.name;
     else if (action.op === 'set-theme') doc.theme = action.theme;
     else if (action.op === 'apply-theme') { const theme = themes.find(t => t.id === action.themeId); if (!theme) throw new Error('Unknown theme'); doc.theme = structuredClone(theme); }
@@ -161,6 +165,7 @@ export function mutateDocument(document: DesignDocument, input: unknown): Design
       }
     }
   }
+  const evolution=characterEvolutionErrors(document.characters??[],doc.characters??[]);if(evolution.length)throw new Error(evolution.join('; '));
   doc.metadata.updatedAt = new Date().toISOString();
   return documentSchema.parse(doc);
 }

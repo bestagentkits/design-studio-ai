@@ -4,9 +4,9 @@ import type { DesignDocument, Project } from '../src/shared/schema';
 import { paintHash } from '../src/shared/paint-png';
 import { fail, owner } from './security';
 
-export async function creativeSaveIdentity(document: DesignDocument, expectedRevision: number, operationId?: string) {
+export async function creativeSaveIdentity(document: DesignDocument, expectedRevision: number, operationId?: string, expectedBriefRevision?: number) {
   if (document.schemaVersion !== 2 || !document.paintings.length) return undefined;
-  const hash = await paintHash(new TextEncoder().encode(JSON.stringify({ document, expectedRevision })));
+  const hash = await paintHash(new TextEncoder().encode(JSON.stringify({ document, expectedRevision, expectedBriefRevision })));
   return { key: operationId ?? hash, hash };
 }
 export async function readCreativeReceipt(c: Context<Env>, projectId: string, identity: { key: string; hash: string }) {
