@@ -3,7 +3,7 @@ import { once } from 'node:events';
 import { build } from 'esbuild';
 import { serve } from '@hono/node-server';
 import { Miniflare, convertV4MiniflareOptions } from 'miniflare';
-import { createOAuthPeer } from './mcp-oauth-peer.mjs';
+import { createOAuthPeer } from '../../../../tests/fixtures/mcp-oauth-peer.mjs';
 import { probeOAuth } from './mcp-oauth-client.mjs';
 const origin = 'http://127.0.0.1:18845';
 for (const modern of [false, true]) for (const encoding of ['json', 'sse']) {

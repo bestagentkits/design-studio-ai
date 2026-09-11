@@ -4,7 +4,7 @@ Date: 2026-09-10. Status: bounded protocol matrix passed; product OAuth lifecycl
 
 ## Scope and executable evidence
 
-Three isolated probe files: [runner](probes/mcp-oauth-interop.mjs), [client](probes/mcp-oauth-client.mjs), [HTTP OAuth/MCP peer](probes/mcp-oauth-peer.mjs). No production routes, configuration, dependencies, accounts, credentials or storage changed. Test tokens and codes are generated in memory, never logged, and discarded on exit. Peer implements a deliberately bounded authorization-server contract; this is not evidence of live third-party provider compatibility.
+Three isolated probe files: [runner](probes/mcp-oauth-interop.mjs), [client](probes/mcp-oauth-client.mjs), [HTTP OAuth/MCP peer](../../../tests/fixtures/mcp-oauth-peer.mjs). No production routes, configuration, dependencies, accounts, credentials or storage changed. Test tokens and codes are generated in memory, never logged, and discarded on exit. Peer implements a deliberately bounded authorization-server contract; this is not evidence of live third-party provider compatibility.
 
 Installed `@modelcontextprotocol/client` 2.0.0 exports `auth`, `StreamableHTTPClientTransport`, issuer/resource validators and OAuth errors from its main package. The probe uses the supported public imports, real HTTP discovery/token requests, SDK-generated S256 challenge/verifier, and real `@modelcontextprotocol/server` 2.0.0 and inbound SDK 1.30.0 MCP handlers. Static test client registration avoids an unrelated registration lifecycle.
 
@@ -12,7 +12,7 @@ Commands, from repository root:
 
 ```sh
 lsof -nP -iTCP:18845 -sTCP:LISTEN
-node --check plans/260910-1839-connectors-and-mcp/reports/probes/mcp-oauth-peer.mjs
+node --check tests/fixtures/mcp-oauth-peer.mjs
 node --check plans/260910-1839-connectors-and-mcp/reports/probes/mcp-oauth-client.mjs
 node --check plans/260910-1839-connectors-and-mcp/reports/probes/mcp-oauth-interop.mjs
 node plans/260910-1839-connectors-and-mcp/reports/probes/mcp-oauth-interop.mjs
@@ -61,3 +61,5 @@ Phase 1 may now cite bounded outgoing OAuth protocol feasibility in Node/local w
 References: [official MCP specification index](https://modelcontextprotocol.io/llms-full.txt), [official TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk). Installed package source and executable local results above are the authority for observed SDK behavior.
 
 Unresolved questions: no new product decision required by this probe; application lifecycle and transport integration remain release gates.
+
+On 2026-09-11 the peer became a shared regular-test fixture under `tests/fixtures`; its SDK server is now an explicit root development dependency. Earlier no-dependency-change statements describe the original probe run.

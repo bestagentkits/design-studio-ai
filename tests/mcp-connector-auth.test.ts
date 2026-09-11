@@ -11,7 +11,7 @@ import { startMcpAuthorization, finishMcpAuthorization, refreshMcpAuthorization 
 import { readConnectorCredential } from '../server/connector-credentials';
 import { createServer } from 'node:http';
 // @ts-expect-error Isolated protocol peer is a JavaScript test artifact.
-import { createOAuthPeer } from '../plans/260910-1839-connectors-and-mcp/reports/probes/mcp-oauth-peer.mjs';
+import { createOAuthPeer } from './fixtures/mcp-oauth-peer.mjs';
 import type { Bindings } from '../server/types';
 import type { ConnectorPrincipal } from '../src/shared/connector-values';
 
