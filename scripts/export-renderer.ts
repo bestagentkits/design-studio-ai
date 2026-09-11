@@ -4,10 +4,19 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import PptxGenJS from 'pptxgenjs';
 import { interpolateNode, renderHtml, renderSvg, resolveColor, resolveFont } from '../src/shared/render';
 import type { DesignDocument, DesignNode } from '../src/shared/schema';
-import { mountExportPage, captureExportPage } from '../src/app/export-page';
+import { mountExportPage, captureExportPage, rasterizeExportPage } from '../src/app/export-page';
 import { usesDom } from '../src/app/document-view';
 import { exportScene } from '../src/shared/scene-runtime';
 
+async function thumbnail(doc: DesignDocument) {
+  document.body.style.cssText = 'margin:0;background:transparent';
+  const mounted = await mountExportPage(doc, 0, (doc.timeline?.duration ?? 0) / 2);
+  try {
+    const page = doc.pages[0], scale = Math.min(480 / page.width, 480 / page.height);
+    const canvas = await rasterizeExportPage(mounted.host, Math.max(1, Math.round(page.width * scale)), Math.max(1, Math.round(page.height * scale)));
+    return canvas.toDataURL('image/png').split(',')[1];
+  } finally { mounted.dispose(); }
+}
 async function imageOf(svg: string) {
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try { const image = new Image(); image.src = url; await image.decode(); return image; }
@@ -167,4 +176,4 @@ async function scene(input: DesignDocument, pageIndex: number, format: 'glb' | '
   const bytes = result instanceof ArrayBuffer ? new Uint8Array(result) : new TextEncoder().encode(JSON.stringify(result));
   return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(new Blob([bytes])); });
 }
-Object.assign(globalThis, { studioRenderer: { present, pptx, video, scene, motionFrames } });
+Object.assign(globalThis, { studioRenderer: { thumbnail, present, pptx, video, scene, motionFrames } });

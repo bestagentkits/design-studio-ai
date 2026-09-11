@@ -102,7 +102,7 @@ export type DesignPage = z.infer<typeof pageSchema>;
 export type DesignDocument = z.infer<typeof documentSchema>;
 export type AssetRef = DesignDocument['assets'][number];
 export type Timeline = NonNullable<DesignDocument['timeline']>;
-export interface Project { id: string; name: string; description: string; kind: ProjectKind; document: DesignDocument; revision: number; createdAt: string; updatedAt: string; publishedUrl?: string }
+export interface Project { thumbnailUrl?: string; thumbnailRevision?: number | null; id: string; name: string; description: string; kind: ProjectKind; document: DesignDocument; revision: number; createdAt: string; updatedAt: string; publishedUrl?: string }
 export type ProjectSummary = Omit<Project, 'document'>;
 export interface User { id: string; email: string; name: string }
 export const uid = () => crypto.randomUUID();
