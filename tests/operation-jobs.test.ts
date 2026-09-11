@@ -30,13 +30,23 @@ test('durable jobs preserve revisions, recover committed saves, isolate owners a
   await db.prepare("UPDATE operation_jobs SET status='running',lease_until=0 WHERE id=?").bind(row.id).run();await processOperation(env,row.id);
   const saved=await json(await request(base));assert.equal(saved.project.revision,project.revision+1);
   await json(await request(base+'/operations','POST',save));
-  const receipt=await json(await request(base+'/operations/save-one/result'));assert.equal(receipt.project.revision,project.revision+1);
+  const receiptResponse=await request(base+'/operations/save-one/result');assert.match(receiptResponse.headers.get('Content-Disposition')!,/save-save-one\.json/);
+  const receipt=await json(receiptResponse);assert.equal(receipt.project.revision,project.revision+1);
+  // A real input read interrupted by lease theft must not let the old worker save.
+  await json(await request(base+'/operations','POST',{...save,operationId:'lease-loss',input:{document,expectedRevision:saved.project.revision}}),202);
+  const stolen=(await db.prepare('SELECT * FROM operation_jobs WHERE operation_id=?').bind('lease-loss').first<any>())!;
+  const bucket=env.ASSETS_BUCKET;
+  await processOperation({...env,ASSETS_BUCKET:{put:bucket.put.bind(bucket),delete:bucket.delete.bind(bucket),get:async key=>{
+   const data=await bucket.get(key);if(key===stolen.input_key)await db.prepare("UPDATE operation_jobs SET lease='new-owner',status='queued' WHERE id=?").bind(stolen.id).run();return data;
+  }}},stolen.id);
+  assert.equal((await json(await request(base))).project.revision,saved.project.revision);
+  assert.equal((await json(await request(base+'/operations/lease-loss'))).operation.status,'queued');
   const exportRequest={kind:'export',operationId:'export-one',input:{format:'json',expectedRevision:saved.project.revision}};
   await json(await request(base+'/operations','POST',exportRequest),202);
   const next=structuredClone(document);next.name='Later revision';await json(await request(base+'/document','PUT',{document:next,expectedRevision:saved.project.revision}));
   const exp=(await db.prepare('SELECT * FROM operation_jobs WHERE operation_id=?').bind('export-one').first<any>())!;await processOperation(env,exp.id);
   assert.equal((await json(await request(base+'/operations/export-one/result'))).name,'Committed once');
   const keys=(await db.prepare('SELECT input_key,result_key FROM operation_jobs').all<any>()).results.flatMap(r=>[r.input_key,r.result_key]);
-  await json(await request(base,'DELETE'));for(const key of keys)assert.equal(await env.ASSETS_BUCKET.get(key),null);
+  await json(await request(base,'DELETE'));for(const key of keys.filter(Boolean))assert.equal(await env.ASSETS_BUCKET.get(key),null);
  }finally{db.native.close();await rm(directory,{recursive:true,force:true});}
 });

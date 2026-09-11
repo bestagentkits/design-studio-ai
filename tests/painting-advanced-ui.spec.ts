@@ -23,7 +23,7 @@ async function open(page: Page, id: string) {
 async function save(page: Page, id: string) {
   await ready(page);
   await page.getByRole('button', { name: 'Close painting studio' }).click();
-  const response = page.waitForResponse(r => r.url().endsWith(`/api/projects/${id}/document`) && r.request().method() === 'PUT');
+  const response = page.waitForResponse(r => r.url().includes(`/api/projects/${id}/operations/`) && r.url().endsWith('/result') && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await response).ok()).toBe(true);
   return (await (await page.request.get(`/api/projects/${id}`)).json()).project.document;

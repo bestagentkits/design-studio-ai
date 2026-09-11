@@ -28,7 +28,7 @@ test('project, editor tabs, preview and component parameters survive navigation'
   await pane(page, 'Design');
   const properties = page.locator('.component-properties');
   await properties.getByLabel('Label', { exact: true }).fill('Read the story');
-  const saved = page.waitForResponse(r => r.url().endsWith(`/api/projects/${project.id}/document`) && r.request().method() === 'PUT');
+  const saved = page.waitForResponse(r => r.url().includes(`/api/projects/${project.id}/operations/`) && r.url().endsWith('/result') && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save', exact: true }).click(); expect((await saved).status()).toBe(200);
   expect((await (await page.request.get(`/api/projects/${project.id}`)).json()).project.document.pages[0].nodes.at(-1).component.props.label).toBe('Read the story');
   await page.getByRole('button', { name: 'Preview', exact: true }).click(); await expect(page).toHaveURL(/mode=preview/);
@@ -68,7 +68,7 @@ test('3D materials and 2D layers remain editable and ordered', async ({ page, ba
   await page.locator('.layer-name').filter({ hasText: 'Sculptural object' }).click();
   await pane(page, 'Design'); await page.getByRole('button', { name: 'Metal', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'metalness', exact: true })).toHaveValue('1');
-  const saved = page.waitForResponse(r => r.url().endsWith(`/api/projects/${project.id}/document`) && r.request().method() === 'PUT');
+  const saved = page.waitForResponse(r => r.url().includes(`/api/projects/${project.id}/operations/`) && r.url().endsWith('/result') && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save', exact: true }).click(); expect((await saved).status()).toBe(200);
   expect((await (await page.request.get(`/api/projects/${project.id}`)).json()).project.document.pages[0].nodes.find((n: { type: string }) => n.type === 'model3d').scene.material.metalness).toBe(1);
   await pane(page, 'Chat & layers');

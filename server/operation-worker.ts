@@ -15,12 +15,14 @@ export async function processOperation(env:Bindings,id:string){
   // This context is constructed only by the internal runner, never by request headers.
   c.set('user',{id:row.user_id,email:'',name:''});c.set('authMethod','token');c.set('tokenKind','api');
   const stored=await env.ASSETS_BUCKET.get(row.input_key);if(!stored)throw new Error('Operation input unavailable');const payload=JSON.parse(new TextDecoder().decode(await stored.arrayBuffer())),request=operationJobSchema.parse(payload.request);
-  await env.DB.prepare('UPDATE operation_jobs SET stage=?,updated_at=? WHERE id=? AND lease=?').bind(request.kind==='save'?'saving':'rendering',Date.now(),id,lease).run();
+  // Input retrieval may outlive the lease. Renew ownership before any side effects.
+  const renewed=Date.now();const active=await env.DB.prepare('UPDATE operation_jobs SET stage=?,updated_at=?,lease_until=? WHERE id=? AND lease=?').bind(request.kind==='save'?'saving':'rendering',renewed,renewed+16*60000,id,lease).run();
+  if(!active.meta.changes)return new Response(null,{status:204});
   let response:Response,revision:number;
   if(request.kind==='save'){const input=request.input,project=await saveDocument(c,row.project_id,input.document,input.expectedRevision,input.expectedBriefRevision,`job-${row.id}`);revision=project.revision;response=Response.json({project});}
   else {response=await renderProjectExport(c,row.project_id,request.input,false,payload.snapshot);revision=request.input.expectedRevision;}
   const bytes=await response.arrayBuffer();if(bytes.byteLength>100*1024*1024)throw new Error('Operation result exceeds 100 MB');
-  await env.ASSETS_BUCKET.put(resultKey,bytes,{httpMetadata:{contentType:response.headers.get('Content-Type')??'application/octet-stream'}});
+  await env.ASSETS_BUCKET.put(resultKey,bytes,{httpMetadata:{contentType:response.headers.get('Content-Type')??'application/octet-stream',contentDisposition:response.headers.get('Content-Disposition')??`attachment; filename="save-${row.operation_id}.json"`}});
   const done=await env.DB.prepare("UPDATE operation_jobs SET status='succeeded',stage='complete',result_key=?,result_type=?,revision=?,error=NULL,lease_until=0,updated_at=? WHERE id=? AND lease=?").bind(resultKey,response.headers.get('Content-Type'),revision,Date.now(),id,lease).run();if(!done.meta.changes)await env.ASSETS_BUCKET.delete(resultKey);else if(row.result_key&&row.result_key!==resultKey)await env.ASSETS_BUCKET.delete(row.result_key);
   return new Response(null,{status:204});
  });

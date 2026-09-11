@@ -14,11 +14,11 @@ export interface Bucket {
   put(
     key: string,
     data: ArrayBuffer | Uint8Array,
-    options?: { httpMetadata?: { contentType: string } },
+    options?: { httpMetadata?: { contentType: string; contentDisposition?:string } },
   ): Promise<unknown>;
   get(key: string): Promise<{
     body: ReadableStream;
-    httpMetadata?: { contentType?: string };
+    httpMetadata?: { contentType?: string; contentDisposition?:string };
     arrayBuffer(): Promise<ArrayBuffer>;
   } | null>;
   delete(key: string): Promise<unknown>;

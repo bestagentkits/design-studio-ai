@@ -27,6 +27,16 @@ Implementation now covers durable jobs/queue/CLI/MCP/browser recovery, shared ri
 
 Verification: full unit/integration suite 319/319 passed. Focused geometry/job/export roundtrip set 18/18 passed, including world transform preservation and GLB foot-position comparison. Typecheck/build pass. UI regression found and fixed a mobile Operations overlay and duplicate React sibling keys; re-running affected UI before claiming acceptance.
 
-Cloudflare queue `design-studio-operations` created; new code not yet deployed. Current branch needs integration of origin/main PR #34 (local JSON recovery). No feature commit or PR yet.
+Cloudflare queue `design-studio-operations` created; new code not yet deployed. Feature commit ed5b864 and merge 7bc6706 include main PR #34 (local JSON recovery). Follow-up verification fixes remain uncommitted; no PR yet.
 
 Pending hook confirmation: privacy hook falsely parsed SQL context `c.env.DB.prepare(...)` as a secret filename. User asked asynchronously to approve the `server/projects.ts` receipt-retention SQL edit. That specific patch has NOT applied; do not retry until approval. Other work continues. Current code exempts all `job-` receipt IDs; intended fix exempts only IDs belonging to real operation_jobs rows.
+
+## Follow-up verification
+
+- Scene flow passed desktop Chromium, mobile Chromium, Firefox and mobile WebKit. Full desktop/mobile E2E in progress; legacy save waiters and schema inventory expectations updated to the new job contract.
+- Independent scene review: no blocking findings, 17/17 geometry and real GLB roundtrip tests passed. Job review found a stale-lease input-read race; worker now renews/checks lease before side effects and the forced lease-theft regression passes.
+- Real Mochi revision 9 backed up privately outside the repository. Local candidate preserves the original page, converts 76 tracks to 7, adds a recoverable shoulder refinement and authored maps. JSON float roundoff required tolerance below 1e-9 in compatible-rig comparison; differing clip tags/mute still reject.
+- Candidate GLB: 2,100,480 bytes, 25 meshes, one 22-joint skin, four animations with 61 channels each; normal and roughness maps embedded. Baseline 9,686,136 bytes, 24 skins, 1,130 channels per clip. This is local candidate evidence, not a production claim.
+- Cached immutable mesh topology makes the candidate 25-pose full scan complete in 5.60s, 382,745-byte compact output, zero warning samples, maximum edge stretch 1.9655. Informational seams appear only in the first frame. Contact samples: active error <1e-12; maximum foot-joint penetration 0.00205 scene units over 49 walk samples.
+
+The pending receipt-retention SQL narrowing is an optional storage-policy refinement: current code conservatively retains all job-prefixed receipts, preserving recovery. It is not a dependency of the implemented lifecycle or production acceptance; do not apply that blocked edit without permission.

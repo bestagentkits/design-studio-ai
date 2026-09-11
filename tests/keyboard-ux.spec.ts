@@ -83,7 +83,8 @@ test('dialog keys cannot modify the canvas and closing restores opener focus', a
   // Hold delivery of a real export response to exercise the busy dialog's close guard.
   let release!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
-  await page.route('**/export', async route => {
+  await page.route('**/operations', async route => {
+    if (route.request().method() !== 'POST' || route.request().postDataJSON()?.kind !== 'export') return route.continue();
     const response = await route.fetch();
     await held;
     await route.fulfill({ response });

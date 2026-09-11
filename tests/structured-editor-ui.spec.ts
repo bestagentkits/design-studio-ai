@@ -28,7 +28,7 @@ async function openProject(page: Page, id: string) {
   await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
 }
 async function saveProject(page: Page, id: string) {
-  const response = page.waitForResponse(response => response.url().endsWith(`/api/projects/${id}/document`) && response.request().method() === 'PUT');
+  const response = page.waitForResponse(response => response.url().includes(`/api/projects/${id}/operations/`) && response.url().endsWith('/result') && response.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save', exact: true }).click();
   expect((await response).status()).toBe(200);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();

@@ -27,7 +27,7 @@ For example, a command file may contain `{"action":"bind","nodeId":"body","smoot
 
 ## Full-animation and multi-angle verification
 
-Use WebMCP `studio_inspect_scene_animation`, MCP `inspect_scene_animation`, REST `GET /api/projects/{id}/scene/animation?pageId=PAGE`, or `dsa scene scan PROJECT --page PAGE`. Choose 2–61 samples; reports include contact error and ground penetration in world units. Select tolerances appropriate to the character's scene scale; sampled success does not prove continuous collision freedom.
+Use WebMCP `studio_inspect_scene_animation`, MCP `inspect_scene_animation`, REST `GET /api/projects/{id}/scene/animation?pageId=PAGE`, or `dsa scene scan PROJECT --page PAGE`. Choose 2–61 samples; informational diagnostics appear only in the first frame to avoid repeated payloads, while warnings remain time-indexed; reports include contact error and ground penetration in world units. Select tolerances appropriate to the character's scene scale; sampled success does not prove continuous collision freedom.
 
 Export `scene-angles` for four actual PNG views and `views.json`, using `start` as pose time. The saved camera is the reference view; the other three orbit its target by quarter turns. The four views together must fit 64 megapixels. Use [durable jobs](operation-jobs.md) for long saves/exports. GLB skins deduplicate only equal joints and float32 bind matrices; incompatible imported skins remain distinct.
 

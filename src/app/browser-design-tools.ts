@@ -52,8 +52,8 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
         const response = await fetch(path + (query.size ? `?${query}` : ''), { method: endpoint.method, credentials: 'same-origin', headers: { 'X-Studio-Client': 'webmcp', ...(!upload ? { 'Content-Type': 'application/json' } : {}) }, ...(endpoint.body ? { body: upload ? assetUploadBody(args.body as Record<string, unknown>) : JSON.stringify(args.body) } : {}) });
         if ((response.headers.get('Content-Type') ?? '').includes('json')) { const data = await response.json(); return { ...result(data), ...(!response.ok ? { isError: true } : {}) }; }
         if (!response.ok) throw new Error(`Request failed: ${response.status}`);
-        const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'studio-export'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
-        return result({ downloaded: true, mimeType: blob.type, bytes: blob.size });
+        const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition')??'')?.[1]??'studio-export'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return result({ downloaded: true, mimeType: blob.type, bytes: blob.size, filename:a.download });
       },
     });
   }

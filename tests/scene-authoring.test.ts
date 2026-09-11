@@ -39,6 +39,9 @@ test('shared rigs reuse one runtime skeleton and preserve legacy skin deformatio
  let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});
  doc.pages[0].nodes.push({...structuredClone(doc.pages[0].nodes[0]),id:'eye',name:'eye',scene:{position:[0,.8,0],scale:[.1,.1,.1]}});
  doc=command(doc,{action:'convert',nodeId:'eye'});doc=command(doc,{action:'attach',nodeId:'eye',rigNodeId:'body',bone:'head'});doc=command(doc,{action:'clip',nodeId:'body',preset:'idle'});
+ const divergent=structuredClone(doc);delete divergent.timeline!.tracks.find(t=>t.nodeId==='eye')!.clipName;assert.throws(()=>command(divergent,{action:'share-rig',nodeId:'body'}),/different bind space or animation/);
+ const muted=structuredClone(doc);muted.timeline!.tracks.find(t=>t.nodeId==='eye')!.muted=true;assert.throws(()=>command(muted,{action:'share-rig',nodeId:'body'}),/different bind space or animation/);
+ const rounded=structuredClone(doc);rounded.pages[0].nodes[1].scene!.bones![1].position[1]+=1e-14;assert.doesNotThrow(()=>command(rounded,{action:'share-rig',nodeId:'body'}));
  const before=inspectScene(doc,undefined,.5);const next=command(doc,{action:'share-rig',nodeId:'body'});assert.equal(next.pages[0].nodes[1].scene!.rigId,'body');assert.equal(next.timeline!.tracks.length,1);assert.deepEqual(inspectScene(next,undefined,.5),before);
  const {buildScene,animateScene,disposeScene}=await import('../src/shared/scene-runtime');const built=await buildScene(next);try{const body=built.objects.get('body') as T.SkinnedMesh,eye=built.objects.get('eye') as T.SkinnedMesh;assert.equal(body.skeleton,eye.skeleton);animateScene(built.scene,next,0,.5);assert(body.skeleton.bones[4].rotation.x!==0);}finally{disposeScene(built.scene);}
 });

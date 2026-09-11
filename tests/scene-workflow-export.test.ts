@@ -18,7 +18,7 @@ test('shared character GLB reopens with one skin, authored maps, morphs and solv
  const bones=doc.pages[0].nodes[0].scene!.bones!,footIndex=bones.findIndex(b=>b.name==='frontLeftFoot'),target=new Vector3().setFromMatrixPosition(boneWorld(bones)[footIndex]);target.x+=.02;
  run({action:'contact',nodeId:'body',id:'stance',endBone:'frontLeftFoot',target:target.toArray(),pole:target.clone().add(new Vector3(0,1,1)).toArray(),start:0,end:doc.timeline!.duration,maxAngle:180,groundHeight:target.y});
  const expected=inspectScene(doc,pageId,.4).pages[0].nodes[0].bones![footIndex].position;
- const scan=inspectSceneAnimation(doc,pageId,0,doc.timeline!.duration,5);assert.equal(scan.frames.length,5);
+ const scan=inspectSceneAnimation(doc,pageId,0,doc.timeline!.duration,5);assert.equal(scan.frames.length,5);assert(scan.frames[0].nodes.some(n=>n.diagnostics.some(d=>d.severity==='info')));assert(scan.frames.slice(1).every(f=>f.nodes.every(n=>n.diagnostics.every(d=>d.severity!=='info'))));
  const browser=await chromium.launch({headless:true});try{
   const page=await browser.newPage();await page.setContent('<html><body></body></html>');await page.addScriptTag({content:await readFile('public/studio-renderer.js','utf8')});
   const encoded=await page.evaluate(async doc=>(globalThis as any).studioRenderer.scene(doc,0,'glb'),doc),bytes=Buffer.from(encoded,'base64');assert.equal(bytes.toString('ascii',0,4),'glTF');const json=JSON.parse(bytes.subarray(20,20+bytes.readUInt32LE(12)).toString());assert.equal(json.skins.length,1);assert.equal(json.meshes.length,2);assert(json.animations.length===2);assert(json.materials.some((m:any)=>m.normalTexture&&m.pbrMetallicRoughness?.metallicRoughnessTexture&&m.pbrMetallicRoughness?.baseColorTexture));
