@@ -1,3 +1,11 @@
+import { diagramHitTarget, diagramEdgeHitTarget } from '../shared/diagram-hit-testing';
+import { diagramNodeSchema } from '../shared/diagram-schema';
+import { cleanDiagramStyle, sketchDiagramStyle } from '../shared/diagram-style';
+import { DiagramInlineEditor } from './diagram-inline-editor';
+import { diagramFontCss } from '../shared/diagram-font-data';
+import { fitDiagramBounds } from '../shared/diagram-curve';
+import { diagramConnectorPoints } from '../shared/diagram-routing';
+import { applyDiagramStyle, boardDiagramStyle } from '../shared/diagram-style';
 import { normalizeBoardPath } from '../shared/board-path-normalize';
 import { BoardElementView } from './board-element-view';
 import { diagramEndpoint, nearestDiagramBinding } from '../shared/diagram-routing';
@@ -22,14 +30,14 @@ import { mutateDocument } from '../shared/operations';
 import './creative-workspace.css';
 
 type Tool = 'select' | 'draw' | 'rectangle' | 'ellipse' | 'diamond' | 'text' | 'connector' | 'pen' | 'erase' | 'hand';
-type Gesture = { pointer: number; base: DesignDocument; input: InkInput; points: InkSample[]; element: BoardElement; start: { x: number; y: number }; move: boolean; ids?: string[]; baseCamera?: { x: number; y: number; width: number; height: number }; endpoint?: 'start' | 'end'; handle?: { index: number; x: string; y: string } };
+type Gesture = { pointer: number; base: DesignDocument; input: InkInput; points: InkSample[]; element: BoardElement; start: { x: number; y: number }; move: boolean; ids?: string[]; baseCamera?: { x: number; y: number; width: number; height: number }; endpoint?: 'start' | 'end'; segment?: number; handle?: { index: number; x: string; y: string } };
 type TextDraft = { id: string; base: DesignDocument; original: string; value: string };
 export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDocument, saveStatus, onSave, onCommit: commit, onClose, onUndo, onRedo }: {
   doc: DesignDocument; boardId: string; projectId?: string; accountId?: string; savedDocument?: DesignDocument; saveStatus?: string; onSave?: () => Promise<void>; onCommit: (base: DesignDocument, next: DesignDocument) => void;
   onClose: () => void; onUndo: () => void; onRedo: () => void;
 }) {
   const board = doc.schemaVersion === 2 ? doc.boards.find(b => b.id === boardId) : undefined;
-  const [tool, setTool] = useState<Tool>('draw'), [color, setColor] = useState('#26352d'), [size, setSize] = useState(16);
+  const [tool, setTool] = useState<Tool>(board?.elements.some(e=>e.diagram)?'select':'draw'), [color, setColor] = useState('#26352d'), [size, setSize] = useState(16);
   const [recovery, setRecovery] = useState<BoardDraft>(), [recoveryError, setRecoveryError] = useState('');
   const draftBase = useRef(savedDocument ?? doc);
   const draftKey = accountId && projectId ? boardDraftKey(accountId, projectId, boardId) : undefined;
@@ -40,6 +48,7 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
       void readBoardDraft(draftKey).then(pending => { if(pending?.document.schemaVersion===2 && JSON.stringify(pending.document.boards.find(b=>b.id===boardId))===JSON.stringify(savedDocument.boards.find(b=>b.id===boardId))) return deleteBoardDraft(draftKey); }).catch(()=>{});
     } },[savedDocument,draftKey]);
   const onCommit = (base: DesignDocument, next: DesignDocument) => { commit(base,next); if(draftKey && accountId && projectId) void writeBoardDraft({ key:draftKey,account:accountId,project:projectId,board:boardId,base:draftBase.current,document:next }).catch(e=>setRecoveryError('Local recovery unavailable: '+String(e))); };
+  const [inlineId,setInlineId]=useState<string>();
   const [mode, setMode] = useState<'draw' | 'diagram' | 'elements'>('draw');
   const timeMs = useCreativeMotionTime(!!board?.elements.some(e => e.type === 'gif' && e.playing));
   const [selection, setSelection] = useState<string[]>([]), [snap, setSnap] = useState(true);
@@ -50,6 +59,7 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
   const touches = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ distance: number; center: { x: number; y: number }; camera: typeof camera } | null>(null);
   const dialog = useRef<HTMLDialogElement>(null);
+  const lastTap=useRef<{id:string;time:number}|undefined>(undefined);
   useEffect(() => { const opener = document.activeElement as HTMLElement | null; dialog.current?.showModal(); return () => opener?.focus(); }, []);
   const svg = useRef<SVGSVGElement>(null), gesture = useRef<Gesture | null>(null), frame = useRef(0);
   const cancel = () => { gesture.current = null; cancelAnimationFrame(frame.current); frame.current = 0; setDraft(undefined); };
@@ -81,19 +91,27 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
     const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse()); return { x: p.x, y: p.y };
   };
   const refresh = () => { if (!frame.current) frame.current = requestAnimationFrame(() => { frame.current = 0; if (gesture.current) setDraft(structuredClone(gesture.current.element)); }); };
+  const inlineElement=board.elements.find(e=>e.id===inlineId);
+  const finishInline=(value:string)=>{if(!inlineElement)return;apply(inlineElement.diagram?[{op:'diagram-update',boardId,elementId:inlineElement.id,changes:{label:value}}]:inlineElement.type==='connector'?[{op:'diagram-edge',boardId,edgeId:inlineElement.id,label:value}]:[]);setInlineId(undefined);};
   const down = (event: PointerEvent<SVGSVGElement>) => {
     if (event.pointerType === 'touch') { touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (touches.current.size === 2) { cancel(); const [a,b] = [...touches.current.values()]; pinch.current = { distance: Math.max(1, Math.hypot(a.x-b.x,a.y-b.y)), center: { x: (a.x+b.x)/2,y:(a.y+b.y)/2 }, camera }; event.currentTarget.setPointerCapture(event.pointerId); return; } }
     if (event.button !== 0 || gesture.current || pinch.current) return;
     event.preventDefault(); setError('');
     try {
       const start = point(event), hit = (event.target as Element).closest('[data-board-element]')?.getAttribute('data-board-element');
-      let target = board.elements.find(e => e.id === hit);
+      const isHandle=(event.target as Element).closest('[data-connector-end],[data-edge-segment],[data-diagram-port],[data-path-handle]');
+      let target = board.elements.find(e => e.id === hit) ?? (isHandle ? undefined : diagramEdgeHitTarget(board,start,6/(svg.current?.getScreenCTM()?.a||1)) ?? diagramHitTarget(board,start));
+      if(!isHandle && tool==='select' && target && (target.diagram||target.type==='connector') && !boardElementLocked(board,target)){if(lastTap.current?.id===target.id && event.timeStamp-lastTap.current.time<400){lastTap.current=undefined;cancel();setInlineId(target.id);return;}lastTap.current={id:target.id,time:event.timeStamp};}
       if (target?.parentId && !event.altKey && tool === 'select') { while (target?.parentId) target = board.elements.find(e => e.id === target!.parentId); }
+      const segment=(event.target as Element).getAttribute('data-edge-segment');
+      if(segment!==null && active?.type==='connector' && !boardElementLocked(board,active)){const element=structuredClone(active);const points=diagramConnectorPoints(board,element);element.bends=points.slice(1,-1);gesture.current={pointer:event.pointerId,base:doc,input:new InkInput(false),points:[],element,start,move:false,segment:+segment};event.currentTarget.setPointerCapture(event.pointerId);return;}
+      const port=(event.target as Element).getAttribute('data-diagram-port');
       const endpoint = (event.target as Element).getAttribute('data-connector-end') as 'start' | 'end' | null;
       if (endpoint && active?.type === 'connector' && !boardElementLocked(board, active)) { gesture.current = { pointer:event.pointerId,base:doc,input:new InkInput(false),points:[],element:structuredClone(active),start,move:false,endpoint }; event.currentTarget.setPointerCapture(event.pointerId); return; }
       const handle = (event.target as Element).getAttribute('data-path-handle');
       if (handle && active?.type === 'path' && !boardElementLocked(board, active)) { const [index, x, y] = handle.split(':'); gesture.current = { pointer: event.pointerId, base: doc, input: new InkInput(false), points: [], element: structuredClone(active), start, move: false, handle: { index: +index, x, y } }; event.currentTarget.setPointerCapture(event.pointerId); return; }
       if (tool === 'erase') { if (target) apply([{ op: 'remove-board-elements', boardId, elementIds: [target.id] }]); return; }
+      if (port && active?.diagram) { const p=active.diagram.ports.find(p=>p.id===port)!; const element=applyDiagramStyle(boardElementSchema.parse({...boardDiagramStyle(board),id:uid(),name:'Connection',type:'connector',x:0,y:0,width:1,height:1,start:{point:start,binding:{elementId:active.id,anchor:{x:p.x,y:p.y},port:p.id}},end:{point:start},routing:active.diagram.family==='mind-map'?'curve':'elbow',bends:[],startArrow:'none',endArrow:active.diagram.family==='mind-map'?'none':'arrow'}),boardDiagramStyle(board));gesture.current={pointer:event.pointerId,base:doc,input:new InkInput(false),points:[],element,start,move:false};event.currentTarget.setPointerCapture(event.pointerId);return;}
       if (tool === 'select' && target && event.shiftKey) { setSelection(current => { const old = current.length ? current : selected ? [selected] : []; return old.includes(target!.id) ? old.filter(id => id !== target!.id) : [...old, target!.id]; }); setSelected(target.id); return; }
       if (tool === 'select' && !target) { setSelected(undefined); setSelection([]); return; }
       if (tool === 'select' && target && boardElementLocked(board, target)) { setError('Unlock this element before moving it.'); return; }
@@ -109,6 +127,8 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
       else if (tool === 'connector') element = boardElementSchema.parse({ ...base, x: 0, y: 0, type: 'connector', start: { point: start, ...(target && !['connector', 'group'].includes(target.type) ? { binding: nearestDiagramBinding(target, start) } : {}) }, end: { point: start }, routing: 'elbow', bends: [], startArrow: 'none', endArrow: 'arrow' });
       else if (tool === 'text') element = boardElementSchema.parse({ ...base, type: 'text', text: 'Text', width: 240, height: 48, fontFamily: 'Arial', fontSize: 28 });
       else element = boardElementSchema.parse({ ...base, type: 'shape', shape: tool, fill: '#eef3ed' });
+      if(mode==='diagram' && element.type==='shape' && tool!=='select') element.diagram=diagramNodeSchema.parse({family:'flowchart',role:element.shape==='diamond'?'decision':element.shape==='ellipse'?'start':'process',label:'New step',fontFamily:'Patrick Hand',fontSize:24,autoSize:false,ports:[{id:'top',x:.5,y:0},{id:'right',x:1,y:.5},{id:'bottom',x:.5,y:1},{id:'left',x:0,y:.5}]});
+      if(mode==='diagram' && tool!=='select') element=applyDiagramStyle(element,boardDiagramStyle(board));
       gesture.current = { pointer: event.pointerId, base: doc, input, points: [sample], element, start, move: tool === 'select', ids: target && ids.includes(target.id) ? ids : [element.id], baseCamera: tool === 'hand' ? camera : undefined };
       if (tool !== 'hand') { setSelected(element.id); if (!target || !ids.includes(target.id)) setSelection([element.id]); } setDraft(element); event.currentTarget.setPointerCapture(event.pointerId);
     } catch (e) { cancel(); setError(String(e)); }
@@ -121,6 +141,8 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
       const events = event.nativeEvent.getCoalescedEvents?.() ?? []; const samples = events.length ? events : [event.nativeEvent];
       for (const e of samples) {
         const p = point(e), last = g.points.at(-1)!;
+        if(g.move && Math.hypot(p.x-g.start.x,p.y-g.start.y)>3)lastTap.current=undefined;
+        if(g.segment!==undefined && g.element.type==='connector'){if(g.element.routing==='curve'){g.element.bends=[p];refresh();return;}const original=g.base.schemaVersion===2?g.base.boards.find(b=>b.id===boardId)!.elements.find(e=>e.id===g.element.id):undefined;if(original?.type==='connector'){const route=diagramConnectorPoints(board,original),i=g.segment,a=route[i],b=route[i+1];if(a&&b){const horizontal=Math.abs(b.x-a.x)>=Math.abs(b.y-a.y);const q=horizontal?{x:a.x,y:p.y}:{x:p.x,y:a.y},r=horizontal?{x:b.x,y:p.y}:{x:p.x,y:b.y};g.element.bends=[...route.slice(1,i),q,r,...route.slice(i+2,-1)];}}refresh();return;}
         if (g.endpoint && g.element.type === 'connector') { g.element[g.endpoint] = { point:p }; refresh(); return; }
         if (g.baseCamera) { const rect = svg.current!.getBoundingClientRect(); setCamera({ ...g.baseCamera, x: g.baseCamera.x - event.movementX * g.baseCamera.width / rect.width, y: g.baseCamera.y - event.movementY * g.baseCamera.height / rect.height }); g.baseCamera = { ...g.baseCamera, x: g.baseCamera.x - event.movementX * g.baseCamera.width / rect.width, y: g.baseCamera.y - event.movementY * g.baseCamera.height / rect.height }; return; }
         if (g.handle && g.element.type === 'path') { const c = g.element.commands[g.handle.index] as unknown as Record<string, number>; const angle = -g.element.rotation * Math.PI / 180, dx = p.x - g.element.x - g.element.width / 2, dy = p.y - g.element.y - g.element.height / 2; c[g.handle.x] = (dx * Math.cos(angle) - dy * Math.sin(angle)) * (g.element.flipX ? -1 : 1) + g.element.width / 2; c[g.handle.y] = (dx * Math.sin(angle) + dy * Math.cos(angle)) * (g.element.flipY ? -1 : 1) + g.element.height / 2; }
@@ -142,12 +164,15 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
   const up = (event: PointerEvent<SVGSVGElement>) => {
     touches.current.delete(event.pointerId); if (pinch.current) { if (!touches.current.size) pinch.current = null; return; }
     if (gesture.current?.pointer !== event.pointerId) return;
+    const pending=gesture.current,endPoint=point(event);
+    if(pending.move && Math.hypot(endPoint.x-pending.start.x,endPoint.y-pending.start.y)<3){cancel();return;}
     move(event); const g = gesture.current; if (!g) return;
     try {
-      if (g.element.type === 'connector') {
-        const hit = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-board-element]')?.getAttribute('data-board-element');
-        const target = board.elements.find(e => e.id === hit && !['connector', 'group'].includes(e.type));
-        if (target) g.element[g.endpoint ?? 'end'].binding = nearestDiagramBinding(target, point(event));
+      if (g.element.type === 'connector' && g.segment===undefined) {
+        // Endpoint handles sit above nodes; look through overlays when rebinding.
+        const hits = document.elementsFromPoint(event.clientX, event.clientY).map(e => e.closest('[data-board-element]')?.getAttribute('data-board-element'));
+        const target = diagramHitTarget(board,point(event)) ?? hits.map(id => board.elements.find(e => e.id === id && !['connector', 'group'].includes(e.type))).find(Boolean);
+        if (target) g.element[g.endpoint ?? 'end'].binding = nearestDiagramBinding(target, point(event), diagramEndpoint(board,g.element[g.endpoint==='start'?'end':'start']));
       }
       if (g.baseCamera) return;
       if (!g.move && g.element.type === 'stroke') { const minX = Math.min(...g.element.points.map(p => p.x)), minY = Math.min(...g.element.points.map(p => p.y)), maxX = Math.max(...g.element.points.map(p => p.x)), maxY = Math.max(...g.element.points.map(p => p.y)); g.element.x += minX; g.element.y += minY; g.element.width = Math.max(1, maxX-minX); g.element.height = Math.max(1,maxY-minY); g.element.points = g.element.points.map(p => ({ ...p, x:p.x-minX, y:p.y-minY })); }
@@ -174,23 +199,31 @@ export function CreativeWorkspace({ doc, boardId, projectId, accountId, savedDoc
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c') { e.preventDefault(); copy(); }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v') { e.preventDefault(); paste(); }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); copy(); paste(); }
+    if(active?.diagram?.family==='mind-map' && e.altKey && (e.key==='Enter'||e.key==='ArrowRight')){e.preventDefault();apply([{op:'mind-map-insert',boardId,relativeId:active.id,relation:e.key==='Enter'?'sibling':'child',id:uid(),label:'New idea'}]);return;}
+    if(e.key==='Enter' && active && (active.diagram||active.type==='connector')&&!boardElementLocked(board,active)){e.preventDefault();setInlineId(active.id);return;}
+    if(!e.metaKey&&!e.ctrlKey&&!e.altKey){const shortcuts:Record<string,Tool>={v:'select',p:'draw',a:'connector',t:'text',h:'hand'};if(shortcuts[e.key.toLowerCase()])setTool(shortcuts[e.key.toLowerCase()]);}
     if (ids.length && ['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) { e.preventDefault(); const d = e.shiftKey ? 10 : 1; apply([{ op: 'transform-board-elements', boardId, elementIds: ids, dx: e.key === 'ArrowLeft' ? -d : e.key === 'ArrowRight' ? d : 0, dy: e.key === 'ArrowUp' ? -d : e.key === 'ArrowDown' ? d : 0, scaleX: 1, scaleY: 1, rotation: 0, flipX: false, flipY: false }]); }
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); remove(); }
   }}>
     <header><div><span className="creative-eyebrow">DESIGN STUDIO / BOARD</span><h2>{board.name}</h2></div><span className="creative-save-note">{saveStatus || 'Edits join your project · Save in Studio'}</span>{onSave && <button disabled={saveStatus === 'Saving'} onClick={() => { if (!gesture.current && commitTextDraft()) void onSave(); }}>Save Board</button>}<button aria-label="Close creative board" onClick={onClose}><X size={20}/></button></header>
-    {recovery && <div role="alert">A local Board draft is available. <button onClick={() => { try { commit(recovery.base,recovery.document); draftBase.current=recovery.base; setRecovery(undefined); } catch(e) { setRecoveryError(String(e)); } }}>Restore draft</button><button onClick={() => { if(draftKey) void deleteBoardDraft(draftKey); setRecovery(undefined); }}>Discard draft</button></div>}{recoveryError && <p role="alert">{recoveryError}</p>}<div className="creative-main"><aside><nav aria-label="Creative modes">{(['draw', 'diagram', 'elements'] as const).map(m => <button key={m} aria-label={m === 'draw' ? 'Sketch workspace' : `${m} mode`} aria-pressed={mode === m} onClick={() => setMode(m)}>{m}</button>)}</nav>{mode === 'diagram' && <DiagramPanel doc={doc} boardId={boardId} selectedIds={ids} onCommit={onCommit}/>}{mode === 'elements' && <CreativeElementsPanel selectedElement={active} doc={doc} boardId={boardId} projectId={projectId} onCommit={onCommit} onInserted={id => { setSelected(id); setSelection([id]); setTool('select'); }}/>}<label>Ink color<input aria-label="Ink color" type="color" value={color} onChange={e => setColor(e.target.value)}/></label><label>Stroke size <b>{size}px</b><input aria-label="Stroke size" type="range" min="2" max="64" value={size} onChange={e => setSize(+e.target.value)}/></label><p>Move slowly for a fuller line. Move quickly for a fine, tapered stroke.</p>
+    {recovery && <div role="alert">A local Board draft is available. <button onClick={() => { try { commit(recovery.base,recovery.document); draftBase.current=recovery.base; setRecovery(undefined); } catch(e) { setRecoveryError(String(e)); } }}>Restore draft</button><button onClick={() => { if(draftKey) void deleteBoardDraft(draftKey); setRecovery(undefined); }}>Discard draft</button></div>}{recoveryError && <p role="alert">{recoveryError}</p>}<div className="creative-main"><aside><nav aria-label="Creative modes">{(['draw', 'diagram', 'elements'] as const).map(m => <button key={m} aria-label={m === 'draw' ? 'Sketch workspace' : `${m} mode`} aria-pressed={mode === m} onClick={() => {setMode(m);if(m==='diagram'){setTool('select');setCamera(fitDiagramBounds(board.elements));}}}>{m}</button>)}</nav>{mode === 'diagram' && <DiagramPanel doc={doc} boardId={boardId} selectedIds={ids} onCommit={onCommit}/>}{mode === 'elements' && <CreativeElementsPanel selectedElement={active} doc={doc} boardId={boardId} projectId={projectId} onCommit={onCommit} onInserted={id => { setSelected(id); setSelection([id]); setTool('select'); }}/>}<label>Ink color<input aria-label="Ink color" type="color" value={color} onChange={e => setColor(e.target.value)}/></label><label>Stroke size <b>{size}px</b><input aria-label="Stroke size" type="range" min="2" max="64" value={size} onChange={e => setSize(+e.target.value)}/></label><p>Move slowly for a fuller line. Move quickly for a fine, tapered stroke.</p>
       {active?.type === 'text' && textDraft && <label>Text<textarea aria-label="Board text" value={textDraft.value} onChange={e => setTextDraft({ ...textDraft, value: e.target.value })} onBlur={e => commitTextDraft({ ...textDraft, value: e.currentTarget.value })}/></label>}
       <label>Snap to grid<input aria-label="Snap to grid" type="checkbox" checked={snap} onChange={e => setSnap(e.target.checked)}/></label><button disabled={!ids.length} onClick={copy}>Copy</button><button onClick={paste}>Paste</button><>{active?.type === 'gif' && <CreativeGifControls doc={doc} boardId={boardId} projectId={projectId} onCommit={onCommit} element={active} timeMs={timeMs}/>}</><BoardSelectionPanel board={board} ids={ids} apply={apply}/>
       <button disabled={!selected} onClick={remove}><Trash2 size={16}/> Delete selection</button>
     </aside><section className="creative-paper"><nav aria-label="Board tools">{tools.map(([key, Icon, label]) => <button key={key} aria-label={label} aria-pressed={tool === key} onClick={() => { cancel(); setTool(key); }}><Icon size={20}/><span>{label}</span></button>)}<i/><button aria-label="Undo board edit" onClick={() => { cancel(); setTextDraft(null); onUndo(); }}><Undo2 size={19}/></button><button aria-label="Redo board edit" onClick={() => { cancel(); setTextDraft(null); onRedo(); }}><Redo2 size={19}/></button></nav>
-      <svg ref={svg} tabIndex={0} aria-label="Drawing canvas" viewBox={`${camera.x} ${camera.y} ${camera.width} ${camera.height}`} preserveAspectRatio="xMidYMid meet" onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { touches.current.delete(e.pointerId); pinch.current = null; cancel(); }} onLostPointerCapture={() => { if (!pinch.current) cancel(); }} onWheel={e => { if (gesture.current) return; if (e.ctrlKey || e.metaKey) { const factor = e.deltaY > 0 ? 1.1 : .9; setCamera(c => ({ ...c, width: Math.min(20000, Math.max(96, c.width * factor)), height: Math.min(14000, Math.max(64, c.height * factor)) })); } else setCamera(c => ({ ...c, x: c.x + e.deltaX, y: c.y + e.deltaY })); }}>
+      {mode==='diagram' && active && (active.diagram || active.type==='connector') && <div role="toolbar" aria-label="Selected diagram tools" className="diagram-context-tools"><button disabled={boardElementLocked(board,active)} onClick={()=>setInlineId(active.id)}>Edit label</button><button onClick={()=>apply([{op:'diagram-style',boardId,elementIds:ids,style:sketchDiagramStyle,setDefault:false}])}>Sketch style</button><button onClick={()=>apply([{op:'diagram-style',boardId,elementIds:ids,style:cleanDiagramStyle,setDefault:false}])}>Clean style</button>{active.diagram?.family==='mind-map' && <button onClick={()=>apply([{op:'mind-map-insert',boardId,relativeId:active.id,relation:'child',id:uid(),label:'New idea'}])}>Add branch</button>}</div>}
+      <svg ref={svg} tabIndex={0} aria-label="Drawing canvas" viewBox={`${camera.x} ${camera.y} ${camera.width} ${camera.height}`} preserveAspectRatio="xMidYMid meet" onDoubleClick={e=>{const id=(e.target as Element).closest('[data-board-element]')?.getAttribute('data-board-element') ?? selected;const n=board.elements.find(n=>n.id===id);if(n&&(n.diagram||n.type==='connector')&&!boardElementLocked(board,n)){cancel();setInlineId(n.id);}}} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={e => { touches.current.delete(e.pointerId); pinch.current = null; cancel(); }} onLostPointerCapture={() => { if (!pinch.current) cancel(); }} onWheel={e => { if (gesture.current) return; if (e.ctrlKey || e.metaKey) { const factor = e.deltaY > 0 ? 1.1 : .9; setCamera(c => ({ ...c, width: Math.min(20000, Math.max(96, c.width * factor)), height: Math.min(14000, Math.max(64, c.height * factor)) })); } else setCamera(c => ({ ...c, x: c.x + e.deltaX, y: c.y + e.deltaY })); }}>
+        <style>{diagramFontCss}</style>
         <rect x={camera.x} y={camera.y} width={camera.width} height={camera.height} fill={board.background}/>
         {renderElements.filter(e => movePreview || e.id !== draft?.id).map(e => e.type === 'gif' ? <CreativeGifElement key={e.id} element={e} board={displayBoard} doc={doc} timeMs={timeMs}/> : <BoardElementView key={e.id} board={displayBoard} element={e} doc={doc}/>) }
         {draft && !movePreview && <g pointerEvents="none" dangerouslySetInnerHTML={{ __html: boardElementSvg({ ...displayBoard, elements: [...displayBoard.elements.filter(e => e.id !== draft.id), draft] }, draft, doc) }}/>}
         {active?.type === 'connector' && tool === 'select' && <g>{(['start','end'] as const).map(end => { const p = diagramEndpoint(displayBoard, (draft?.type === 'connector' ? draft : active)[end]); return <circle key={end} data-connector-end={end} cx={p.x} cy={p.y} r={7} fill="white" stroke="#326550"/>; })}</g>}
+        {active?.type==='connector' && tool==='select' && <g>{(()=>{try{return diagramConnectorPoints(displayBoard,active).slice(1).map((p,i,rest)=>{if(active.routing==='curve' && i!==Math.floor(rest.length/2))return null;const a=i?rest[i-1]:diagramEndpoint(displayBoard,active.start);return <circle key={i} data-edge-segment={i} cx={(a.x+p.x)/2} cy={(a.y+p.y)/2} r={7} fill="#e6eddf" stroke="#326550"/>;});}catch{return null;}})()}</g>}
+        {active?.diagram && tool==='select' && !boardElementLocked(board,active) && <g>{active.diagram.ports.map(p=>{const pos=transformedAnchor(active,p);return <circle key={p.id} data-diagram-port={p.id} cx={pos.x} cy={pos.y} r={8} fill="white" stroke="#326550"><title>Drag to connect</title></circle>;})}</g>}
+        {inlineElement && <DiagramInlineEditor key={inlineElement.id} element={inlineElement.type==='connector'?{...inlineElement,x:diagramEndpoint(board,inlineElement.start).x,y:diagramEndpoint(board,inlineElement.start).y,width:240,height:96}:inlineElement} onSave={finishInline} onCancel={()=>setInlineId(undefined)}/>}
         {active?.type === 'path' && (tool === 'select' || tool === 'pen') && <g transform={`translate(${active.x} ${active.y}) rotate(${active.rotation} ${active.width / 2} ${active.height / 2}) translate(${active.flipX ? active.width : 0} ${active.flipY ? active.height : 0}) scale(${active.flipX ? -1 : 1} ${active.flipY ? -1 : 1})`}>{(draft?.type === 'path' ? draft.commands : active.commands).flatMap((c, i) => (['x','x1','x2'] as const).flatMap(x => { const y = x.replace('x','y'); const values = c as unknown as Record<string, number>; return typeof values[x] === 'number' ? [<circle key={`${i}:${x}`} data-path-handle={`${i}:${x}:${y}`} cx={values[x]} cy={values[y]} r={5} fill={x === 'x' ? '#fff' : '#b8d9cd'} stroke="#326550"/>] : []; }))}</g>}
         {active && tool === 'select' && active.type !== 'connector' && <rect pointerEvents="none" x={draft?.x ?? active.x} y={draft?.y ?? active.y} width={active.width} height={active.height} fill="none" stroke="#2b6955" strokeWidth="1.5" strokeDasharray="5 4"/>}
-      </svg><footer><span>{error || `${board.elements.length} elements · ${tool === 'draw' ? 'Pressure-sensitive ink' : 'One gesture, one undo'}`}</span><div><button aria-label="Zoom out" onClick={() => setCamera(c => ({ ...c, width: Math.min(20000, c.width * 1.2), height: Math.min(14000, c.height * 1.2) }))}><Minus size={16}/></button><button onClick={() => setCamera({ x: 0, y: 0, width: 960, height: 640 })}>Reset view</button><button aria-label="Zoom in" onClick={() => setCamera(c => ({ ...c, width: Math.max(96, c.width / 1.2), height: Math.max(64, c.height / 1.2) }))}><Plus size={16}/></button></div></footer>
+      </svg><footer><span>{error || `${board.elements.length} elements · ${tool === 'draw' ? 'Pressure-sensitive ink' : 'One gesture, one undo'}`}</span><div><button aria-label="Zoom out" onClick={() => setCamera(c => ({ ...c, width: Math.min(20000, c.width * 1.2), height: Math.min(14000, c.height * 1.2) }))}><Minus size={16}/></button><button onClick={() => setCamera({ x: 0, y: 0, width: 960, height: 640 })}>Reset view</button><button onClick={()=>setCamera(fitDiagramBounds(board.elements))}>Fit diagram</button><button aria-label="Zoom in" onClick={() => setCamera(c => ({ ...c, width: Math.max(96, c.width / 1.2), height: Math.max(64, c.height / 1.2) }))}><Plus size={16}/></button></div></footer>
     </section></div>
   </dialog>;
 }

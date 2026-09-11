@@ -79,6 +79,8 @@ For concurrent editing, retain the exact document and revision you read. `projec
 
 The bundled schema reads v1/v2 and exposes board transforms, paste, semantic diagrams and painting layer/group operations through `schema --operations`. Preserve v2 roots when applying edits. `projects paint PROJECT_ID --file command.json` executes a real server-side stroke/fill using the live `paintingCommand` schema; include the observed revision, painting generation and a unique operation ID. An uncertain write can be retried with the identical command and ID. Direct painting replacement still requires owned PNG tiles and verified source hashes. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. Static GIF export uses the saved poster; timed browser exports sample actual frames. See [creative tools](../../docs/creative-tools.md) for persistence, SVG flattening, public projections and acceptance limits.
 
+Native diagram appearance uses `diagram-style` with a partial `style`, optional `elementIds`, `setDefault` and `savePreset`. An empty selection changes no existing objects; omitting it targets semantic nodes and connectors. `diagram-update` edits labels and text sizing; `diagram-edge` edits bindings-independent routing, bends, label position and color. Preserve user overrides and use the shared live schema for exact fields. Bundled Vietnamese fonts and SVG geometry are shared with the editor.
+
 ## Native character motion
 
 `dsa motion PROJECT_ID --node NODE_ID --time 1` inspects an instance; omit the node to list reusable rigs/clips/skins. Use live `schema --operations` for named character, channel, key and bake edits. Character documents use schema v2; saving v1 over v2 is rejected.
