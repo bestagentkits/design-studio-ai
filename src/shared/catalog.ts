@@ -12,6 +12,7 @@ export const themes: Theme[] = [
 ];
 export interface Template { id: string; name: string; kind: ProjectKind; description: string; themeId: string; category: string }
 export const templates: Template[] = [
+  { id: 'creative-board', name: 'Creative Board', kind: 'wireframe', description: 'Draw, diagram, collect elements and paint on an open board.', themeId: 'moss', category: 'Board' },
   { id: 'studio-landing', name: 'A considered beginning', kind: 'web', description: 'An editorial landing page with room to breathe.', themeId: 'atelier', category: 'Landing page' },
   { id: 'product-deck', name: 'Ideas worth sharing', kind: 'slides', description: 'A confident three-slide story for your next big idea.', themeId: 'nocturne', category: 'Presentation' },
   { id: 'brand-guidelines', name: 'A brand, beautifully defined', kind: 'report', description: 'Color, typography, and principles in one source of truth.', themeId: 'moss', category: 'Brand guidelines' },
@@ -80,5 +81,6 @@ export function createDocument(kind: ProjectKind = 'web', name = 'Untitled desig
   if (kind === 'web' || kind === 'wireframe') pages = [structuredPage(kind === 'wireframe')];
   const doc: DesignDocument = { schemaVersion: 1, id: uid(), name, kind, theme, pages, assets: [], metadata: { createdAt: now, updatedAt: now } };
   if (kind === 'video') doc.timeline = { duration: 6, fps: 30, tracks: [{ id: uid(), nodeId: pages[0].nodes[1].id, keyframes: [{ time: 0, values: { opacity: 0, y: 275 } }, { time: 1.5, values: { opacity: 1, y: 215 } }, { time: 5, values: { opacity: 1, y: 215 } }, { time: 6, values: { opacity: 0, y: 190 } }] }, { id: uid(), nodeId: pages[0].nodes[0].id, keyframes: [{ time: 0, values: { x: 1040, rotation: 0 } }, { time: 6, values: { x: 940, rotation: 180 } }] }] };
+  if (templateId === 'creative-board') { const boardId = uid(); return { ...doc, schemaVersion: 2, boards: [{ id: boardId, name, elements: [], background: '#ffffff' }], paintings: [], pages: [page('Board', 1440, 960, [{ id: uid(), type: 'board', name, x: 0, y: 0, width: 1440, height: 960, boardId, crop: { x: 0, y: 0, width: 1440, height: 960 } }])] }; }
   return applyTemplatePreset(doc, templateId);
 }

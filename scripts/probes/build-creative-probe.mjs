@@ -1,0 +1,10 @@
+import { build } from 'esbuild';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
+const target = resolve('artifacts/creative-probe.html');
+const result = await build({ entryPoints: ['scripts/board-engine-probe.ts'], bundle: true, write: false, platform: 'browser', format: 'iife', minify: true });
+const script = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
+const notices = await Promise.all(['perfect-freehand', 'gifuct-js', 'js-binary-schema-parser'].map(async name => `${name}\n${await readFile(resolve('node_modules', name, 'LICENSE'), 'utf8')}`));
+await mkdir(dirname(target), { recursive: true });
+await writeFile(target, `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Design Studio — Drawing lab</title><!--\n${notices.join('\n\n').replace(/-->/g, '-- >')}\n--><main id="probe"></main><script>${script}</script></html>`);
+console.log(target);

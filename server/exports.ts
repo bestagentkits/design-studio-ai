@@ -1,3 +1,5 @@
+import { publicCreativeProjection } from '../src/shared/public-creative-projection';
+
 import {exportOptionsSchema as optionsSchema} from '../src/shared/export-contract';
 import { createMotionArchive } from '../src/shared/motion-export';
 import { updateEvent } from './observability-store';
@@ -70,7 +72,7 @@ return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'e
   if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
   span.event.projectId = row.id; span.event.action = thumbnail ? 'thumbnail.render' : `export.${options.format}`;
   await updateEvent(c.env, span.event);
-  const doc = documentSchema.parse(JSON.parse(row.document));
+  let doc = documentSchema.parse(JSON.parse(row.document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
   if (options.format === 'react' && !['web', 'wireframe'].includes(doc.kind)) fail(400, 'unsupported_export', 'React source export is available for Web/App and wireframe projects.');
   if (['glb', 'gltf'].includes(options.format) && doc.pages[options.pageIndex].nodes.some(node=>node.character)) fail(400,'unsupported_export','Character motion uses the native motion package; GLB/glTF cannot preserve 2D rigs.');
@@ -78,6 +80,7 @@ return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'e
   const extension = ['react','motion','png-sequence','spritesheet'].includes(options.format) ? 'zip' : options.format;
   const headers = { 'Content-Type': mimeTypes[options.format], 'Content-Disposition': `attachment; filename="${row.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}"`, 'Cache-Control': 'private,no-store', 'X-Content-Type-Options': 'nosniff' };
   if (options.format === 'json') { const output = JSON.stringify(doc, null, 2); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
+  doc = publicCreativeProjection(doc);
   await validateAssets(c, doc, row.id);
   if (!['html', 'svg', 'react'].includes(options.format)) {
     const selectedPages = options.format === 'pdf' || options.format === 'pptx' ? doc.pages : [doc.pages[options.pageIndex]];

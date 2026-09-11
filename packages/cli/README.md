@@ -14,13 +14,13 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.3.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.0.tgz`, or install the published release directly:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.3/bestagentkits-design-studio-ai-0.3.3.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/bestagentkits-design-studio-ai-0.4.0.tgz
 ```
 
-The [v0.3.3 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.3) includes CLI and skill archives. The package is not published to the npm registry.
+The [v0.4.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.0) includes CLI and skill archives. The package is not published to the npm registry.
 
 The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
 
@@ -74,6 +74,10 @@ All fal modes return queued jobs. Poll to a completed asset before reporting suc
 For concurrent editing, retain the exact document and revision you read. `projects document changes` observes saved updates; `projects document merge` accepts your edited document with that original base. Resolve reported overlapping changes explicitly; never change the base or invent its revision to force a write. See the [revision workflow](../../docs/agents.md#revision-workflow).
 
 `api METHOD /api/path --file request.json` provides an explicit REST escape hatch constrained to the configured server. It neither bypasses server auth nor evaluates local code. Requests reject redirects to keep tokens bound to the configured origin.
+
+## Creative documents
+
+The bundled schema reads v1/v2 and exposes board transforms, paste, semantic diagrams and painting layer/group operations through `schema --operations`. Preserve v2 roots when applying edits. `projects paint PROJECT_ID --file command.json` executes a real server-side stroke/fill using the live `paintingCommand` schema; include the observed revision, painting generation and a unique operation ID. An uncertain write can be retried with the identical command and ID. Direct painting replacement still requires owned PNG tiles and verified source hashes. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. Static GIF export uses the saved poster; timed browser exports sample actual frames. See [creative tools](../../docs/creative-tools.md) for persistence, SVG flattening, public projections and acceptance limits.
 
 ## Native character motion
 

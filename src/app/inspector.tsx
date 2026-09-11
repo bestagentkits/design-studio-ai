@@ -14,7 +14,7 @@ import {
   Trash2,
   UnlockKeyhole,
 } from "lucide-react";
-import type { DesignDocument, DesignNode, DesignPage } from "../shared/schema";
+import { uid, type DesignDocument, type DesignNode, type DesignPage } from "../shared/schema";
 import { themes } from "../shared/catalog";
 import { resolveColor } from "../shared/render";
 import { Field } from "./ui";
@@ -390,6 +390,7 @@ export function Inspector({
           </section>
           <LayoutInspector node={node} page={page} update={update}/>
           <InteractionInspector node={node} doc={doc} update={update}/>
+          {node.type === 'board' && node.crop && <section><h3>Board view</h3><p>Crop this linked view without changing the source board.</p>{(['x','y','width','height'] as const).map(key => <Field key={key} label={`Crop ${key}`}><input aria-label={`Board crop ${key}`} type="number" value={node.crop![key]} onChange={e => { const value=+e.target.value; if(Number.isFinite(value) && (!['width','height'].includes(key) || value>0)) update({crop:{...node.crop!,[key]:value}}); }}/></Field>)}<button className="button-secondary" onClick={() => change(d => { const p=d.pages.find(p=>p.id===page.id); if(p) p.nodes.push({...structuredClone(storedNode!),id:uid(),name:`${storedNode!.name} linked view`,x:storedNode!.x+24,y:storedNode!.y+24}); })}>Create linked view</button><p>Duplicate creates an independent board. Linked views share editable content and keep separate crops.</p></section>}
           {node.type === "text" && (
             <section>
               <h3>Content</h3>

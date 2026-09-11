@@ -12,6 +12,7 @@ export const designSystemSchema = z.object({
   if (new Set(ids).size !== ids.length) ctx.addIssue({ code: 'custom', message: 'Library item IDs must be unique' });
   if (definition.components.some(c => c.src?.includes('/api/assets/') || c.src?.includes('/published/'))) ctx.addIssue({ code: 'custom', message: 'Reusable component media must be embedded or use public HTTPS URLs' });
   for (const page of definition.compositions) {
+    if (page.nodes.some(n => n.type === 'board' || n.type === 'artwork')) ctx.addIssue({ code: 'custom', message: 'Board and painting source cannot be packaged in reusable libraries yet. Use editable project embeds or project clone.' });
     const parsed = documentSchema.safeParse({ schemaVersion: 1, id: 'composition', name: page.name || 'Composition', kind: 'web', theme: definition.theme, pages: [page], assets: [], metadata: { createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' } });
     if (!parsed.success) ctx.addIssue({ code: 'custom', message: `Invalid composition ${page.name}: ${parsed.error.issues[0]?.message}` });
     if (page.nodes.some(n => n.src?.includes('/api/assets/') || n.src?.includes('/published/') || n.scene?.material?.textureAssetId)) ctx.addIssue({ code: 'custom', message: 'Reusable compositions must embed their media or use public HTTPS URLs' });

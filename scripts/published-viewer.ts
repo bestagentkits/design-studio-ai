@@ -1,3 +1,4 @@
+import { creativeGifDuration } from '../src/app/creative-elements-export';
 import {motionDuration} from '../src/shared/motion-duration';
 import { mountSceneComposition } from '../src/shared/scene-composition';
 import { createElement } from 'react';
@@ -71,7 +72,8 @@ if (source?.textContent) {
       })();
     }
   }
-  const duration=motionDuration(doc);
+  void (async () => {
+  const duration=Math.max(motionDuration(doc), await creativeGifDuration(doc));
   if (duration>0) {
     const controls = document.createElement('div'); controls.style.cssText = 'position:sticky;bottom:16px;display:flex;align-items:center;gap:16px;max-width:480px;margin:16px auto;padding:12px 20px;border-radius:12px;background:#1b1b1b;color:white;font:14px Arial';
     const play = document.createElement('button'); play.textContent = 'Play animation'; play.style.cssText = 'padding:10px 16px;cursor:pointer;border:0;border-radius:6px';
@@ -83,4 +85,5 @@ if (source?.textContent) {
     scrub.oninput = () => { time = Number(scrub.value); running = false; cancelAnimationFrame(frame); play.textContent = 'Play animation'; paint(); };
     paint();
   }
+  })().catch(error => { const notice = document.createElement('p'); notice.setAttribute('role', 'alert'); notice.textContent = `Animation could not load: ${String(error)}`; document.body.append(notice); });
 }

@@ -1,3 +1,4 @@
+import { creativeGifDuration } from '../src/app/creative-elements-export';
 import { motionFrames } from './motion-frame-export';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
@@ -97,7 +98,10 @@ async function pptx(input: DesignDocument) {
 async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 'mp4') {
   const selected = { ...input, pages: [input.pages[pageIndex]] };
   const hasScene = !!selected.pages[0].scene || selected.pages[0].nodes.some(n => n.scene);
-  const doc = hasScene ? selected : await prepare(selected), page = doc.pages[0], timeline = doc.timeline;
+  const doc = hasScene ? selected : await prepare(selected), page = doc.pages[0];
+  const gifDuration = await creativeGifDuration(doc);
+  const timeline = doc.timeline ?? (gifDuration > 0 ? { duration: gifDuration, fps: 30, tracks: [] } : undefined);
+  if (timeline && !doc.timeline) doc.timeline = timeline;
   if (!timeline) throw new Error('This document needs a timeline.');
   if (timeline.duration > 60) throw new Error('Cloud video exports currently support up to 60 seconds per clip.');
   // Prefer VP8 for real-time capture; cloud VP9 initialization can backlog short clips.
@@ -109,7 +113,7 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
   const context = canvas.getContext('2d')!;
   const mounted = hasScene ? await mountExportPage(doc, 0) : undefined;
   const sceneCanvas = mounted?.host.querySelector('canvas');
-  context.drawImage(sceneCanvas ?? (usesDom(page) ? await captureExportPage(doc) : await imageOf(renderSvg(doc, 0, 0))), 0, 0);
+  context.drawImage(sceneCanvas ?? (usesDom(page) ? await captureExportPage(doc, 0, 0) : await imageOf(renderSvg(doc, 0, 0))), 0, 0);
   const stream = canvas.captureStream(0), videoTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
   const media = new Map<string, HTMLMediaElement>(), audio = new AudioContext(), destination = audio.createMediaStreamDestination();
   let activeRecorder: MediaRecorder | undefined;

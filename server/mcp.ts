@@ -1,4 +1,6 @@
 import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
+import { paintingCommandSchema } from '../src/shared/painting-command';
+import { documentSaveSchema } from '../src/shared/document-save-contract';
 import { motionInspectionSchema } from '../src/shared/motion-inspection';
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -60,7 +62,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.3.3" },
+    { name: "design-studio-ai", version: "0.4.0" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -181,12 +183,10 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     "update_document",
     {
       description:
-        "Persist a complete validated document. expectedRevision is required; stale revisions fail with conflict.",
+        "Persist a complete v1/v2 document. Preserve boards and paintings. expectedRevision is required. For painting saves, operationId allows retrying the exact payload; a changed payload conflicts.",
       inputSchema: {
         projectId: z.string(),
-        document: documentSchema,
-        expectedBriefRevision:z.number().int().min(0).optional(),
-        expectedRevision: z.number().int().positive(),
+        ...documentSaveSchema.shape,
       },
     },
     async ({ projectId, ...body }) =>
@@ -196,6 +196,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         body,
       ),
   );
+  server.registerTool('paint_document', { description: 'Execute a real raster stroke or fill on an owned layer. Requires exact document revision and painting generation; reuse operationId only for the same request. Inspect paintingCommand in schema.', inputSchema: { projectId: z.string(), ...paintingCommandSchema.shape } }, async ({ projectId, ...body }) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/paint`, body));
   server.registerTool(
     "patch_document",
     {
