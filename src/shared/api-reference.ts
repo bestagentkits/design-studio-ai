@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
+  {method:'GET',path:'/api/projects/{id}/scene/animation',summary:'Inspect complete animation; required pageId and optional start, end, samples (2–61) query',body:undefined},
+  {method:'POST',path:'/api/projects/{id}/operations',summary:'Start idempotent save/export job; reuse operationId and exact payload on uncertain response',body:{kind:'export',operationId:'unique-operation-id',input:{format:'glb',expectedRevision:1,pageIndex:0}}},
+  {method:'GET',path:'/api/projects/{id}/operations/{operationId}',summary:'Read owner-scoped operation status, stage, revision and result URL',body:undefined},
+  {method:'GET',path:'/api/projects/{id}/operations/{operationId}/result',summary:'Download completed operation result',body:undefined},
   { method: 'GET', path: '/api/projects/{id}/scene', summary: 'Inspect 3D mesh topology, skin weights, skeleton and sampled pose; optional pageId and time query', body: undefined },
   { method: 'POST', path: '/api/projects/{id}/scene', summary: 'Preview or apply a bounded 3D authoring command with revision checking; discover sceneCommands in schema', body: { pageId: 'page-id', expectedRevision: 1, preview: true, command: { action: 'convert', nodeId: 'model-id' } } },
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },

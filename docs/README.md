@@ -20,3 +20,5 @@ Use the executable owners linked from each guide for current schemas, routes, co
 [Plans and reports](../plans/) preserve implementation decisions and observed checks. [Release verification](../plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) is evidence for that release, not current implementation authority. Use source and tests to establish behavior for a new change.
 
 [Editable 3D characters](3d-characters.md) covers mesh, rig, expressions, UV painting and agent commands.
+
+See [durable operation jobs](operation-jobs.md) for save/export recovery, result retention and Cloudflare queue provisioning.

@@ -1,3 +1,4 @@
+import {operationJobSchema} from '../src/shared/operation-jobs';
 import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
 import { paintingCommandSchema } from '../src/shared/painting-command';
 import { documentSaveSchema } from '../src/shared/document-save-contract';
@@ -97,6 +98,15 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     if (!response.ok) return { isError: true, ...result(value) };
     return result(value);
   };
+  server.registerTool('inspect_scene_animation',{description:'Sample a complete 3D animation and return affected vertices, times and foot contact errors.',inputSchema:{projectId:z.string(),pageId:z.string(),start:z.number().min(0).optional(),end:z.number().min(0).optional(),samples:z.number().int().min(2).max(61).default(25)},annotations:{readOnlyHint:true}},async ({projectId,...query})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/scene/animation?${new URLSearchParams(Object.entries(query).filter(([,v])=>v!==undefined).map(([k,v])=>[k,String(v)]))}`));
+  server.registerTool('get_operation_result',{description:'Download the completed durable operation result. Results above 20 MB should be downloaded with the CLI.',inputSchema:{projectId:z.string(),operationId:z.string()},annotations:{readOnlyHint:true}},async ({projectId,operationId})=>{
+   const response=await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/operations/${encodeURIComponent(operationId)}/result`,{headers:{Authorization:c.req.header('Authorization')!}},telemetryEnv(c,toolSpan.getStore()));
+   if(!response.ok)return {isError:true,...result(await response.json())};
+   const bytes=await response.arrayBuffer();if(bytes.byteLength>20*1024*1024)return {isError:true,...result({error:{message:'Result exceeds 20 MB; download with dsa operations result.'}})};
+   return {content:[{type:'resource' as const,resource:{uri:`studio://operations/${projectId}/${operationId}`,mimeType:response.headers.get('Content-Type')!,blob:Buffer.from(bytes).toString('base64')}}]};
+  });
+  server.registerTool('start_operation',{description:'Start a durable save or export job. Reuse the same operation ID and payload after an uncertain response.',inputSchema:{projectId:z.string(),request:operationJobSchema}},async ({projectId,request})=>callApi('POST',`/api/projects/${encodeURIComponent(projectId)}/operations`,request));
+  server.registerTool('get_operation',{description:'Read durable operation status and private result URL.',inputSchema:{projectId:z.string(),operationId:z.string()},annotations:{readOnlyHint:true}},async ({projectId,operationId})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/operations/${encodeURIComponent(operationId)}`));
   registerDesignSystemTools(server, callApi);
   registerObservabilityTools(server, callApi);
   server.registerTool('inspect_scene',{description:'Inspect saved 3D mesh, skeleton and sampled pose.',inputSchema:{projectId:z.string(),pageId:z.string().optional(),time:z.number().min(0).max(3600).optional()},annotations:{readOnlyHint:true}},async ({projectId,pageId,time})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/scene?${new URLSearchParams({...pageId?{pageId}:{},...time!==undefined?{time:String(time)}:{}})}`));
@@ -430,7 +440,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       inputSchema: {
         projectId: z.string(),
         start:z.number().min(0).optional(),end:z.number().positive().optional(),fps:z.number().int().min(1).max(60).optional(),
-        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf", "motion", "png-sequence", "spritesheet"]),
+        format: z.enum(["json", "html", "svg", "png", "pdf", "pptx", "webm", "mp4", "react", "glb", "gltf", "motion", "png-sequence", "spritesheet", "scene-angles"]),
         pageIndex: z.number().int().min(0).default(0),
         expectedRevision: z.number().int().positive().optional(),
       },

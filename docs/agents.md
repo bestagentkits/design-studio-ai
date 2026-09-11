@@ -126,3 +126,5 @@ Use `dsa scene schema`, `scene inspect`, and revision-checked `scene command` (p
 ## Persistent project covers
 
 Project summaries include `thumbnailUrl` (current saved revision) and `thumbnailRevision` (latest completed cover or null). GET `/api/projects/{id}/thumbnail?revision=N` returns a private PNG, or 202 with `Retry-After: 2` while rendering is busy. MCP `get_project_thumbnail`, WebMCP `studio_api_get_projects_id_thumbnail`, and `dsa projects thumbnail ID --revision N --output cover.png` use the same cache. A 202 is pending, not a completed download; retry after the indicated delay. Only the two latest completed covers are retained. Cloud render asset/import limits apply; no provider call occurs.
+
+See [durable operation jobs](operation-jobs.md) for save/export recovery, result retention and Cloudflare queue provisioning.

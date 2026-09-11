@@ -1,6 +1,6 @@
 import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
 import { mutateDocument } from '../src/shared/operations';
-import { inspectScene } from '../src/shared/scene-inspection';
+import { inspectScene, inspectSceneAnimation } from '../src/shared/scene-inspection';
 import { executePaintingCommand } from './painting-commands';
 import { inspectElementImage } from '../src/shared/creative-elements-image-bounds';
 import { inspectGif } from '../src/shared/gif-bounds';
@@ -127,9 +127,10 @@ export async function saveDocument(
   const committed = serializeProject({ ...row, document: JSON.stringify(parsed), name: parsed.name, revision: row.revision + 1, updated_at: parsed.metadata.updatedAt }, origin(c));
   const results = await c.env.DB.batch([statement, ...(identity ? [
     c.env.DB.prepare("INSERT INTO creative_save_receipts(operation_id,project_id,user_id,payload_hash,revision,response,created_at) SELECT ?,?,?,?,?,?,? WHERE changes()=1").bind(identity.key, row.id, owner(c), identity.hash, committed.revision, JSON.stringify(committed), Date.now()),
-    c.env.DB.prepare("DELETE FROM creative_save_receipts WHERE project_id=? AND user_id=? AND operation_id NOT IN (SELECT operation_id FROM creative_save_receipts WHERE project_id=? AND user_id=? ORDER BY revision DESC LIMIT 8)").bind(row.id, owner(c), row.id, owner(c)),
+    c.env.DB.prepare("DELETE FROM creative_save_receipts WHERE project_id=? AND user_id=? AND operation_id NOT LIKE 'job-%' AND operation_id NOT IN (SELECT operation_id FROM creative_save_receipts WHERE project_id=? AND user_id=? ORDER BY revision DESC LIMIT 8)").bind(row.id, owner(c), row.id, owner(c)),
   ] : [])]);
   const result = results[0] as { meta?: { changes?: number } };
+  if (!result.meta?.changes && identity){const receipt=await readCreativeReceipt(c,row.id,identity);if(receipt)return receipt;}
   if (!result.meta?.changes)
     fail(409, "revision_conflict", "Project changed. Reload before saving.");
   return committed;
@@ -381,9 +382,9 @@ projectRoutes.delete("/:id", async (c) => {
   // Close thumbnail publication before reading storage keys, so deletion cannot miss a late cover.
   await c.env.DB.prepare("UPDATE projects SET thumbnail_deleting=1 WHERE id=? AND user_id=?").bind(row.id, owner(c)).run();
   const assets = await c.env.DB.prepare(
-    "SELECT storage_key FROM assets WHERE project_id=? AND user_id=? UNION ALL SELECT storage_key FROM project_thumbnails WHERE project_id=? AND storage_key IS NOT NULL",
+    "SELECT storage_key FROM assets WHERE project_id=? AND user_id=? UNION ALL SELECT storage_key FROM project_thumbnails WHERE project_id=? AND storage_key IS NOT NULL UNION ALL SELECT input_key FROM operation_jobs WHERE project_id=? UNION ALL SELECT result_key FROM operation_jobs WHERE project_id=? AND result_key IS NOT NULL",
   )
-    .bind(row.id, owner(c), row.id)
+    .bind(row.id, owner(c), row.id, row.id, row.id)
     .all<{ storage_key: string }>();
   await c.env.DB.prepare("DELETE FROM projects WHERE id=? AND user_id=?")
     .bind(row.id, owner(c))
@@ -532,3 +533,11 @@ projectRoutes.post('/:id/scene', async c => {
   return c.json({revision,preview:input.preview,...inspectScene(next,input.pageId)});
 });
 projectRoutes.post('/:id/paint', async c => c.json({ project: await executePaintingCommand(c, c.req.param('id'), await c.req.json()) }));
+
+projectRoutes.get('/:id/scene/animation',async c=>{
+ const row=await projectRow(c,c.req.param('id')),doc=documentSchema.parse(JSON.parse(row.document));
+ const query=z.object({pageId:z.string().min(1),start:z.coerce.number().min(0).max(3600).default(0),end:z.coerce.number().min(0).max(3600).optional(),samples:z.coerce.number().int().min(2).max(61).default(25)}).parse(c.req.query());
+ if(!doc.pages.some(p=>p.id===query.pageId))fail(400,'invalid_page','Unknown page');
+ if((query.end??doc.timeline?.duration??0)<query.start)fail(400,'invalid_range','End must follow start');
+ return c.json({revision:row.revision,...inspectSceneAnimation(doc,query.pageId,query.start,query.end,query.samples)});
+});

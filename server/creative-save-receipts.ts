@@ -5,7 +5,7 @@ import { paintHash } from '../src/shared/paint-png';
 import { fail, owner } from './security';
 
 export async function creativeSaveIdentity(document: DesignDocument, expectedRevision: number, operationId?: string, expectedBriefRevision?: number) {
-  if (document.schemaVersion !== 2 || !document.paintings.length) return undefined;
+  if (!operationId && (document.schemaVersion !== 2 || !document.paintings.length)) return undefined;
   const hash = await paintHash(new TextEncoder().encode(JSON.stringify({ document, expectedRevision, expectedBriefRevision })));
   return { key: operationId ?? hash, hash };
 }
