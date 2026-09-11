@@ -40,3 +40,9 @@ Pending hook confirmation: privacy hook falsely parsed SQL context `c.env.DB.pre
 - Cached immutable mesh topology makes the candidate 25-pose full scan complete in 5.60s, 382,745-byte compact output, zero warning samples, maximum edge stretch 1.9655. Informational seams appear only in the first frame. Contact samples: active error <1e-12; maximum foot-joint penetration 0.00205 scene units over 49 walk samples.
 
 The pending receipt-retention SQL narrowing is an optional storage-policy refinement: current code conservatively retains all job-prefixed receipts, preserving recovery. It is not a dependency of the implemented lifecycle or production acceptance; do not apply that blocked edit without permission.
+
+## Main integration and UI verification
+
+Main PR #35 integrated at e456d39. All 333 unit/integration tests, typecheck, build and skill packaging passed. PR #36 opened. Desktop Paint, public docs, keyboard and diagram rechecks passed; Character Motion passed unchanged on isolated retry after a single connection reset. Mobile checks found a real header overlap after adding Operations; a wrapping two-row mobile header and labeled compact Operations icon fix it. Independent review found no blockers; affected UI rerun remains in progress. The superseded CI run was cancelled before merge.
+
+Header fix verification: typecheck/build/skill packaging passed; mobile thumbnail 2/2, studio feedback 6/6, keyboard 3 passed/1 existing skip, scene authoring 1/1 on unchanged isolated retry after one export-click timeout. Other mobile rechecks passed. Local transient connection/export timing failures are recorded, not removed from assertions; final CI must run the complete suite.
