@@ -34,7 +34,7 @@ export function ConnectionsSettings() {
   }
   return <section className="connector-panel" aria-label="External connections">
     <h3>Your tools and source accounts</h3>
-    <p>Connect a remote MCP server, then choose what each project can use. Connecting a server does not grant an agent access.</p>
+    <p>Connect GitHub, Google Drive or an MCP server. Choose project access separately, and review external actions before they run.</p>
     {error&&<p className="inline-error" role="alert">{error}</p>}
     {notice&&<p role="status">{notice}</p>}
     <div className="connector-list">{connections.map(connection=><article key={connection.id}>
@@ -64,8 +64,8 @@ export function ConnectionsSettings() {
       </>}
       <div className="connector-actions"><button className="button primary" disabled={busy}>Continue</button><button type="button" className="button" disabled={busy} onClick={()=>{setSelected(null);setToken('');setClientSecret('');}}>Cancel</button></div>
     </form>}
-    <button className="button" disabled={busy} onClick={()=>void run(async()=>{const created=await post<{connection:ConnectionMetadata}>('/api/connections',{displayName:'Google Drive',config:{adapter:'google-drive',authMode:'oauth'}});setSelected(created.connection);})}>Add Google Drive account</button>
-    <button className="button" disabled={busy} onClick={()=>void run(async()=>{const created=await post<{connection:ConnectionMetadata}>('/api/connections',{displayName:'GitHub',config:{adapter:'github',authMode:'oauth'}});setInstallationId('');setSelected(created.connection);})}>Add GitHub account</button>
+    <div className="connector-actions connector-add-services"><button className="button" disabled={busy} onClick={()=>void run(async()=>{const created=await post<{connection:ConnectionMetadata}>('/api/connections',{displayName:'Google Drive',config:{adapter:'google-drive',authMode:'oauth'}});setSelected(created.connection);})}>Add Google Drive account</button>
+    <button className="button" disabled={busy} onClick={()=>void run(async()=>{const created=await post<{connection:ConnectionMetadata}>('/api/connections',{displayName:'GitHub',config:{adapter:'github',authMode:'oauth'}});setInstallationId('');setSelected(created.connection);})}>Add GitHub account</button></div>
     <details><summary>Add MCP server</summary><form className="connector-form" onSubmit={e=>{e.preventDefault();void run(async()=>{
       const result=await post<{connection:ConnectionMetadata}>('/api/connections',{displayName:name,config:{adapter:'mcp',endpoint,authMode:mode}});
       setSelected(result.connection);setName('');setEndpoint('');setToken('');setClientId('');setClientSecret('');
