@@ -113,3 +113,8 @@ test('run continuation cannot approve tools; paused and completed runs need dura
   assert.equal(agentRunSchema.safeParse({ ...run, toolCalls: 13 }).success, false);
   assert.ok(agentRunSchema.safeParse({ ...run, status: 'awaiting_approval', pendingOperationId: 'op-1' }).success);
 });
+
+test('bounded JSON permits repeated values but rejects actual ancestor cycles',()=>{
+  const value={text:'shared'};assert.equal(boundedConnectorJson(1000).safeParse({first:value,second:value}).success,true);
+  const cyclic:{next?:unknown}={};cyclic.next=cyclic;assert.equal(boundedConnectorJson(1000).safeParse(cyclic).success,false);
+});

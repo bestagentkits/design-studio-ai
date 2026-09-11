@@ -15,6 +15,7 @@ export interface OperationRow {
   idempotency_key: string; revision: number; status: ConnectorOperationStatus;
   action: string; effect: ConnectorTool['effect']; arguments_hash: string; action_fingerprint: string;
   destination_hash: string; versions_json: string; encrypted_arguments: string | null; approval_id: string | null;
+  payload_expires_at: number | null; encrypted_result: string | null; error_code: string | null;
   lease_id: string | null; lease_expires_at: number | null; remote_ids_json: string; created_at: string; updated_at: string;
 }
 export function operationPrincipal(row: OperationRow): ConnectorPrincipal {

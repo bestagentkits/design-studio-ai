@@ -1,3 +1,5 @@
+import { AgentRunActivity } from './agent-run-activity';
+import { ProjectConnections } from './project-connections';
 import { builtInProviders, isTextProvider, isCustomProvider } from '../shared/providers';
 import { trackClient } from './analytics';
 import './editor-ergonomics.css';
@@ -135,6 +137,8 @@ export function Editor({
   onProject: (project: Project) => void;
   notify: (message: string) => void;
 }) {
+  const [showConnections,setShowConnections]=useState(false),[connectorsEnabled,setConnectorsEnabled]=useState(false);
+  useEffect(()=>{let active=true;api<{connectorsEnabled:boolean}>('/api/config').then(c=>{if(active)setConnectorsEnabled(c.connectorsEnabled===true);}).catch(()=>{});return()=>{active=false;};},[]);
   const [brief, setBrief] = useState<DesignBrief | null>(null),
     [briefLoaded, setBriefLoaded] = useState(false),
     [briefManual, setBriefManual] = useState(false),
@@ -228,7 +232,7 @@ export function Editor({
         projectRevision: projectRef.current.revision,
       };
       briefProposal.current = pending;
-      setProposal(generated);
+      setProposal(generated);setRunProposal(null);
     }
     const { project: next } = await put<{ project: Project }>(
       `/api/projects/${projectRef.current.id}/document`,
@@ -241,7 +245,7 @@ export function Editor({
     setDoc(next.document);
     setSaved(JSON.stringify(next.document));
     onProject(next);
-    setProposal(null);
+    setProposal(null);setRunProposal(null);
     briefProposal.current = null;
     setPageIndex(0);
     setSelected(null);
@@ -278,6 +282,8 @@ export function Editor({
     [proposal, setProposal] = useState<DesignDocument | null>(null),
     [exportOpen, setExportOpen] = useState(false),
     [shareUrl, setShareUrl] = useState("");
+  const [runProposal,setRunProposal]=useState<string|null>(null);
+  const proposalRef=useRef(proposal);proposalRef.current=proposal;
   const [showChecks, setShowChecks] = useState(false);
   const designChecks = showChecks ? inspectDesign(doc) : null;
   const [live, setLive] = useState(true);
@@ -379,7 +385,7 @@ export function Editor({
       recipe(next);
       next.metadata.updatedAt = new Date().toISOString();
       const validated = documentSchema.parse(next);
-      remember(); docRef.current = validated; setDoc(validated); setProposal(null);
+      remember(); docRef.current = validated; setDoc(validated); setProposal(null);setRunProposal(null);
     } catch (error) { setError(`Edit rejected: ${message(error)}`); }
   }, []);
   function setNodePatch(
@@ -427,7 +433,7 @@ export function Editor({
     docRef.current = last; setDoc(last);
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
-    setProposal(null);
+    setProposal(null);setRunProposal(null);
   }
   function redo() {
     const next = future.current.pop();
@@ -853,7 +859,7 @@ export function Editor({
           expectedRevision: project.revision,
         },
       );
-      setProposal(result.document);
+      setProposal(result.document);setRunProposal(null);
       setPageIndex(0);
       setPrompt("");
       await appendChat(
@@ -1227,7 +1233,7 @@ export function Editor({
           setDoc(next);
           setPageIndex(0);
           setSelected(null);
-          setProposal(null);
+          setProposal(null);setRunProposal(null);
           return result({ updated: next.id, saved: false });
         },
       });
@@ -1485,6 +1491,7 @@ export function Editor({
     <div
       className={`editor-shell ${preview ? "preview-mode" : ""} mobile-${mobilePanel}`}
     >
+      {showConnections&&<ProjectConnections projectId={project.id} onClose={()=>setShowConnections(false)}/>}
       <header className="editor-header">
         <div className="editor-heading">
           <button
@@ -1519,6 +1526,7 @@ export function Editor({
           </div>
         </div>
         <div className="editor-header-actions">
+          {connectorsEnabled&&<button className="button small" onClick={()=>setShowConnections(true)}>Tools & sources</button>}
           <ThemeToggle />
           <button
             className="icon-button"
@@ -1727,6 +1735,15 @@ export function Editor({
                   />
                 </details>
               </div>
+              {connectorsEnabled&&<AgentRunActivity projectId={project.id} documentRevision={project.revision} briefRevision={brief?.revision??0} prompt={prompt} provider={provider} model={model}
+                disabled={dirty||!!busy||brief?.status!=='approved'} onStarted={()=>{const text=prompt;setPrompt('');void appendChat('user',text).catch(e=>setError(message(e)));}}
+                onProposal={async(document,run)=>{
+                  if(dirty||projectRef.current.revision!==run.pins[0].versions.documentRevision)throw new Error('Save or reconcile your edits before previewing this proposal.');
+                  const latest=await api<{brief:DesignBrief|null}>(`/api/projects/${project.id}/brief`);
+                  if(latest.brief?.revision!==run.pins[0].versions.briefRevision||latest.brief.status!=='approved')throw new Error('The approved brief changed. Start a new run.');
+                  const verified=await api<{document:DesignDocument}>(`/api/projects/${project.id}/runs/${run.id}/proposal`);
+                  setProposal(verified.document);setRunProposal(run.id);setPageIndex(0);
+                }}/>}
               <button className="provider-settings" onClick={onSettings}>
                 <Settings2 size={14} />
                 {providers.length
@@ -1995,19 +2012,21 @@ export function Editor({
               <span>Previewing an AI proposal</span>
               <button
                 className="button small"
-                onClick={() => setProposal(null)}
+                onClick={() => {setProposal(null);setRunProposal(null);}}
               >
                 Discard
               </button>
               <button
                 className="button primary small"
-                onClick={() => {
-                  remember();
-                  setDoc(proposal);
-                  setProposal(null);
-                  setSelected(null);
-                  notify("Proposal applied. Save when you are ready.");
-                }}
+                onClick={() => void (async()=>{
+                  try {
+                    const before=docRef.current, baseRevision=projectRef.current.revision, selectedProposal=proposal;
+                    const next=runProposal?(await api<{document:DesignDocument}>(`/api/projects/${project.id}/runs/${runProposal}/proposal`)).document:proposal;
+                    if(docRef.current!==before||projectRef.current.revision!==baseRevision||proposalRef.current!==selectedProposal)throw new Error("The document or proposal changed. Review it again before applying.");
+                    remember();docRef.current=next;proposalRef.current=null;setDoc(next);setProposal(null);setRunProposal(null);setSelected(null);
+                    notify("Proposal applied. Save when you are ready.");
+                  } catch(e){setError(message(e));}
+                })()}
               >
                 Apply proposal
               </button>
@@ -2521,7 +2540,7 @@ export function Editor({
                       setSelected(issue.nodeId || null);
                       setMobilePanel("canvas");
                       setShowChecks(false);
-                      setProposal(null);
+                      setProposal(null);setRunProposal(null);
                     }
                   }}
                 >

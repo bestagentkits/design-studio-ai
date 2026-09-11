@@ -121,3 +121,22 @@ for (const action of ['import', 'discover']) test(`revocation during handshake b
   await assert.rejects(action === 'import' ? importMcpResource(f.env, f.api, 'project', 'binding', uri) : discoverBindingMcpCatalog(f.env, f.api, 'binding'), error('missing_grant'));
   assert.deepEqual(f.methods, ['server/discover']); assert.equal(await f.count(), 0);
 });
+
+test('mounted source routes protect grant-filtered downloads and retain disconnected human copies',async t=>{
+  const f=await fixture(t);await f.grant();f.env.CONNECTORS_ENABLED='true';
+  const {app}=await import('../server/index');
+  const request=(path:string,credential='isolated-api',method='GET')=>app.request(`https://studio.test/api/projects/project/sources${path}`,{method,headers:{Origin:'https://studio.test',...(credential==='isolated-session'?{Cookie:'studio_session=isolated-session'}:{Authorization:`Bearer ${credential}`})}},f.env);
+  f.env.APP_URL='https://studio.test';
+  const source=await importMcpResource(f.env,f.api,'project','binding',uri);
+  assert.equal((await request('')).status,200);
+  const download=await request(`/${source.id}`);assert.equal(download.status,200);assert.match(download.headers.get('content-disposition')! ,/^attachment/);assert.equal(download.headers.get('content-type'),'application/octet-stream');
+  assert.match(await download.text(),/untrusted/);
+  assert.equal((await request(`/${source.id}`,'isolated-api','DELETE')).status,403);
+  await f.db.prepare("UPDATE connection_agent_grants SET revoked_at='revoked'").run();
+  assert.deepEqual(await (await request('')).json(),{sources:[]});assert.equal((await request(`/${source.id}`)).status,403);
+  await disconnectConnection(f.env,'alice','connection',1);
+  assert.equal((await request(`/${source.id}`,'isolated-session')).status,200);
+  assert.equal((await request(`/${source.id}/refresh`,'isolated-session','POST')).status,409);
+  assert.equal((await request(`/${source.id}`,'isolated-session','DELETE')).status,200);
+  assert.equal(await f.count(),0);
+});

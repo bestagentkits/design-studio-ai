@@ -1,3 +1,5 @@
+import { registerConnectorAgentTools } from './connector-agent-tools';
+import { limitedBytes } from './providers';
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   McpServer,
@@ -76,7 +78,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   const result = (value: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
   });
-  const callApi = async (method: string, path: string, body?: unknown) => {
+  const callApi = async (method: string, path: string, body?: unknown, binary = false) => {
     const response = await app.request(
       `${origin(c)}${path}`,
       {
@@ -89,10 +91,15 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       },
       telemetryEnv(c, toolSpan.getStore()),
     );
+    if(binary&&response.ok){
+      const bytes=await limitedBytes(response,20*1024*1024);
+      return result({mimeType:response.headers.get("Content-Type"),encoding:"base64",data:Buffer.from(bytes).toString("base64"),bytes:bytes.byteLength,trust:"external source data"});
+    }
     const value = await response.json();
     if (!response.ok) return { isError: true, ...result(value) };
     return result(value);
   };
+  registerConnectorAgentTools(server, callApi);
   registerDesignSystemTools(server, callApi);
   registerObservabilityTools(server, callApi);
   server.registerTool(

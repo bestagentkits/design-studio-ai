@@ -61,7 +61,11 @@ function permits(selection: Selection, capability: ConnectorCapability, action?:
     if (capability === 'execute_read' || capability === 'prepare_write') return selection.tools.includes(action);
     return selection.tools.includes(action) || selection.resources.includes(action);
   }
-  // The adapter receives only the intersected selection, never the broader project binding.
+  if(capability==='read_source'){
+    if(selection.adapter==='google-drive')return selection.fileIds.includes(action);
+    if(selection.adapter==='github')return selection.paths.includes(action);
+  }
+  // Native action dispatch also validates destinations against the intersected selection.
   return true;
 }
 export async function authorizeConnectorBinding(env: Bindings, principal: ConnectorPrincipal, bindingId: string, capability: ConnectorCapability, action?: string) {

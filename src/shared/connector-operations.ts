@@ -34,6 +34,7 @@ export const connectorOperationSchema = z.strictObject({
   id: connectorIdSchema, projectId: connectorIdSchema, connectionId: connectorIdSchema,
   principal: connectorPrincipalSchema, revision: connectorRevisionSchema,
   status: connectorOperationStatusSchema, action: z.string().min(1).max(200),
+  errorCode: z.string().max(100).nullable().default(null),
   effect: z.enum(['read', 'write', 'unknown']), argumentsHash: connectorHashSchema,
   actionFingerprint: connectorHashSchema, destinationHash: connectorHashSchema,
   versions: connectorVersionPinsSchema, approvalId: connectorIdSchema.nullable(),
@@ -49,3 +50,6 @@ export const connectorOperationSchema = z.strictObject({
     context.addIssue({ code: 'custom', message: 'Write and unknown effects require exact approval before dispatch.' });
 });
 export type ConnectorOperation = z.infer<typeof connectorOperationSchema>;
+
+export const connectorOperationExecuteSchema = z.strictObject({expectedRevision:connectorRevisionSchema});
+export const connectorOperationDecisionSchema = connectorOperationExecuteSchema.extend({decision:z.enum(['approve','deny'])});

@@ -1,6 +1,6 @@
 import { updateEvent } from './observability-store';
 import { withSpan } from './observability';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import puppeteer from '@cloudflare/puppeteer';
 import { documentSchema, type DesignDocument } from '../src/shared/schema';
@@ -59,9 +59,10 @@ export async function embeddedDocumentFonts(doc: DesignDocument) {
   } catch { fail(502, 'font_load_failed', 'The selected Google Fonts could not be loaded. Choose a local font or retry the export.'); }
 }
 
-exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action: 'export.render' }, async span => {
+export async function renderProjectExport(c:Context<Env>,projectId:string,input:unknown){
+  return withSpan(c, { kind: 'export', action: 'export.render' }, async span => {
   const { env: bindings } = c;
-  const row = await projectRow(c, c.req.param('id')), options = optionsSchema.parse(await c.req.json());
+  const row = await projectRow(c, projectId), options = optionsSchema.parse(input);
   if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
   span.event.projectId = row.id; span.event.action = `export.${options.format}`;
   await updateEvent(c.env, span.event);
@@ -152,4 +153,6 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
     // Browser errors can include URLs. Avoid leaking provider/asset credentials.
     fail(502, 'render_failed', 'Cloud rendering failed. Check that media files decode and external assets permit cross-origin access; try PNG or WebM.');
   } finally { await browser?.close(); }
-}));
+});
+}
+exportRoutes.post('/:id/export',async c=>renderProjectExport(c,c.req.param('id'),await c.req.json()));

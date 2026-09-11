@@ -1,3 +1,4 @@
+import { ConnectionsSettings } from './connections-settings';
 import { useEffect, useState } from "react";
 import { ProviderSettings } from './provider-settings';
 import {
@@ -47,13 +48,15 @@ export function Settings({
   onLogout: () => Promise<void>;
   onProviders: (providers: Provider[]) => void;
   onBeforeGitHubLink: () => void;
-  initialTab?: "providers" | "agents" | "account";
+  initialTab?: "providers" | "agents" | "account" | "connections";
 }) {
-  const [tab, setTab] = useState<"providers" | "agents" | "account">(
+  const [tab, setTab] = useState<"providers" | "agents" | "account" | "connections">(
       initialTab,
     ),
     [providers, setProviders] = useState<Provider[]>([]),
     [tokens, setTokens] = useState<Token[]>([]);
+  const [connectorsEnabled,setConnectorsEnabled]=useState(false);
+  useEffect(()=>{let active=true;api<{connectorsEnabled:boolean}>('/api/config').then(c=>{if(active)setConnectorsEnabled(c.connectorsEnabled===true);}).catch(()=>{});return()=>{active=false;};},[]);
   const [tokenName, setTokenName] = useState(''), [newToken, setNewToken] = useState('');
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -152,8 +155,10 @@ export function Settings({
             <span className="mini-avatar">{user.name.slice(0, 1)}</span> Your
             account
           </button>
+          {connectorsEnabled&&<button className={tab === "connections" ? "selected" : ""} aria-pressed={tab === "connections"} onClick={()=>setTab("connections")}>External services</button>}
         </nav>
         <div className="settings-content">
+          {tab === "connections" && (connectorsEnabled ? <ConnectionsSettings/> : <p>External connections are not enabled on this studio.</p>)}
           {tab === "providers" && <ProviderSettings providers={providers} onChanged={load} />}
           {tab === "agents" && (
             <>

@@ -1,0 +1,37 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { serve } from '@hono/node-server';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp,writeFile,rm } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { app } from '../server/index';
+import { fixture,input } from './fixtures/mcp-tool-context';
+import { connectorAgentContracts } from '../src/shared/connector-agent-contracts';
+test('network MCP and distributable CLI share real connector operations and cannot self-approve',async t=>{
+  const f=await fixture(t);f.env.CONNECTORS_ENABLED='true';
+  await f.db.prepare(`UPDATE connection_agent_grants SET capabilities_json='["discover","prepare_write","execute_read"]'`).run();
+  const server=serve({fetch:request=>app.fetch(request,f.env),hostname:'127.0.0.1',port:0});
+  if(!server.listening)await new Promise<void>(resolve=>server.once('listening',resolve));
+  const address=server.address();assert.ok(address&&typeof address!=='string');
+  const base=`http://127.0.0.1:${address.port}`;f.env.APP_URL=base;
+  const directory=await mkdtemp(join(tmpdir(),'connector-agent-'));let sequence=0;
+  t.after(async()=>{if('closeAllConnections' in server)server.closeAllConnections();await new Promise<void>(resolve=>server.close(()=>resolve()));await rm(directory,{recursive:true,force:true});});
+  const rpc=async(method:string,params:unknown)=>{
+    const response=await fetch(base+'/mcp',{method:'POST',headers:{Authorization:'Bearer alice-api','Content-Type':'application/json',Accept:'application/json, text/event-stream','MCP-Protocol-Version':'2025-11-25'},body:JSON.stringify({jsonrpc:'2.0',id:++sequence,method,params})});
+    assert.equal(response.status,200,await response.clone().text());return await response.json() as any;
+  };
+  const catalog=await rpc('tools/list',{});assert.equal(catalog.error,undefined);
+  const names=catalog.result.tools.map((tool:any)=>tool.name);
+  for(const contract of connectorAgentContracts)assert.ok(names.includes(contract.name),contract.name);
+  assert.ok(!names.includes('approve_connector_operation'));assert.ok(!names.includes('grant_connection'));
+  const invoke=async(name:string,args:unknown)=>{const response=await rpc('tools/call',{name,arguments:args});assert.equal(response.error,undefined);assert.ok(!response.result.isError,JSON.stringify(response.result));return JSON.parse(response.result.content[0].text);};
+  const prepared=await invoke('prepare_connector_operation',{projectId:'alice-project',...input});assert.equal(prepared.operation.status,'awaiting_approval');
+  const denied=await rpc('tools/call',{name:'execute_connector_operation',arguments:{projectId:'alice-project',operationId:prepared.operation.id,expectedRevision:1}});assert.equal(denied.result.isError,true);assert.equal(f.calls.length,0);
+  assert.equal((await f.decision(prepared.operation.id)).status,200);
+  const file=join(directory,'execute.json');await writeFile(file,JSON.stringify({projectId:'alice-project',operationId:prepared.operation.id,expectedRevision:2}));
+  const executed=await promisify(execFile)(process.execPath,['packages/cli/dist/dsa.js','connectors','execute-connector-operation','--file',file],{env:{...process.env,DESIGN_STUDIO_URL:base,DESIGN_STUDIO_API_KEY:'alice-api'},timeout:15000});
+  assert.equal(JSON.parse(executed.stdout).operation.status,'succeeded');assert.equal(f.calls.length,1);
+  const read=await invoke('get_connector_operation',{projectId:'alice-project',operationId:prepared.operation.id});assert.equal(read.operation.status,'succeeded');assert.ok(read.result);assert.equal(f.calls.length,1);
+});

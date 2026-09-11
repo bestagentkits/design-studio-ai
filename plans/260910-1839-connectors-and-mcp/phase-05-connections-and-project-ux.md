@@ -1,11 +1,11 @@
 ---
 title: "Phase 5: Complete the MCP-first human workflow"
-status: todo
+status: in-progress
 ---
 
 # Complete the MCP-first human workflow
 
-Priority: P2. Status: pending. Depends on: 2, 3, 4. Estimate: 4-6 engineering days.
+Priority: P2. Status: in progress. Depends on: 2, 3, 4. Estimate: 4-6 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 
@@ -57,9 +57,9 @@ Deliver the first usable milestone: add remote MCP, authenticate, choose tools f
 
 ## Todo
 
-- [ ] Implement accessible Settings connection lifecycle and OAuth return state.
-- [ ] Implement per-project tools/sources and provenance views.
-- [ ] Implement run activity, resume/cancel and exact action approval.
+- [x] Implement accessible Settings connection lifecycle and OAuth return state.
+- [x] Implement per-project tools/sources and provenance views.
+- [x] Implement run activity, resume/cancel and exact action approval.
 - [ ] Preserve unsaved edits and proposal/save behavior.
 - [ ] Verify desktop, mobile, Firefox and WebKit interactions.
 

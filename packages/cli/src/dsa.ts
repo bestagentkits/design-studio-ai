@@ -1,3 +1,4 @@
+import { registerConnectorCommands } from './connector-commands';
 import { Command, CommanderError } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -19,6 +20,7 @@ const program = new Command().name('dsa').description('Design Studio AI: structu
   .showHelpAfterError(false).exitOverride();
 program.configureOutput({ writeErr: () => {} });
 const client = () => new Client(program.opts());
+registerConnectorCommands(program, client);
 registerDesignSystemCommands(program, client);
 registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);

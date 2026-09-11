@@ -1,8 +1,9 @@
+import { dispatchContextSchema, operationArgumentsHash, type DispatchContext } from './connector-dispatch-context';
 import type { Context } from 'hono';
 import { z } from 'zod';
 import type { Bindings, Env } from './types';
 import { connectorOperationPrepareSchema, connectorOperationSchema } from '../src/shared/connector-operations';
-import { connectorPrincipalSchema, connectorRevisionSchema, type ConnectorPrincipal } from '../src/shared/connector-values';
+import { boundedConnectorJson, connectorPrincipalSchema, connectorRevisionSchema, type ConnectorPrincipal } from '../src/shared/connector-values';
 import type { ConnectorTool } from '../src/shared/connectors';
 import { assertActiveConnectorPrincipal, interactiveConnectionOwner, principalColumns } from './connection-policy';
 import { canonicalConnectorJson, connectorFingerprint } from './connector-fingerprints';
@@ -10,10 +11,10 @@ import { activePrincipalGuard, inspectOperationVersions, operationClockSql, oper
 import { decrypt, encrypt, fail, id, now } from './security';
 
 const retentionMs = 7 * 86400000;
-const metadata = (row: OperationRow) => connectorOperationSchema.parse({
+export const connectorOperationMetadata = (row: OperationRow) => connectorOperationSchema.parse({
   id: row.id, projectId: row.project_id, connectionId: row.connection_id, principal: operationPrincipal(row), revision: row.revision,
   status: row.status, action: row.action, effect: row.effect, argumentsHash: row.arguments_hash, actionFingerprint: row.action_fingerprint,
-  destinationHash: row.destination_hash, versions: JSON.parse(row.versions_json), approvalId: row.approval_id,
+  errorCode: row.error_code ?? null, destinationHash: row.destination_hash, versions: JSON.parse(row.versions_json), approvalId: row.approval_id,
   leaseId: row.lease_id, leaseExpiresAt: row.lease_expires_at === null ? null : new Date(row.lease_expires_at).toISOString(),
   remoteIds: JSON.parse(row.remote_ids_json), createdAt: row.created_at, updatedAt: row.updated_at,
 });
@@ -33,25 +34,26 @@ async function inspectRow(env: Bindings, row: OperationRow) {
 }
 
 /** The adapter supplies the trusted tool descriptor; request input cannot choose effect or approve itself. */
-export async function prepareConnectorOperation(env: Bindings, actor: ConnectorPrincipal, input: unknown, descriptor: ConnectorTool) {
+export async function prepareConnectorOperation(env: Bindings, actor: ConnectorPrincipal, input: unknown, descriptor: ConnectorTool, continuation?: {context:DispatchContext;parentId:string;parentRevision:number;guard:{sql:string;values:unknown[]}}) {
   const principal = connectorPrincipalSchema.parse(actor), value = connectorOperationPrepareSchema.parse(input);
   const { tool, fingerprint } = await validateOperationTool(descriptor, value.arguments);
   if (value.action !== tool.remoteName) fail(409, 'schema_changed', 'Selected action changed.');
   const context = await inspectOperationVersions(env, principal, value.bindingId, value.expectedVersions, tool.effect, tool.remoteName);
   if (tool.connectionId !== context.connection.id) fail(409, 'schema_changed', 'Selected action belongs to another connection.');
-  const operationId = id(), timestamp = now(), identity = principalColumns(principal), argsHash = await connectorFingerprint(value.arguments);
+  const operationId = id(), timestamp = now(), identity = principalColumns(principal), argsHash = await operationArgumentsHash(value.arguments,continuation?.context);
+  if(continuation){dispatchContextSchema.parse(continuation.context);boundedConnectorJson(65536).parse({arguments:value.arguments,context:continuation.context});}
   const versions = canonicalConnectorJson(context.pins);
-  const encrypted = await encrypt(env, canonicalConnectorJson({ operationId, userId: principal.userId, bindingId: value.bindingId, arguments: value.arguments }));
-  await env.DB.prepare(`INSERT INTO connector_operations(id,user_id,project_id,connection_id,binding_id,principal_kind,principal_id,principal_client_id,idempotency_key,status,action,effect,arguments_hash,action_fingerprint,destination_hash,versions_json,encrypted_arguments,created_at,updated_at)
-    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${context.guard.sql} ON CONFLICT DO NOTHING`)
+  const encrypted = await encrypt(env, canonicalConnectorJson({ operationId, userId: principal.userId, bindingId: value.bindingId, arguments: value.arguments, ...(continuation?{dispatchContext:continuation.context}:{}), description: tool.description, destination: { endpoint: context.connection.endpoint, account: context.connection.remote_identity, bindingId: context.binding.id, role: context.binding.role } }));
+  await env.DB.prepare(`INSERT INTO connector_operations(id,user_id,project_id,connection_id,binding_id,principal_kind,principal_id,principal_client_id,idempotency_key,status,action,effect,arguments_hash,action_fingerprint,destination_hash,versions_json,encrypted_arguments,created_at,updated_at,parent_operation_id)
+    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE ${context.guard.sql}${continuation?` AND (${continuation.guard.sql}) AND EXISTS(SELECT 1 FROM connector_operations parent WHERE parent.id=? AND parent.user_id=? AND parent.revision=? AND parent.status='failed' AND parent.error_code='input_required')`: ''} ON CONFLICT DO NOTHING`)
     .bind(operationId, principal.userId, context.binding.project_id, context.connection.id, value.bindingId, identity.kind, identity.id, identity.clientId, value.idempotencyKey,
-      tool.effect === 'read' ? 'pending' : 'awaiting_approval', value.action, tool.effect, argsHash, fingerprint, context.destinationHash, versions, encrypted, timestamp, timestamp, ...context.guard.values).run();
+      tool.effect === 'read' ? 'pending' : 'awaiting_approval', value.action, tool.effect, argsHash, fingerprint, context.destinationHash, versions, encrypted, timestamp, timestamp, continuation?.parentId??null, ...context.guard.values,...(continuation?[...continuation.guard.values,continuation.parentId,principal.userId,continuation.parentRevision]:[])).run();
   const stored = await env.DB.prepare(`SELECT * FROM connector_operations WHERE user_id=? AND project_id=? AND principal_kind=? AND principal_id=? AND principal_client_id IS ? AND idempotency_key=?`)
     .bind(principal.userId, context.binding.project_id, identity.kind, identity.id, identity.clientId, value.idempotencyKey).first<OperationRow>();
   if (!stored) return conflict();
   if (stored.binding_id !== value.bindingId || stored.action !== value.action || stored.effect !== tool.effect || stored.arguments_hash !== argsHash || stored.action_fingerprint !== fingerprint || stored.destination_hash !== context.destinationHash || stored.versions_json !== versions)
     fail(409, 'idempotency_conflict', 'This idempotency key already identifies different operation content.');
-  return metadata(stored);
+  return connectorOperationMetadata(stored);
 }
 
 /** Human consent is bound to the stored operation, not caller-supplied hashes or approval flags. */
@@ -67,6 +69,7 @@ export async function decideConnectorOperation(c: Context<Env>, operationId: str
     if (changes(result) !== 1) return conflict();
   } else {
     if (row.status !== 'awaiting_approval' || row.effect === 'read') return conflict();
+    if(['upload_drive_export','create_react_pull_request'].includes(row.action)&&!await c.env.DB.prepare('SELECT 1 FROM connector_export_artifacts WHERE operation_id=?').bind(row.id).first())fail(409,'export_not_ready','Prepare and inspect the export before approving.');
     const context = await inspectRow(c.env, row), approvalId = id(), timestamp = now();
     const results = await c.env.DB.batch([
       c.env.DB.prepare(`INSERT INTO connector_approvals(id,operation_id,user_id,arguments_hash,action_fingerprint,destination_hash,versions_json,created_at,expires_at)
@@ -79,7 +82,7 @@ export async function decideConnectorOperation(c: Context<Env>, operationId: str
     ]);
     if (changes(results[0]) !== 1 || changes(results[1]) !== 1) return conflict();
   }
-  return metadata(await ownedOperation(c.env, userId, row.id));
+  return connectorOperationMetadata(await ownedOperation(c.env, userId, row.id));
 }
 
 export async function claimConnectorOperation(env: Bindings, actor: ConnectorPrincipal, operationId: string, expectedRevision: number, descriptor: ConnectorTool) {
@@ -87,12 +90,13 @@ export async function claimConnectorOperation(env: Bindings, actor: ConnectorPri
   const { row } = await actorOperation(env, actor, operationId);
   if (row.revision !== expectedRevision || row.status !== 'pending') fail(409, row.status === 'awaiting_approval' ? 'approval_required' : 'revision_conflict', 'Operation is not ready to claim.');
   const context = await inspectRow(env, row);
-  let args: unknown;
+  let args: unknown, dispatchContext:DispatchContext|undefined;
   try {
     const envelope = JSON.parse(await decrypt(env, row.encrypted_arguments ?? ''));
     if (envelope.operationId !== row.id || envelope.userId !== row.user_id || envelope.bindingId !== row.binding_id) throw new Error('Mismatched arguments');
     args = connectorOperationPrepareSchema.shape.arguments.parse(envelope.arguments);
-    if (await connectorFingerprint(args) !== row.arguments_hash) throw new Error('Mismatched arguments');
+    dispatchContext=envelope.dispatchContext===undefined?undefined:dispatchContextSchema.parse(envelope.dispatchContext);
+    if (await operationArgumentsHash(args,dispatchContext) !== row.arguments_hash) throw new Error('Mismatched arguments');
   } catch { return fail(409, 'operation_payload_unavailable', 'Stored operation arguments cannot be used. Prepare a new operation.'); }
   const { tool, fingerprint } = await validateOperationTool(descriptor, args);
   if (tool.connectionId !== row.connection_id || tool.remoteName !== row.action || tool.effect !== row.effect || fingerprint !== row.action_fingerprint) fail(409, 'schema_changed', 'Tool definition changed. Prepare a new operation.');
@@ -109,20 +113,21 @@ export async function claimConnectorOperation(env: Bindings, actor: ConnectorPri
   // Dispatcher must use this restricted selection and recheck immediately before any external call.
   const claimed = await ownedOperation(env, row.user_id, row.id);
   if (claimed.status !== 'running' || claimed.lease_id !== leaseId) return conflict();
-  return { operation: metadata(claimed), arguments: args, selection: context.selection, leaseId };
+  return { operation: connectorOperationMetadata(claimed), arguments: args, dispatchContext, selection: context.selection, leaseId };
 }
 
-const finishSchema = z.strictObject({ status: z.enum(['succeeded', 'failed', 'outcome_unknown']), remoteIds: z.array(z.string().min(1).max(1024)).max(100).default([]), errorCode: z.string().regex(/^[a-z][a-z0-9_]{0,99}$/).optional() });
+const finishSchema = z.strictObject({ status: z.enum(['succeeded', 'failed', 'outcome_unknown']), result: boundedConnectorJson(1048576).optional(), remoteIds: z.array(z.string().min(1).max(1024)).max(100).default([]), errorCode: z.string().regex(/^[a-z][a-z0-9_]{0,99}$/).optional() });
 export async function finishConnectorOperation(env: Bindings, actor: ConnectorPrincipal, operationId: string, expectedRevision: number, leaseId: string, input: unknown) {
   connectorRevisionSchema.parse(expectedRevision); const value = finishSchema.parse(input);
   const { row } = await actorOperation(env, actor, operationId);
   if (row.revision !== expectedRevision || row.status !== 'running' || row.lease_id !== leaseId) return conflict();
   const context = await inspectRow(env, row);
-  const result = await env.DB.prepare(`UPDATE connector_operations SET status=?,revision=revision+1,lease_id=NULL,lease_expires_at=NULL,remote_ids_json=?,error_code=?,updated_at=?,payload_expires_at=?
+  const encryptedResult = value.result === undefined ? null : await encrypt(env, canonicalConnectorJson({ operationId: row.id, userId: row.user_id, result: value.result }));
+  const result = await env.DB.prepare(`UPDATE connector_operations SET status=?,revision=revision+1,lease_id=NULL,lease_expires_at=NULL,remote_ids_json=?,error_code=?,encrypted_result=?,updated_at=?,payload_expires_at=?
     WHERE id=? AND user_id=? AND revision=? AND status='running' AND lease_id=? AND lease_expires_at>${operationClockSql} AND ${context.guard.sql}`)
-    .bind(value.status, JSON.stringify(value.remoteIds), value.errorCode ?? null, now(), Date.now() + retentionMs, row.id, row.user_id, expectedRevision, leaseId, ...context.guard.values).run();
+    .bind(value.status, JSON.stringify(value.remoteIds), value.errorCode ?? null, encryptedResult, now(), Date.now() + retentionMs, row.id, row.user_id, expectedRevision, leaseId, ...context.guard.values).run();
   if (changes(result) !== 1) return conflict();
-  return metadata(await ownedOperation(env, row.user_id, row.id));
+  return connectorOperationMetadata(await ownedOperation(env, row.user_id, row.id));
 }
 
 export async function cancelConnectorOperation(env: Bindings, actor: ConnectorPrincipal, operationId: string, expectedRevision: number) {
@@ -132,7 +137,7 @@ export async function cancelConnectorOperation(env: Bindings, actor: ConnectorPr
     revision=revision+1,lease_id=NULL,lease_expires_at=NULL,updated_at=?,payload_expires_at=? WHERE id=? AND user_id=? AND revision=? AND status IN('pending','awaiting_approval','running') AND ${active.sql}`)
     .bind(now(), Date.now() + retentionMs, row.id, row.user_id, expectedRevision, ...active.values).run();
   if (changes(result) !== 1) return conflict();
-  return metadata(await ownedOperation(env, row.user_id, row.id));
+  return connectorOperationMetadata(await ownedOperation(env, row.user_id, row.id));
 }
 
 /** Maintenance-only recovery never retries an external call whose outcome may have been lost. */
@@ -141,4 +146,12 @@ export async function recoverExpiredConnectorOperations(env: Bindings, userId: s
     WHERE user_id=? AND status='running' AND lease_expires_at<=${operationClockSql}`)
     .bind(now(), Date.now() + retentionMs, userId).run();
   return changes(result);
+}
+
+
+/** A dispatcher holding this exact lease can relinquish it even after its authority was revoked. */
+export async function markConnectorOperationUncertain(env: Bindings, userId: string, operationId: string, revision: number, leaseId: string) {
+  await env.DB.prepare(`UPDATE connector_operations SET status='outcome_unknown',revision=revision+1,lease_id=NULL,lease_expires_at=NULL,
+    error_code='outcome_unknown',updated_at=?,payload_expires_at=? WHERE id=? AND user_id=? AND revision=? AND status='running' AND lease_id=?`)
+    .bind(now(),Date.now()+retentionMs,operationId,userId,revision,leaseId).run();
 }

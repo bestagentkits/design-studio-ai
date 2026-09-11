@@ -56,6 +56,8 @@ Estimates are planning ranges, not commitments; protocol/egress probes can chang
 - [ ] Shared REST/CLI/MCP/WebMCP behavior, mobile/desktop UX, Node/Cloudflare paths and generated docs pass the gates in phase 9.
 - [ ] Live credential-dependent evidence is recorded separately from deterministic tests, CI, merge and deployment.
 
+Current implementation evidence and remaining queue: [2026-09-11 progress](reports/implementation-progress-2026-09-11.md).
+
 ## Ownership and tracking
 
 Default to sequential execution. If delegation is explicitly authorized later, provider adapters may overlap only after shared contracts stabilize; one integrator owns shared auth, routes, editor, schema, config, migration numbering and docs. Every delegate receives its exact files and this scope. Never edit another owner's changes away.

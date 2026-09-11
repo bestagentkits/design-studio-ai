@@ -37,8 +37,15 @@ mcpAuthRoutes.post('/authorize', async c => {
 mcpAuthRoutes.get('/callback', async c => {
   const actor = principal(c), { env: bindings } = c;
   // The saved one-use state owns destination, issuer, resource and session; no return URL is accepted.
-  const proof = await finishMcpAuthorization(bindings, actor, {
-    state: c.req.query('state') ?? '', code: c.req.query('code'), issuer: c.req.query('iss'), denial: c.req.query('error'),
-  });
-  return c.json(await activateMcpConnection(bindings, actor, proof.connectionId, proof.expectedRevision, proof.credentialVersion, proof.scopes));
+  const browser = c.req.header('Accept')?.includes('text/html');
+  try {
+    const proof = await finishMcpAuthorization(bindings, actor, {
+      state: c.req.query('state') ?? '', code: c.req.query('code'), issuer: c.req.query('iss'), denial: c.req.query('error'),
+    });
+    const result = await activateMcpConnection(bindings, actor, proof.connectionId, proof.expectedRevision, proof.credentialVersion, proof.scopes);
+    return browser ? c.redirect('/?settings=connections&connectorResult=connected',303) : c.json(result);
+  } catch (error) {
+    if (!browser) throw error;
+    return c.redirect('/?settings=connections&connectorResult=failed',303);
+  }
 });

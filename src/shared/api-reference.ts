@@ -1,9 +1,47 @@
+import { connectorRequestBodySchema } from './connector-agent-contracts';
+import { agentRunStartSchema, agentRunAdvanceSchema } from './agent-runs';
+import { connectorOperationPrepareSchema, connectorOperationExecuteSchema, connectorOperationDecisionSchema } from './connector-operations';
+import { connectorSourceImportSchema } from './connector-management';
 import { connectionCreateSchema } from './connectors';
-import { mcpConnectionSetupSchema, mcpAuthorizationStartSchema, connectionBindingCreateSchema, connectionGrantCreateSchema, connectionBindingRemoveSchema } from './connector-management';
+import { mcpConnectionSetupSchema, mcpAuthorizationStartSchema, connectionBindingCreateSchema, connectionGrantCreateSchema, connectionBindingRemoveSchema, connectionBindingUpdateSchema } from './connector-management';
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 interface ApiEndpoint { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; summary: string; body: unknown; agentExposure: 'allowed' | 'human-only' | 'none' }
 export const apiEndpoints = [
+  {agentExposure:'human-only',method:'PUT',path:'/api/projects/{id}/connections/{bindingId}',summary:'Change the explicit project selection with revision checks; revoke grants and retain disconnected source copies',body:{expectedPolicyRevision:1,role:'source',selection:{adapter:'mcp',tools:[],resources:[]}}},
+  {agentExposure:'human-only',method:'GET',path:'/api/connections/agent-recipients',summary:'List owned active OAuth authorization identities for explicit connector grants; no tokens',body:undefined},
+  {agentExposure:'human-only',method:'POST',path:'/api/connectors/github/authorize',summary:'Begin separate GitHub App authorization for a verified installation',body:{connectionId:'',expectedRevision:1,installationId:''}},
+  {agentExposure:'human-only',method:'GET',path:'/api/connectors/github/callback',summary:'Complete one-use GitHub authorization bound to the initiating session',body:undefined},
+  {agentExposure:'human-only',method:'GET',path:'/api/connectors/github/repositories',summary:'List repositories accessible to the user and selected GitHub installation; connectionId and page query parameters',body:undefined},
+  {agentExposure:'human-only',method:'POST',path:'/api/connectors/github/resolve',summary:'Resolve a selected repository branch or tag to an immutable commit',body:{connectionId:'',repositoryId:'',ref:'main'}},
+  {agentExposure:'none',method:'POST',path:'/api/connectors/github/webhook',summary:'Receive signature-verified GitHub installation and authorization revocations',body:{}},
+  {agentExposure:'allowed',method:'POST',path:'/api/projects/{id}/sources/{sourceId}/asset',summary:'Copy a granted image snapshot into isolated project assets without changing the document',body:{}},
+  {agentExposure:'allowed',method:'POST',path:'/api/projects/{id}/connector-operations/{operationId}/reconcile',summary:'Reconcile an uncertain Drive upload or GitHub PR using recorded identities; never repeats external writes',body:{expectedRevision:1}},
+  {agentExposure:'allowed',method:'GET',path:'/api/projects/{id}/connector-operations/{operationId}/artifact',summary:'Download an authorized prepared PDF, PPTX or React ZIP for inspection before upload',body:undefined},
+  {agentExposure:'human-only',method:'POST',path:'/api/connectors/google-drive/authorize',summary:'Begin separate session-bound Google Drive authorization',body:{connectionId:'',expectedRevision:1}},
+  {agentExposure:'human-only',method:'GET',path:'/api/connectors/google-drive/callback',summary:'Redeem a one-use Google callback for the initiating session',body:undefined},
+  {agentExposure:'human-only',method:'POST',path:'/api/connectors/google-drive/picker',summary:'Obtain a transient selected-account access token for Google Picker; never returns refresh credentials',body:{connectionId:''}},
+  {agentExposure:'human-only',method:'POST',path:'/api/projects/{id}/connector-operations/{operationId}/continuation',summary:'Supply explicitly reviewed input to a paused MCP operation; creates a separately approved continuation',body:{expectedRevision:1,inputResponses:{}}},
+  {agentExposure:'allowed',method:'GET',path:'/api/projects/{id}/runs',summary:'List saved run metadata without advancing',body:undefined},
+  {agentExposure:'allowed',method:'POST',path:'/api/projects/{id}/runs',summary:'Persist a bounded run at exact document and brief versions',body:{provider:'openai',prompt:'Refine design',bindingIds:[],sourceSnapshotIds:[],expectedDocumentRevision:1,expectedBriefRevision:1,idempotencyKey:'unique-request-key'}},
+  {agentExposure:'allowed',method:'GET',path:'/api/projects/{id}/runs/{runId}',summary:'Read run status, authorized proposal and provider usage',body:undefined},
+  {agentExposure:'allowed',method:'POST',path:'/api/projects/{id}/runs/{runId}/advance',summary:'Advance exactly one run step with current grants',body:{expectedRevision:1}},
+  {agentExposure:'allowed',method:'POST',path:'/api/projects/{id}/runs/{runId}/cancel',summary:'Cancel future steps and preserve uncertain in-flight outcomes',body:{expectedRevision:1}},
+  {agentExposure:'allowed',method:'GET',path:'/api/projects/{id}/runs/{runId}/proposal',summary:'Revalidate a completed unsaved proposal against current authority and versions',body:undefined},
+  {"agentExposure": "human-only", "method": "GET", "path": "/api/projects/{id}/connections/{bindingId}/grants", "summary": "Inspect existing agent grants for a project binding", "body": undefined},
+  {"agentExposure": "allowed", "method": "GET", "path": "/api/projects/{id}/sources", "summary": "List private source metadata; agent results are limited to current source grants", "body": undefined},
+  {"agentExposure": "allowed", "method": "GET", "path": "/api/projects/{id}/sources/{sourceId}", "summary": "Download an authorized immutable source as inert data", "body": undefined},
+  {"agentExposure": "allowed", "method": "POST", "path": "/api/projects/{id}/sources/{sourceId}/refresh", "summary": "Import a new source snapshot without replacing existing content or brief", "body": {}},
+  {"agentExposure": "human-only", "method": "DELETE", "path": "/api/projects/{id}/sources/{sourceId}", "summary": "Remove an owned source snapshot and invalidate dependent work", "body": undefined},
+  {"agentExposure": "human-only", "method": "POST", "path": "/api/connections/{connectionId}/capabilities", "summary": "Discover bounded MCP capabilities before granting a project access", "body": {}},
+  {"agentExposure": "allowed", "method": "POST", "path": "/api/projects/{id}/connections/{bindingId}/capabilities", "summary": "Discover only capabilities selected by both the project and agent grant", "body": {}},
+  {"agentExposure": "allowed", "method": "POST", "path": "/api/projects/{id}/connections/{bindingId}/sources", "summary": "Import one selected MCP resource or Drive file as an immutable source snapshot", "body": {"uri": "resource://selected"}},
+  {"agentExposure": "allowed", "method": "GET", "path": "/api/projects/{id}/connector-operations", "summary": "List the latest 50 operation records without private payloads", "body": undefined},
+  {"agentExposure": "allowed", "method": "POST", "path": "/api/projects/{id}/connector-operations", "summary": "Prepare a selected tool operation against exact observed versions; unknown effects require human approval", "body": {"bindingId": "", "action": "", "arguments": {}, "idempotencyKey": "unique-request-key", "expectedVersions": {"connectionRevision": 1, "credentialVersion": 1, "policyRevision": 1, "documentRevision": 1, "briefRevision": 0, "sourceSnapshotIds": []}}},
+  {"agentExposure": "allowed", "method": "GET", "path": "/api/projects/{id}/connector-operations/{operationId}", "summary": "Inspect an operation and authorized private payload without advancing it", "body": undefined},
+  {"agentExposure": "allowed", "method": "POST", "path": "/api/projects/{id}/connector-operations/{operationId}/execute", "summary": "Claim approved operation once; uncertain results are never replayed", "body": {"expectedRevision": 1}},
+  {"agentExposure": "human-only", "method": "POST", "path": "/api/projects/{id}/connector-operations/{operationId}/decision", "summary": "Approve once or deny the exact operation in an authenticated browser session", "body": {"expectedRevision": 1, "decision": "approve"}},
+  {"agentExposure": "allowed", "method": "POST", "path": "/api/projects/{id}/connector-operations/{operationId}/cancel", "summary": "Cancel own pending operation with revision protection", "body": {"expectedRevision": 1}},
   { agentExposure: 'allowed', method: 'GET', path: '/api/projects/{id}/connections', summary: 'List project bindings; agents see only explicitly granted discovery selections', body: undefined },
   { agentExposure: 'human-only', method: 'POST', path: '/api/projects/{id}/connections', summary: 'Bind a connected account and explicit selection to an owned project', body: { connectionId: '', role: 'tool', selection: { adapter: 'mcp', tools: [], resources: [] } } },
   { agentExposure: 'human-only', method: 'DELETE', path: '/api/projects/{id}/connections/{bindingId}', summary: 'Remove a project binding, revoke grants and invalidate dependent work', body: { expectedPolicyRevision: 1 } },
@@ -67,7 +105,7 @@ export const apiEndpoints = [
   { agentExposure: 'none', method: 'POST', path: '/api/observability/client-events', summary: 'Submit an allowlisted browser event without private content', body: { event: 'page_view', page: 'templates' } },
 ] as const satisfies readonly ApiEndpoint[];
 export function openApiDocument(schemas: Record<string, unknown>) {
-  schemas = { 'POST /api/projects/{id}/connections': z.toJSONSchema(connectionBindingCreateSchema), 'DELETE /api/projects/{id}/connections/{bindingId}': z.toJSONSchema(connectionBindingRemoveSchema), 'POST /api/projects/{id}/connections/{bindingId}/grants': z.toJSONSchema(connectionGrantCreateSchema), 'POST /api/connections': z.toJSONSchema(connectionCreateSchema), 'POST /api/connectors/mcp/connect': z.toJSONSchema(mcpConnectionSetupSchema), 'POST /api/connectors/mcp/authorize': z.toJSONSchema(mcpAuthorizationStartSchema), ...schemas };
+  schemas = { 'PUT /api/projects/{id}/connections/{bindingId}':z.toJSONSchema(connectionBindingUpdateSchema), 'POST /api/projects/{id}/runs':z.toJSONSchema(agentRunStartSchema), 'POST /api/projects/{id}/runs/{runId}/advance':z.toJSONSchema(agentRunAdvanceSchema), 'POST /api/projects/{id}/runs/{runId}/cancel':z.toJSONSchema(agentRunAdvanceSchema), 'POST /api/projects/{id}/connections/{bindingId}/sources': z.toJSONSchema(connectorSourceImportSchema), 'POST /api/projects/{id}/connector-operations': z.toJSONSchema(connectorOperationPrepareSchema), 'POST /api/projects/{id}/connector-operations/{operationId}/execute': z.toJSONSchema(connectorOperationExecuteSchema), 'POST /api/projects/{id}/connector-operations/{operationId}/decision': z.toJSONSchema(connectorOperationDecisionSchema), 'POST /api/projects/{id}/connector-operations/{operationId}/cancel': z.toJSONSchema(connectorOperationExecuteSchema),  'POST /api/projects/{id}/connections': z.toJSONSchema(connectionBindingCreateSchema), 'DELETE /api/projects/{id}/connections/{bindingId}': z.toJSONSchema(connectionBindingRemoveSchema), 'POST /api/projects/{id}/connections/{bindingId}/grants': z.toJSONSchema(connectionGrantCreateSchema), 'POST /api/connections': z.toJSONSchema(connectionCreateSchema), 'POST /api/connectors/mcp/connect': z.toJSONSchema(mcpConnectionSetupSchema), 'POST /api/connectors/mcp/authorize': z.toJSONSchema(mcpAuthorizationStartSchema), ...schemas };
   const paths: Record<string, Record<string, unknown>> = {};
   for (const endpoint of apiEndpoints) {
     const { method, path, summary, body } = endpoint;
@@ -82,7 +120,7 @@ export function openApiDocument(schemas: Record<string, unknown>) {
     const upload = method === 'POST' && path.endsWith('/assets');
     const content = upload
       ? { 'multipart/form-data': { schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } } }
-      : { 'application/json': { schema: path.endsWith('/client-events') ? z.toJSONSchema(clientEventSchema) : schemas[`${method} ${path}`] ?? { type: 'object' }, example: body } };
+      : { 'application/json': { schema: path.endsWith('/client-events') ? z.toJSONSchema(clientEventSchema) : schemas[`${method} ${path}`] ?? connectorRequestBodySchema(method,path) ?? { type: 'object' }, example: body } };
     (paths[path] ??= {})[method.toLowerCase()] = { summary, parameters, 'x-studio-agent-exposure': endpoint.agentExposure,
       ...(body ? { requestBody: { required: true, content } } : {}),
       responses: { '2XX': { description: 'Success; exports return file bytes with Content-Type and Content-Disposition' }, '400': { description: 'Invalid request' }, '401': { description: 'Authentication required' }, '403': { description: 'Insufficient scope' }, '404': { description: 'Resource not found' }, '409': { description: 'Revision or merge conflict' } },

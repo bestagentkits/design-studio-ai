@@ -1,4 +1,7 @@
+import { setup } from './fixtures/connector-operation-context';
 import assert from 'node:assert/strict';
+import { readConnectorOperation } from '../server/connector-operation-reads';
+import { maintainConnectorState } from '../server/connector-retention';
 import { test, type TestContext } from 'node:test';
 import { Hono } from 'hono';
 import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
@@ -15,31 +18,6 @@ const pins = { connectionRevision: 1, credentialVersion: 1, policyRevision: 1, d
 const tool: ConnectorTool = { connectionId: 'connection', remoteName: 'action', description: 'Isolated tool', fingerprint: 'a'.repeat(64), effect: 'write', inputSchema: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'], additionalProperties: false } };
 const input = (key = 'operation-key-0001') => ({ bindingId: 'binding', action: 'action', arguments: { text: 'sensitive argument' }, idempotencyKey: key, expectedVersions: pins });
 const error = (code: string) => (value: unknown) => value instanceof ApiError && value.code === code;
-async function setup(t: TestContext) {
-  const directory = await mkdtemp(join(tmpdir(), 'studio-operations-')), db = new SqliteDatabase(join(directory, 'db.sqlite'));
-  t.after(async () => { db.close(); await rm(directory, { recursive: true, force: true }); });
-  for (const file of (await readdir(new URL('../migrations/', import.meta.url))).filter(f => f.endsWith('.sql')).sort()) await db.exec(await readFile(new URL(`../migrations/${file}`, import.meta.url), 'utf8'));
-  const insert = async (table: string, values: Record<string, unknown>) => { const keys = Object.keys(values); await db.prepare(`INSERT INTO ${table}(${keys.join(',')}) VALUES(${keys.map(() => '?').join(',')})`).bind(...Object.values(values)).run(); };
-  const timestamp = new Date().toISOString();
-  for (const owner of ['alice', 'bob']) {
-    await insert('users', { id: owner, name: owner, email: `${owner}@test.invalid`, password: 'test-password-hash', created_at: timestamp });
-    await insert('sessions', { hash: await hash(`${owner}-session`), user_id: owner, expires_at: Date.now() + 3600000 });
-    await insert('projects', { id: `${owner}-project`, user_id: owner, name: 'Isolated project', kind: 'web', document: '{}', created_at: timestamp, updated_at: timestamp });
-  }
-  await insert('connections', { id: 'connection', user_id: 'alice', adapter: 'mcp', display_name: 'Test peer', endpoint: 'https://peer.vendor.net/mcp', auth_mode: 'anonymous', status: 'connected', created_at: timestamp, updated_at: timestamp });
-  const selection = JSON.stringify({ adapter: 'mcp', tools: ['action'], resources: [] });
-  await insert('project_connection_bindings', { id: 'binding', user_id: 'alice', project_id: 'alice-project', connection_id: 'connection', role: 'tool', selection_json: selection, created_at: timestamp, updated_at: timestamp });
-  await insert('api_tokens', { id: 'api-id', user_id: 'alice', hash: await hash('alice-api'), name: 'Test', created_at: timestamp });
-  await insert('connection_agent_grants', { id: 'grant', user_id: 'alice', project_id: 'alice-project', connection_id: 'connection', principal_kind: 'api', principal_id: 'api-id', capabilities_json: '["execute_read","prepare_write"]', selection_json: selection, created_at: timestamp, expires_at: Date.now() + 3600000 });
-  const env: Bindings = { DB: db, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), APP_URL: 'https://studio.test', ENCRYPTION_KEY: secret() };
-  const session: ConnectorPrincipal = { kind: 'session', userId: 'alice', sessionId: await hash('alice-session') };
-  const api: ConnectorPrincipal = { kind: 'api', userId: 'alice', tokenId: 'api-id' };
-  const app = new Hono<Env>(); app.use('*', async (c, next) => { await authenticate(c); await next(); });
-  app.onError(e => new Response(JSON.stringify({ code: e instanceof ApiError ? e.code : e.message }), { status: e instanceof ApiError ? e.status : 500 }));
-  app.post('/:id/:revision/:decision', async c => c.json(await decide(c, c.req.param('id'), Number(c.req.param('revision')), c.req.param('decision') as 'approve' | 'deny')));
-  const decision = (id: string, revision = 1, action = 'approve', credential = 'alice-session', headers: Record<string, string> = {}) => app.request(`https://studio.test/${id}/${revision}/${action}`, { method: 'POST', headers: { ...(credential.endsWith('session') ? { Cookie: `studio_session=${credential}` } : { Authorization: `Bearer ${credential}` }), ...headers } }, env);
-  return { db, env, session, api, decision, insert, timestamp };
-}
 
 test('strict preparation validates trusted schema, stores encrypted arguments, and enforces idempotency', async t => {
   const { env, session, db } = await setup(t);
@@ -257,4 +235,27 @@ test('changed tool description invalidates exact approval without consuming it',
   assert.equal(approval!.consumed_at, null);
   const stored = await db.prepare('SELECT status,revision FROM connector_operations WHERE id=?').bind(operation.id).first<{status:string;revision:number}>();
   assert.equal(stored!.status, 'pending'); assert.equal(stored!.revision, 2);
+});
+
+
+test('results are encrypted, read-only, principal-scoped and erased with arguments', async t => {
+  const { env, api, session, decision, db } = await setup(t);
+  const op = await prepare(env, api, input(), tool);
+  assert.equal((await decision(op.id)).status, 200);
+  const claimed = await claim(env, api, op.id, 2, tool);
+  const result = {content:[{type:'text',text:'private tool output'}]};
+  await finish(env, api, op.id, 3, claimed.leaseId, {status:'succeeded',result});
+  assert.deepEqual((await readConnectorOperation(env, api, op.id)).result, result);
+  assert.deepEqual((await readConnectorOperation(env, session, op.id)).arguments, input().arguments);
+  const stored = await db.prepare('SELECT encrypted_result FROM connector_operations WHERE id=?').bind(op.id).first<{encrypted_result:string}>();
+  assert.ok(stored!.encrypted_result && !stored!.encrypted_result.includes('private tool output'));
+  await db.prepare("UPDATE connection_agent_grants SET revoked_at='revoked' WHERE id='grant'").run();
+  const denied = await readConnectorOperation(env, api, op.id);
+  assert.equal(denied.operation.status, 'succeeded'); assert.equal(denied.payloadAvailable, false); assert.equal(denied.result, null);
+  assert.deepEqual((await readConnectorOperation(env, session, op.id)).result, result);
+  await db.prepare('UPDATE connector_operations SET payload_expires_at=1 WHERE id=?').bind(op.id).run();
+  assert.equal((await readConnectorOperation(env, session, op.id)).payloadAvailable, false);
+  await maintainConnectorState(env);
+  const cleared = await db.prepare('SELECT encrypted_arguments,encrypted_result FROM connector_operations WHERE id=?').bind(op.id).first<{encrypted_arguments:null;encrypted_result:null}>();
+  assert.equal(cleared!.encrypted_arguments, null); assert.equal(cleared!.encrypted_result, null);
 });

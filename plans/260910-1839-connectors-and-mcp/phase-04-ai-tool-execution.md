@@ -1,11 +1,11 @@
 ---
 title: "Phase 4: Run connector tools inside design conversations"
-status: todo
+status: in-progress
 ---
 
 # Run connector tools inside design conversations
 
-Priority: P2. Status: pending. Depends on: 2, 3. Estimate: 5-8 engineering days.
+Priority: P2. Status: in progress. Depends on: 2, 3. Estimate: 5-8 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 
@@ -54,10 +54,10 @@ AI can use project-enabled tools and sources, wait for exact human approval, res
 
 ## Todo
 
-- [ ] Add provider-normalized tool messages and capability detection.
-- [ ] Add durable request-driven runs, budgets and execution leases.
-- [ ] Integrate tool selection, provenance and operation approvals.
-- [ ] Preserve brief/document concurrency and validated proposal output.
+- [x] Add provider-normalized tool messages and capability detection.
+- [x] Add durable request-driven runs, budgets and execution leases.
+- [x] Integrate tool selection, provenance and operation approvals.
+- [x] Preserve brief/document concurrency and validated proposal output.
 - [ ] Add cancellation, reconnect, interrupted/unknown outcome recovery.
 
 ## Validation and success

@@ -107,6 +107,7 @@ export async function storeAsset(
   name: string,
   mimeType: string,
   data: ArrayBuffer,
+  trustedGuard?: { sql:string; values:unknown[] },
 ) {
   await projectRow(c, projectId);
   if (data.byteLength > 20 * 1024 * 1024)
@@ -163,8 +164,8 @@ export async function storeAsset(
     httpMetadata: { contentType: mimeType },
   });
   try {
-    await c.env.DB.prepare(
-      "INSERT INTO assets(id,user_id,project_id,name,mime_type,size,storage_key,created_at) VALUES(?,?,?,?,?,?,?,?)",
+    const inserted=await c.env.DB.prepare(
+      `INSERT INTO assets(id,user_id,project_id,name,mime_type,size,storage_key,created_at) SELECT ?,?,?,?,?,?,?,?${trustedGuard?` WHERE (${trustedGuard.sql})`:""}`,
     )
       .bind(
         assetId,
@@ -175,8 +176,10 @@ export async function storeAsset(
         data.byteLength,
         storageKey,
         now(),
+        ...(trustedGuard?.values??[]),
       )
       .run();
+    if(inserted.meta.changes!==1)fail(409,"revision_conflict","Source authority changed during asset import.");
   } catch (error) {
     await c.env.ASSETS_BUCKET.delete(storageKey);
     throw error;

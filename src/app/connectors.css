@@ -1,0 +1,15 @@
+.connector-panel { min-width: 0; }
+.connector-panel p { overflow-wrap: anywhere; }
+.connector-list { display: grid; gap: 12px; margin-block: 16px; }
+.connector-list article { border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; }
+.connector-list h4 { margin: 0 0 8px; }
+.connector-address { font-size: 12px; overflow-wrap: anywhere; }
+.connector-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }
+.connector-form { display: grid; gap: 12px; margin-block: 16px; }
+.connector-form input,.connector-form select,.connector-form textarea { width: 100%; min-width: 0; }
+.connector-panel pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 320px; overflow: auto; padding: 12px; font-size: 12px; }
+.connector-choices { display: grid; gap: 8px; max-height: 300px; overflow: auto; margin-block: 12px; }
+.connector-choices label { display: flex; gap: 8px; align-items: start; overflow-wrap: anywhere; }
+.connector-choices input { flex-shrink: 0; margin-top: 4px; }
+.connector-choices small { display: block; }
+@media (max-width: 600px) { .connector-actions > .button { flex: 1 1 140px; } }

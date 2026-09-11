@@ -25,6 +25,8 @@ jobs:
           PUBLIC_SITE_URL: https://beta.studio.agentkit.best
       - run: npm run pack:skill
       - run: npm run test:e2e
+        env:
+          CONNECTORS_ENABLED: "true"
       - run: npm pack
         working-directory: packages/cli
       - uses: actions/upload-artifact@v4

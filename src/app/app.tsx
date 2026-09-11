@@ -200,8 +200,9 @@ export function App() {
       new URL(location.href).searchParams.get("settings") === "agents" ||
       oauthReturn.saved?.agents === true,
   );
+  const [connectionsRequested,setConnectionsRequested]=useState(()=>new URL(location.href).searchParams.get('settings')==='connections');
   const [settingsTab, setSettingsTab] = useState<
-    "providers" | "agents" | "account"
+    "providers" | "agents" | "account" | "connections"
   >("providers");
   const [user, setUser] = useState<User | null>(null),
     [ready, setReady] = useState(false),
@@ -342,6 +343,17 @@ export function App() {
         .catch((e) => setError(message(e)));
     } else setProjects([]);
   }, [user]);
+  useEffect(()=>{
+    if(!connectionsRequested||!ready)return;
+    if(!user){setAuth(true);return;}
+    setSettingsTab('connections');setSettings(true);setAuth(false);setConnectionsRequested(false);
+    const url=new URL(location.href),result=url.searchParams.get('connectorResult');
+    if(result){try{const saved=JSON.parse(sessionStorage.getItem('studio-connector-return')??'null');sessionStorage.removeItem('studio-connector-return');if(saved?.expires>Date.now()&&typeof saved.project==='string'&&/^[a-zA-Z0-9_-]{1,128}$/.test(saved.project))url.searchParams.set('project',saved.project);}catch{/* Return state is optional and never grants project access. */}}
+    if(result==='connected')setNotice('Server verified. Choose project tools and sources to continue.');
+    if(result==='failed')setError('Connection authorization did not complete. Reopen setup to try again.');
+    url.searchParams.delete('settings');url.searchParams.delete('connectorResult');
+    history.replaceState(history.state,'',`${url.pathname}${url.search}${url.hash}`);
+  },[connectionsRequested,ready,user]);
   useEffect(() => {
     if (!agentsRequested || !ready) return;
     const url = new URL(location.href);

@@ -23,3 +23,9 @@ export const mcpConnectionSetupSchema = z.strictObject({ connectionId: connector
 export const mcpAuthorizationStartSchema = z.strictObject({ connectionId: connectorIdSchema, expectedRevision: connectorRevisionSchema, options: mcpAuthorizationOptionsSchema });
 
 export const connectionBindingRemoveSchema = z.strictObject({ expectedPolicyRevision: connectorRevisionSchema });
+
+export const mcpResourceImportSchema = z.strictObject({uri:z.string().min(1).max(2048)});
+
+export const connectorSourceImportSchema=z.strictObject({uri:mcpResourceImportSchema.shape.uri.optional(),fileId:connectorIdSchema.optional(),path:z.string().min(1).max(1024).optional()}).refine(value=>Number(value.uri!==undefined)+Number(value.fileId!==undefined)+Number(value.path!==undefined)===1,'Provide exactly one MCP URI, Drive file ID or GitHub path.');
+
+export const connectionBindingUpdateSchema=z.strictObject({expectedPolicyRevision:connectorRevisionSchema,role:z.enum(['source','tool','destination']),selection:connectorSelectionSchema});

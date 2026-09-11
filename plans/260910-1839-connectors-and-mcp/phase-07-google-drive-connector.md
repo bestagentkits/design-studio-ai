@@ -1,11 +1,11 @@
 ---
 title: "Phase 7: Add selected Drive sources and connected exports"
-status: todo
+status: in-progress
 ---
 
 # Add selected Drive sources and connected exports
 
-Priority: P2. Status: pending. Depends on: 2, 4, 5. Estimate: 5-7 engineering days.
+Priority: P2. Status: in progress. Depends on: 2, 4, 5. Estimate: 5-7 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 
@@ -61,10 +61,10 @@ Connect multiple Google accounts, select source files with Picker, retain proven
 
 ## Todo
 
-- [ ] Implement stored Google connection lifecycle and safe Picker bridge.
-- [ ] Implement selected file ingestion with bounded extraction/provenance.
-- [ ] Upload actual PDF/PPTX bytes with durable remote identity.
-- [ ] Add connection-backed Slides conversion without breaking legacy export.
+- [x] Implement stored Google connection lifecycle and safe Picker bridge.
+- [x] Implement selected file ingestion with bounded extraction/provenance.
+- [x] Upload actual PDF/PPTX bytes with durable remote identity.
+- [x] Add connection-backed Slides conversion without breaking legacy export.
 - [ ] Verify multi-account isolation and partial export recovery.
 
 ## Validation and success

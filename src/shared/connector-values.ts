@@ -9,12 +9,13 @@ export type ConnectorJson = null | boolean | number | string | ConnectorJson[] |
 
 // Validate before serializing: cycles and deeply nested input must fail without a stack overflow.
 export function boundedConnectorJson(maxBytes: number, localReferencesOnly = false) {
-  return z.custom<ConnectorJson>((value) => {
-    const stack: { value: unknown; depth: number }[] = [{ value, depth: 0 }];
+  return z.unknown().refine((value) => {
+    const stack: { value: unknown; depth: number; exit?: boolean }[] = [{ value, depth: 0 }];
     const seen = new Set<object>();
     let count = 0;
     while (stack.length) {
       const entry = stack.pop()!;
+      if (entry.exit) { seen.delete(entry.value as object); continue; }
       if (++count > 20000 || entry.depth > 32) return false;
       const item = entry.value;
       if (item === null || typeof item === 'boolean') continue;
@@ -22,6 +23,7 @@ export function boundedConnectorJson(maxBytes: number, localReferencesOnly = fal
       if (typeof item === 'string') { if (item.length > maxBytes) return false; continue; }
       if (typeof item !== 'object' || seen.has(item)) return false;
       seen.add(item);
+      stack.push({ value: item, depth: entry.depth, exit: true });
       if (!Array.isArray(item) && Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) return false;
       const entries = Object.entries(item);
       if (entries.length > 20000) return false;
@@ -36,7 +38,7 @@ export function boundedConnectorJson(maxBytes: number, localReferencesOnly = fal
     }
     try { return new TextEncoder().encode(JSON.stringify(value)).byteLength <= maxBytes; }
     catch { return false; }
-  }, { message: 'Expected bounded JSON without unsafe keys, cycles or external schema references.' });
+  }, { message: 'Expected bounded JSON without unsafe keys, cycles or external schema references.' }).meta({description:`JSON data up to ${maxBytes} UTF-8 bytes, depth 32 and 20000 values; unsafe property names and cycles are rejected${localReferencesOnly ? '; schema references must be local fragments' : ''}.`, 'x-studio-max-bytes':maxBytes}) as z.ZodType<ConnectorJson>;
 }
 
 // Syntax checks only. The dispatcher must additionally enforce public addresses at connection time.

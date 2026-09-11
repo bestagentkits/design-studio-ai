@@ -1,11 +1,11 @@
 ---
 title: "Phase 6: Add selected GitHub sources and React export PRs"
-status: todo
+status: in-progress
 ---
 
 # Add selected GitHub sources and React export PRs
 
-Priority: P2. Status: pending. Depends on: 2, 4, 5. Estimate: 4-6 engineering days.
+Priority: P2. Status: in progress. Depends on: 2, 4, 5. Estimate: 4-6 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 
@@ -57,10 +57,10 @@ Use a GitHub App for selected repositories without changing the current GitHub l
 
 ## Todo
 
-- [ ] Add independent GitHub App authentication and verified installation binding.
-- [ ] Add selected repo/file sources pinned to immutable SHA.
-- [ ] Produce reviewed real React file diffs and branch/PR writes.
-- [ ] Add webhook revocation and partial-write reconciliation.
+- [x] Add independent GitHub App authentication and verified installation binding.
+- [x] Add selected repo/file sources pinned to immutable SHA.
+- [x] Produce reviewed real React file diffs and branch/PR writes.
+- [x] Add webhook revocation and partial-write reconciliation.
 - [ ] Complete provider-specific UX/reference and acceptance tests.
 
 ## Validation and success

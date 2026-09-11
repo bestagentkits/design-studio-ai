@@ -1,3 +1,4 @@
+import { githubWebhookRoutes } from './connectors/github-webhooks';
 import { providerSettingsSchema, providerIdSchema, builtInProviders } from '../src/shared/providers';
 import { connectorRoutes } from './connector-routes';
 import { mediaInputSchema, generationInputSchema, providerInterviewSchema } from '../src/shared/provider-requests';
@@ -157,6 +158,7 @@ app.get("/api/config", (c) =>
     googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
     allowRegistration: c.env.ALLOW_REGISTRATION === "true",
     githubEnabled: githubEnabled(c),
+    connectorsEnabled: c.env.CONNECTORS_ENABLED === "true",
     observability: { operator: isObservabilityOperator(c), retentionDays: 30 },
     analytics: { enabled: true, posthogConfigured: !!posthogConfig(c.env) },
   }),
@@ -171,6 +173,7 @@ const credentials = z.object({
   name: z.string().trim().min(1).max(100).optional(),
 });
 app.route('/api/observability', observabilityRoutes);
+app.route('/api/connectors/github/webhook', githubWebhookRoutes);
 app.route('/api', connectorRoutes);
 app.route('/api/auth/github', githubRoutes);
 app.post("/api/auth/register", async (c) => {

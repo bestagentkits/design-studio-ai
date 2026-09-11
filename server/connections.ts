@@ -1,3 +1,4 @@
+import { discoverOwnedMcpCatalog } from './connectors/mcp-discovery';
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { Env } from './types';
@@ -25,6 +26,11 @@ async function readableConnection(c: Context<Env>, connectionId: string) {
 
 /** Mount only when the connector rollout is enabled; setup remains an interactive human action. */
 export const connectionRoutes = new Hono<Env>();
+connectionRoutes.get('/agent-recipients',async c=>{
+  const userId=interactiveConnectionOwner(c);
+  const {results}=await c.env.DB.prepare('SELECT t.client_id AS clientId,t.family AS familyId,c.name,MAX(t.expires_at) AS expiresAt FROM oauth_tokens t JOIN oauth_clients c ON c.id=t.client_id WHERE t.user_id=? AND t.expires_at>? GROUP BY t.client_id,t.family ORDER BY c.name LIMIT 100').bind(userId,Date.now()).all();
+  return c.json({oauth:results});
+});
 connectionRoutes.get('/', async c => {
   const userId = owner(c);
   if (isHuman(c)) return c.json({ connections: await listOwnedConnections(c.env, userId) });
@@ -44,4 +50,9 @@ connectionRoutes.get('/:connectionId', async c => c.json({ connection: await rea
 connectionRoutes.post('/:connectionId/disconnect', async c => {
   const userId = interactiveConnectionOwner(c), value = revisionBody.parse(await c.req.json());
   return c.json({ connection: await disconnectConnection(c.env, userId, connectorIdSchema.parse(c.req.param('connectionId')), value.expectedRevision) });
+});
+
+connectionRoutes.post('/:connectionId/capabilities',async c=>{
+  interactiveConnectionOwner(c);
+  return c.json(await discoverOwnedMcpCatalog(c.env,c.get('principal')!,connectorIdSchema.parse(c.req.param('connectionId'))));
 });

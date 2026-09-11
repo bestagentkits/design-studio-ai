@@ -1,11 +1,11 @@
 ---
 title: "Phase 8: Complete shared agent APIs and documentation"
-status: todo
+status: in-progress
 ---
 
 # Complete shared agent APIs and documentation
 
-Priority: P2. Status: pending. Depends on: 3-7. Estimate: 3-4 engineering days.
+Priority: P2. Status: in progress. Depends on: 3-7. Estimate: 3-4 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 
@@ -62,10 +62,10 @@ People and external agents discover/use the same first-party connector services 
 
 ## Todo
 
-- [ ] Complete explicit agent-safe API exposure policy.
-- [ ] Add shared MCP/CLI/WebMCP connection/source/run operations.
-- [ ] Verify useful typed recovery errors and schema parity.
-- [ ] Update owning docs, public guide/reference and agent skill.
+- [x] Complete explicit agent-safe API exposure policy.
+- [x] Add shared MCP/CLI/WebMCP connection/source/run operations.
+- [x] Verify useful typed recovery errors and schema parity.
+- [x] Update owning docs, public guide/reference and agent skill.
 - [ ] Rebuild generated references and verify links/examples.
 
 ## Validation and success
