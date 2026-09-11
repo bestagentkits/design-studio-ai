@@ -96,3 +96,9 @@ jobs:
           assert.equal((await read('/.well-known/oauth-authorization-server')).authorization_endpoint, origin + '/oauth/authorize');
           console.log('Production health and OAuth discovery passed.');
           NODE
+      - name: Verify persistent thumbnails on production
+        if: steps.head.outputs.current == 'true'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: node scripts/smoke-thumbnails.mjs

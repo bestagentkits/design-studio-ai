@@ -20,3 +20,5 @@ Design reviewed against existing owners: server/projects.ts owns saved revisions
 - Local review found and fixed deletion publication race with a project deletion gate; late workers remove their output. No outstanding correctness findings.
 - First uncached revision still needs rendering; external media follows cloud export restrictions. Rendering is demand-driven, not performed on every save.
 - Patch release 0.3.3 packages the added CLI command and synchronized skill. CI and production evidence will be recorded after deployment.
+
+Release verification: CI now runs `scripts/smoke-thumbnails.mjs` after production deploy. It checks actual D1/R2/Browser Rendering cache behavior using disposable data with project/account cleanup; local execution is intentionally skipped without cleanup credentials.
