@@ -38,3 +38,11 @@ The E2E harness owns its temporary database and port and shuts the server down a
 Reviewed authority guards, exact approval/claim, immutable export artifacts, GitHub user-installation-repository intersection, signed webhook replay, source asset races, client parity and UI state. Resolved findings are in [implementation progress](implementation-progress-2026-09-11.md). No independent reviewer or universal security certification is claimed.
 
 Required live acceptance remains: designated GitHub App/repository; Google OAuth project, Picker and Drive folder; a permitted model/tool loop; real remote write and external OAuth recovery. Beta currently lacks native connector settings. Those are unverified, not passing tests. See [release readiness](release-readiness.md).
+
+## Enabled full-suite regression and correction
+
+CI run 34571677384 at `085732a` passed typecheck, 367 tests and build but failed browser verification; deployment was skipped. Enabling connectors exposed a Settings End-key ordering regression and mobile header overlap. The failed desktop test restarted its worker and contributed to a later signup rate-limit failure; the rate limit and assertions were not changed. Commit `e1c57dd` keeps Your account last and moves the mobile connector entry out of the crowded header. Focused enabled navigation/workspace/Settings checks passed 5 desktop and 5 mobile tests, with the opt-in external case skipped. Full CI subsequently passed on the correction.
+
+After `e1c57dd`, the complete local release browser suite with CONNECTORS_ENABLED=true passed: desktop 32 passed / 1 opt-in live skip; mobile 31 passed / 1 opt-in live skip plus the existing keyboard skip. The public MCP flow was rerun on Chromium mobile and WebKit mobile after the layout fix: 4/4 passed. Cloudflare remote preview of the actual application transport/client also passed public discovery/search (2026-07-28, 2,038 text bytes).
+
+Final exact-code CI: [34572237146](https://github.com/bestagentkits/design-studio-ai/actions/runs/34572237146), SHA `e1c57dd68f0398f69240cabb622f1e2f92c8a353`, success. CI confirmed 367 tests, desktop 32/33 (one opt-in skip), mobile 31/33 (opt-in plus existing keyboard skip), all builds/packages and beta deployment. See [release readiness](release-readiness.md) for active Cloudflare version, migrations and direct live checks.

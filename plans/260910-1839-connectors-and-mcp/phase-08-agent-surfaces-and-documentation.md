@@ -66,7 +66,9 @@ People and external agents discover/use the same first-party connector services 
 - [x] Add shared MCP/CLI/WebMCP connection/source/run operations.
 - [x] Verify useful typed recovery errors and schema parity.
 - [x] Update owning docs, public guide/reference and agent skill.
-- [ ] Rebuild generated references and verify links/examples.
+- [x] Rebuild generated references and verify links/examples.
+
+Implementation checklist verified at code `085732a`; see [verification](reports/verification.md). Live provider/model acceptance and general enablement remain tracked in phase 9.
 
 ## Validation and success
 

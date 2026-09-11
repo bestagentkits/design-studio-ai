@@ -20,3 +20,9 @@ To contain execution, disable the server feature flag and redeploy a compatible 
 - Request and operation budgets are bounded. A partially completed GitHub export or native Slides creation remains visible as uncertain with IDs; no automatic retry claims.
 - Remote Workers PDF CPU envelope has not been measured. Local workerd functionality and bundle success are narrower evidence.
 - Eight high dependency audit findings were reported during installation; no audit-clean claim or unrelated forced upgrade.
+
+## Verified beta deployment
+
+Code `e1c57dd68f0398f69240cabb622f1e2f92c8a353` passed [CI 34572237146](https://github.com/bestagentkits/design-studio-ai/actions/runs/34572237146) and deployed on 2026-09-11 at 07:03 UTC. Cloudflare lists 100% active version `fec10669-bfa1-46eb-a63f-c8d6a5665fca` with that exact SHA as its message. Migrations 0014–0017 each completed successfully on isolated beta D1. A private local D1 export was taken before migration (48,235 bytes, mode 0600); it was not committed or uploaded as a report.
+
+Post-deployment checks passed health, beta OAuth resource discovery and current `/api/openapi` GitHub/binding-edit contracts. `/api/config` confirms connectorsEnabled=false. Production was untouched. This is deployed disabled code, not a completed live connector rollout.

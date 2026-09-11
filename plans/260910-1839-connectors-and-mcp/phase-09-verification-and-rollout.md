@@ -1,11 +1,11 @@
 ---
 title: "Phase 9: Verify integrated behavior and prepare controlled rollout"
-status: todo
+status: in-progress
 ---
 
 # Verify integrated behavior and prepare controlled rollout
 
-Priority: P2. Status: pending. Depends on: 1-8. Estimate: 4-6 engineering days.
+Priority: P2. Status: in progress. Depends on: 1-8. Estimate: 4-6 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 
@@ -48,12 +48,12 @@ Produce evidence for the actual requested workflows, runtime/security boundaries
 
 ## Todo
 
-- [ ] Pass focused suites and full current release gates.
+- [x] Pass focused suites and full current release gates.
 - [ ] Verify Chromium desktop/mobile, Firefox and WebKit.
 - [ ] Verify Cloudflare + Node auth, transport, persistence and cleanup.
 - [ ] Complete isolated real MCP/model/GitHub/Google acceptance evidence.
-- [ ] Review final code and reconcile known risks.
-- [ ] Prepare rollback and hand over evidence with honest release state.
+- [x] Review final code and reconcile known risks.
+- [x] Prepare rollback and hand over evidence with honest release state.
 
 ## Evidence deliverables
 

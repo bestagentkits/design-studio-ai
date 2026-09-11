@@ -1,6 +1,6 @@
 # Connector implementation progress — 2026-09-11
 
-Status: implementation and acceptance in progress. This report supersedes earlier foundation-only checkpoints. Current changes extend baseline `f114988`; commit/deployment identity will be recorded separately after verification. Full scope remains nine phases; external acceptance is not waived.
+Status: implementation and acceptance in progress. This report supersedes earlier foundation-only checkpoints. Code extends baseline `f114988` through `e1c57dd`; verified CI and disabled beta deployment are recorded in [release readiness](release-readiness.md). Full scope remains nine phases; external acceptance is not waived.
 
 ## Implemented
 
@@ -19,7 +19,7 @@ Status: implementation and acceptance in progress. This report supersedes earlie
 - `npm run typecheck`, `npm run build:cli`, `npm test`, `npm run build`, `npm run pack:skill`: passed; full unit/integration suite **367/367**. Later browser-form fixes received another typecheck/build and browser verification.
 - Local workerd + D1 applied migrations 0001–0017, preserved an existing project revision, passed refresh/disconnect/lease races and reported no foreign-key violations.
 - Local workerd extracted an actual Chromium-generated PDF (18,251 bytes) and verified GitHub RSA signing. Combined observed wall time 376 ms; CPU budget was not measured. Probe closes browser and runtime in finally blocks.
-- Current Workers dry-run passed. Bundle evidence is not remote runtime acceptance.
+- Current Workers dry-run passed. Public MCP discovery/search also passed actual Cloudflare remote preview through the application transport. Native account workflows and PDF CPU remain separate.
 - Real public endpoint `https://docs.mcp.cloudflare.com/mcp`: application Node DNS-pinned transport negotiated `2026-07-28`, discovered two tools and successfully called `search_cloudflare_documentation`. No credentials or private content were sent.
 - Opt-in browser acceptance uses that actual endpoint and real isolated application persistence. Covers capability selection, multiline binding edits, refresh-surviving pending action, human approval and successful dispatch; final browser matrix is recorded in verification.md.
 - Prior DNS/Cloudflare, OAuth profile and persistence probes remain linked from runtime-probes.md. They are distinct from real native-provider account acceptance.
@@ -38,7 +38,7 @@ Status: implementation and acceptance in progress. This report supersedes earlie
 
 - Beta secret-name inspection returned only ENCRYPTION_KEY; GitHub App and Google connector registration/secrets are not configured. Test repository, Drive destination and paid model authorization have been requested; no answer received at this checkpoint. Never put their secrets in reports.
 - Public MCP read success does not establish a real write, outgoing OAuth against an external authorization server, or a paid-model chat tool loop. GitHub source-to-PR, live Picker/multi-account, Drive PDF/PPTX and native Slides acceptance remain pending designated accounts.
-- Full browser/CI gate and exact revision deployment must be recorded separately. Baseline beta CI 34557747033 ran on 99990cd with connectors disabled; it does not validate these changes.
+- Current CI 34572237146 passed on e1c57dd and deployed isolated beta with connectors disabled. Earlier baseline CI 34557747033 is historical only.
 - Connector feature flag stays disabled until required acceptance gates pass. Production/main release is not authorized by this beta request.
 - GitHub exports have a bounded operation lease; timeout after partial writes is reported as unknown with recorded IDs, not silently retried. Native Slides partial creation has manual inspection guidance.
 - Installation reported eight high dependency findings; no audit-clean claim. Worker PDF CPU envelope is not yet measured on the remote deployment.

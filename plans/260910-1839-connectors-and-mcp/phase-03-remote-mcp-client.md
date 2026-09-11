@@ -55,11 +55,11 @@ A user can add a remote HTTPS server, authenticate, discover/select capabilities
 
 ## Todo
 
-- [ ] Implement verified HTTP profile adapter and transport cleanup.
-- [ ] Implement OAuth/bearer/anonymous auth and recovery.
-- [ ] Implement bounded catalog discovery, namespace and schema fingerprinting.
-- [ ] Execute tools and read resources through shared policy.
-- [ ] Preserve errors, safe content, input-required state and provenance.
+- [x] Implement verified HTTP profile adapter and transport cleanup.
+- [x] Implement OAuth/bearer/anonymous auth and recovery.
+- [x] Implement bounded catalog discovery, namespace and schema fingerprinting.
+- [x] Execute tools and read resources through shared policy.
+- [x] Preserve errors, safe content, input-required state and provenance.
 
 ## Validation and success
 

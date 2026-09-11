@@ -66,12 +66,14 @@ Implement the shared service before individual providers. Add new domain-named m
 
 ## Todo
 
-- [ ] Add and verify forward-only migrations and indexes.
-- [ ] Enforce human/API-key/OAuth/WebMCP/internal-run boundaries.
-- [ ] Implement credential refresh/revoke/disconnect races.
-- [ ] Implement exact approval, idempotency and unknown-outcome state.
-- [ ] Implement snapshot lifecycle, cleanup and clone rules.
-- [ ] Integrate safe transport, metadata-only telemetry and API exposure policy.
+- [x] Add and verify forward-only migrations and indexes.
+- [x] Enforce human/API-key/OAuth/WebMCP/internal-run boundaries.
+- [x] Implement credential refresh/revoke/disconnect races.
+- [x] Implement exact approval, idempotency and unknown-outcome state.
+- [x] Implement snapshot lifecycle, cleanup and clone rules.
+- [x] Integrate safe transport, metadata-only telemetry and API exposure policy.
+
+Implementation checklist verified at code `085732a`; see [verification](reports/verification.md). Live provider/model acceptance and general enablement remain tracked in phase 9.
 
 ## Validation and success
 

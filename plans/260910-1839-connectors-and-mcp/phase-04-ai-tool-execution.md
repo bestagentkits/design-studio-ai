@@ -58,7 +58,9 @@ AI can use project-enabled tools and sources, wait for exact human approval, res
 - [x] Add durable request-driven runs, budgets and execution leases.
 - [x] Integrate tool selection, provenance and operation approvals.
 - [x] Preserve brief/document concurrency and validated proposal output.
-- [ ] Add cancellation, reconnect, interrupted/unknown outcome recovery.
+- [x] Add cancellation, reconnect, interrupted/unknown outcome recovery.
+
+Implementation checklist verified at code `085732a`; see [verification](reports/verification.md). Live provider/model acceptance and general enablement remain tracked in phase 9.
 
 ## Validation and success
 
