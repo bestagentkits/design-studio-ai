@@ -79,6 +79,7 @@ test('dialog keys cannot modify the canvas and closing restores opener focus', a
   await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
   await expect(opener).toBeFocused();
 
+  // SVG uses the server; JSON is a local recovery download and has no pending request.
   // Hold delivery of a real export response to exercise the busy dialog's close guard.
   let release!: () => void;
   const held = new Promise<void>(resolve => { release = resolve; });
@@ -89,9 +90,9 @@ test('dialog keys cannot modify the canvas and closing restores opener focus', a
   });
   await opener.click();
   const download = page.waitForEvent('download');
-  await page.getByRole('button', { name: 'Design JSON Fully editable source' }).click();
+  await page.getByRole('button', { name: 'SVG vector Current page' }).click();
   try {
-    await expect(page.getByRole('button', { name: 'Design JSON Fully editable source' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'SVG vector Current page' })).toBeDisabled();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeVisible();
   } finally { release(); }

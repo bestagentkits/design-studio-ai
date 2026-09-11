@@ -1,3 +1,6 @@
+import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
+import { mutateDocument } from '../src/shared/operations';
+import { inspectScene } from '../src/shared/scene-inspection';
 import { executePaintingCommand } from './painting-commands';
 import { inspectElementImage } from '../src/shared/creative-elements-image-bounds';
 import { inspectGif } from '../src/shared/gif-bounds';
@@ -516,4 +519,16 @@ export async function published(c: Context<Env>, slug: string) {
 
 projectRoutes.get('/:id/motion',async c=>{const row=await projectRow(c,c.req.param('id'));const input=motionInspectionSchema.parse(c.req.query());const doc=documentSchema.parse(JSON.parse(row.document));if(input.nodeId&&!doc.pages.some(p=>p.nodes.some(n=>n.id===input.nodeId&&n.character)))fail(404,'not_found','Unknown character instance');if(input.characterId&&!doc.characters?.some(x=>x.id===input.characterId))fail(404,'not_found','Unknown character');return c.json({revision:row.revision,...inspectMotion(documentSchema.parse(JSON.parse(row.document)),input)});});
 
+projectRoutes.get('/:id/scene', async c => {
+  const row=await projectRow(c,c.req.param('id')); const query=z.object({pageId:z.string().optional(),time:z.coerce.number().finite().min(0).max(3600).default(0)}).parse(c.req.query());
+  const doc=documentSchema.parse(JSON.parse(row.document));if(query.pageId&&!doc.pages.some(p=>p.id===query.pageId))fail(404,'not_found','Unknown page');
+  return c.json({revision:row.revision,...inspectScene(doc,query.pageId,query.time)});
+});
+projectRoutes.post('/:id/scene', async c => {
+  const row=await projectRow(c,c.req.param('id')),input=sceneRequestSchema.parse(await c.req.json());
+  if(row.revision!==input.expectedRevision)fail(409,'conflict','Project revision changed. Read and reconcile before applying geometry.');
+  let next:DesignDocument;try{next=mutateDocument(documentSchema.parse(JSON.parse(row.document)),[{op:'scene-command',pageId:input.pageId,command:input.command}]);}catch(error){if(error instanceof z.ZodError)throw error;fail(400,'invalid_scene_command',error instanceof Error?error.message:'Scene command failed');throw error;}
+  const revision=input.preview?row.revision:(await saveDocument(c,row.id,next,input.expectedRevision)).revision;
+  return c.json({revision,preview:input.preview,...inspectScene(next,input.pageId)});
+});
 projectRoutes.post('/:id/paint', async c => c.json({ project: await executePaintingCommand(c, c.req.param('id'), await c.req.json()) }));

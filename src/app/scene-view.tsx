@@ -1,3 +1,4 @@
+import { SceneAuthoringPanel } from './scene-authoring-panel';
 import { mountSceneComposition } from '../shared/scene-composition';
 import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
@@ -8,15 +9,19 @@ import { animateScene, buildScene, defaultScene, disposeScene, exportScene } fro
 import { MeshTools } from './mesh-tools';
 import { download } from './api';
 
-export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0, time = 0, onUpdate, onPage }: {
+export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0, time = 0, onUpdate, onPage, onDocument }: {
   page: DesignPage; theme: Theme; selected: string | null; onSelect: (id: string, additive?: boolean) => void; doc?: DesignDocument; pageIndex?: number; time?: number;
+  onDocument?: (doc: DesignDocument) => void;
   onUpdate?: (patch: Partial<DesignNode>) => void; onPage?: (patch: Partial<DesignPage>) => void;
 }) {
   const host = useRef<HTMLDivElement>(null), [error, setError] = useState(''), [transform, setTransform] = useState<'translate' | 'rotate' | 'scale'>('translate'), [mode, setMode] = useState('object'), [selection, select] = useState<number[]>([]), [tools, showTools] = useState(false);
+  const toolbar=useRef<HTMLDivElement>(null),[toolbarHeight,setToolbarHeight]=useState(50);
+  useEffect(()=>{if(!toolbar.current)return;const observer=new ResizeObserver(entries=>setToolbarHeight(entries[0].contentRect.height+16));observer.observe(toolbar.current);return()=>observer.disconnect();},[]);
+  const [authoring,showAuthoring]=useState(false),[heatBone,setHeatBone]=useState<number|null>(null);
   const active = page.nodes.find(n => n.id === selected);
   const document: DesignDocument = doc ?? { schemaVersion: 1, id: 'scene', name: 'Scene', kind: '3d', pages: [page], assets: [], theme, metadata: { createdAt: '', updatedAt: '' } };
   const handlers = useRef({ onSelect, onUpdate, onPage, mode, selection, document, time, active }); handlers.current = { onSelect, onUpdate, onPage, mode, selection, document, time, active };
-  useEffect(() => { select([]); }, [selected]);
+  useEffect(() => { select([]); setHeatBone(null); }, [selected]);
   useEffect(() => {
     const element = host.current; if (!element) return;
     let composition: ReturnType<typeof mountSceneComposition> | undefined;
@@ -48,6 +53,11 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
         orbit.addEventListener('end', () => { if (!orbit || gizmo?.dragging || draggedGizmo) return; const old = page.scene ?? defaultScene; if (camera.position.distanceTo(new THREE.Vector3(...old.camera.position)) > .001 || orbit.target.distanceTo(new THREE.Vector3(...old.camera.target)) > .001) handlers.current.onPage?.({ scene: { ...old, camera: { ...old.camera, position: camera.position.toArray(), target: orbit.target.toArray() } } }); });
         const grid = new THREE.GridHelper(20, 20, 0x888888, 0xcccccc); grid.userData.compositionBackground = true; scene.add(grid);
         const mesh = object instanceof THREE.Mesh ? object : undefined;
+        if (mesh && heatBone !== null && active?.scene?.mesh?.skinWeights) {
+          const data=active.scene.mesh, colors:number[]=[];
+          for(let i=0;i<data.positions.length/3;i++){let w=0;for(let j=0;j<4;j++)if(data.skinIndices![i*4+j]===heatBone)w+=data.skinWeights![i*4+j];colors.push(w,.15,1-w);}
+          mesh.geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material])if(material instanceof THREE.MeshStandardMaterial){material.vertexColors=true;material.color.set('#ffffff');material.map?.dispose();material.map=null;}
+        }
         let vertexPoints: THREE.Points | undefined, selectedPoints: THREE.Points | undefined;
         if (mesh && mode !== 'object') {
           const geometry = new THREE.BufferGeometry(); geometry.setAttribute('position', mesh.geometry.getAttribute('position').clone());
@@ -116,8 +126,9 @@ export function SceneView({ page, theme, selected, onSelect, doc, pageIndex = 0,
       } catch (e) { cleanup(); if (!disposed) setError(e instanceof Error ? e.message : 'WebGL unavailable'); }
     })();
     return () => { disposed = true; cleanup(); };
-  }, [page, theme, selected, transform, mode, pageIndex, doc?.assets, doc?.timeline, !!onUpdate]);
-  return <div className="scene-workspace"><div className="scene-toolbar">{(['translate', 'rotate', 'scale'] as const).map(value => <button key={value} aria-pressed={transform === value} onClick={() => setTransform(value)}>{value}</button>)}<button aria-pressed={tools} onClick={() => showTools(!tools)}>Mesh / UV / Rig</button>{mode !== 'object' && <button onClick={() => { setMode('object'); select([]); }}>Orbit / object mode</button>}{doc && ['glb', 'gltf'].map(format => <button key={format} onClick={async () => { try { const output = await exportScene(doc, pageIndex, format === 'glb'); download(`${doc.name}.${format}`, output instanceof ArrayBuffer ? output : JSON.stringify(output), format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'); } catch (e) { setError(e instanceof Error ? e.message : 'Export failed'); } }}>Export {format.toUpperCase()}</button>)}</div>
+  }, [page, theme, selected, transform, mode, pageIndex, doc?.assets, doc?.timeline, !!onUpdate, heatBone]);
+  return <div className="scene-workspace" style={{'--scene-tools-top':`${toolbarHeight}px`} as React.CSSProperties}><div className="scene-toolbar" ref={toolbar}>{onDocument&&<button aria-pressed={authoring} onClick={()=>showAuthoring(!authoring)}>Character authoring</button>}{(['translate', 'rotate', 'scale'] as const).map(value => <button key={value} aria-pressed={transform === value} onClick={() => setTransform(value)}>{value}</button>)}<button aria-pressed={tools} onClick={() => showTools(!tools)}>Mesh / UV / Rig</button>{mode !== 'object' && <button onClick={() => { setMode('object'); select([]); }}>Orbit / object mode</button>}{doc && ['glb', 'gltf'].map(format => <button key={format} onClick={async () => { try { const output = await exportScene(doc, pageIndex, format === 'glb'); download(`${doc.name}.${format}`, output instanceof ArrayBuffer ? output : JSON.stringify(output), format === 'glb' ? 'model/gltf-binary' : 'model/gltf+json'); } catch (e) { setError(e instanceof Error ? e.message : 'Export failed'); } }}>Export {format.toUpperCase()}</button>)}</div>
+    {authoring&&onDocument&&<SceneAuthoringPanel doc={document} pageId={page.id} nodeId={active?.id} onDocument={onDocument} selection={mode==='face'&&active?.scene?.mesh?[...new Set(selection.flatMap(i=>active.scene!.mesh!.indices.slice(i*3,i*3+3)))]:selection} onHeat={setHeatBone}/>}
     <div className="scene-view" ref={host}/>{error && <p className="scene-error" role="alert">{error}</p>}{tools && active?.type === 'model3d' && onUpdate && <MeshTools node={active} update={onUpdate} mode={mode} setMode={setMode} selection={selection} select={select} animatedBones={(doc?.timeline?.tracks ?? []).filter(t => t.nodeId === active.id).flatMap(t => t.keyframes.flatMap(k => Object.keys(k.values).flatMap(p => { const match = /^scene\.bones\.(\d+)\./.exec(p); return match ? [+match[1]] : []; })))}/>}
   </div>;
 }

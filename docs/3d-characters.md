@@ -1,0 +1,25 @@
+# Editable 3D characters
+
+Use **Character authoring** in a 3D project's editor. It shares the [scene command validator](../src/shared/scene-authoring-schema.ts) and atomic document operations with REST, MCP, CLI and WebMCP. Camera coordinates, landmarks and IK targets use scene/mesh-local units; rotations use degrees. Save revisions remain separate from schema versions.
+
+## Workflow
+
+1. Build an unrigged shape from sphere primitives. Preview a bounded smooth-union remesh, then apply; original primitives remain hidden for recovery. Remesh accepts unparented document primitives or triangle meshes with positive scale, using fast ellipsoid fields or a triangle BVH (up to 20,000 document-mesh source triangles in total). Triangle inputs should be closed; open surfaces have ambiguous interior. Imported asset nodes need editable document geometry first. Resolution controls sampling, not a guaranteed polygon count. X symmetry reflects sources around the origin. For controlled joint topology, build a loft from ordered center/radius rings; its rings form triangulated quad strips. Relax before binding.
+2. Convert other primitives into editable meshes. Create a quadruped rig from eight explicit landmarks (hips, chest, head, four feet, tail), or inspect and adjust the bounds-derived starting rig. Templates are starting points, not anatomy detection.
+3. Auto-bind using normalized nearest-segment weights (up to four influences), inspect the weight heatmap, smooth/mirror or edit selected weights in Mesh / UV / Rig. Mirror needs matching symmetric vertices. Use `attach` to bake a separate unparented accessory mesh into an existing rig's space and bind it rigidly to a named bone; subsequent preset clips propagate to these attachments.
+4. Pose with FK rotation or bounded CCD IK. IK changes the stored pose, uses mesh-local targets and clamps Euler angles; it is not a persistent foot-contact solver. Add idle, wag or walk cycles to the timeline and edit the resulting keys. Walk samples two-bone IK with ground-level stance targets and lifted swing targets; inspect contact on your anatomy. Named clip ranges accompany the complete timeline in GLB export. Inspect intermediate poses, not just endpoints. `bindRotation` preserves skeletal rest orientation separately from posed `rotation`.
+5. Create named morph targets from selected vertices and a displacement. Animate `scene.morphWeights.NAME` from 0 to 1 using normal timeline keys. This supports expressions; it does not infer facial landmarks.
+6. Pack UVs using explicit seam edges or non-overlapping triangle islands. Explicit seam islands use planar projection and need visual checking for distortion/overlap. The UV brush stores bounded colored strokes, rendered into a 512px color texture and embedded on GLB export. Paint replaces the node's base-color texture; other PBR maps are not authored. Clear paint before changing UVs.
+7. Inspect mesh/rig reports and render several camera angles and timeline times. Export GLB/glTF and reopen the actual file; verify skeleton, deformation, texture and animation. Reports flag degenerate triangles, boundary/non-manifold edges, winding inconsistencies, unnormalized weights and extreme edge stretching. UV seams can intentionally introduce boundary edges. Reports do not certify absence of self-intersections or animation quality.
+
+Topology-changing legacy operations reject skinned meshes, morph targets and vertex colors rather than silently discarding their data. UV atlas splitting copies weights and morph deltas to each duplicated vertex. Undo is available for local editor edits; source documents and live state are checked before asynchronous geometry results apply.
+
+## Agent surfaces
+
+- Discover `sceneCommands` through `/api/schema` or WebMCP `studio_capabilities`; `dsa scene schema` provides the local CLI contract.
+- WebMCP `studio_scene_command({pageId, command, preview:true})` calculates a read-only preview. Pass `preview:false` to apply locally; Live autosaves. Responses contain compact diagnostics instead of vertex buffers. `studio_inspect_scene({pageId,time})` inspects current unsaved state. Geometry runs in a worker with a 30-second timeout and stale-state protection.
+- `GET /api/projects/:id/scene?pageId=...&time=...` inspects saved geometry and sampled deformation. `POST` to the same path accepts `{pageId,command,expectedRevision,preview}`; preview defaults true. Application uses the existing owner and atomic revision checks.
+- Network MCP exposes `inspect_scene` and `author_scene`. Shared `scene-command` operations also work through `patch_design`.
+- CLI: `dsa scene inspect PROJECT --page PAGE --time 0.5`; `dsa scene command PROJECT --page PAGE --revision N --file command.json` previews, `--apply` saves.
+
+For example, a command file may contain `{"action":"bind","nodeId":"body","smooth":2}`. Use IDs read from the project. Do not retry a conflict by incrementing its revision; inspect and reconcile first. Native geometry commands need no provider credentials. Private editing and exporting do not publish the project.

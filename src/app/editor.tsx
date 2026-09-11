@@ -1,3 +1,6 @@
+import {useMemo} from 'react';
+import {documentRequest, DocumentRequestTimeout} from './document-request';
+import {documentFingerprint} from '../shared/document-fingerprint';
 import { PaintingWorkspace } from './painting-workspace';
 import { paintingSchema } from '../shared/painting-schema';
 import { CreativeWorkspace } from './creative-workspace';
@@ -243,7 +246,7 @@ export function Editor({
       briefProposal.current = pending;
       setProposal(generated);setProposalGuard({baseRevision:pending.projectRevision,baseBriefRevision:pending.briefRevision});
     }
-    const { project: next } = await put<{ project: Project }>(
+    const { project: next } = await saveDocument<{ project: Project }>(
       `/api/projects/${projectRef.current.id}/document`,
       { document: pending.document, expectedRevision: pending.projectRevision, expectedBriefRevision: pending.briefRevision },
     );
@@ -252,7 +255,7 @@ export function Editor({
     docRef.current = next.document;
     setProject(next);
     setDoc(next.document);
-    setSaved(JSON.stringify(next.document));
+    setSaved(documentFingerprint(next.document));
     onProject(next);
     setProposal(null);
     briefProposal.current = null;
@@ -268,7 +271,7 @@ export function Editor({
   }
   const [project, setProject] = useState(initial),
     [doc, setDoc] = useState<DesignDocument>(() => clone(initial.document));
-  const [saved, setSaved] = useState(JSON.stringify(initial.document)),
+  const [saved, setSaved] = useState(() => documentFingerprint(initial.document)),
     [requestedPageIndex, setPageIndexState] = useState(() => Math.max(0, initial.document.pages.findIndex(p => p.id === screenParam("page")))),
     [selection, setSelection] = useState<string[]>([]);
   const selected = selection.at(-1) ?? null;
@@ -352,7 +355,8 @@ export function Editor({
       resize: Handle; started: boolean;
     } | null>(null);
   const pointerSelecting = useRef(false);
-  const dirty = JSON.stringify(doc) !== saved,
+  const currentFingerprint = useMemo(() => documentFingerprint(doc), [doc]);
+  const dirty = currentFingerprint !== saved,
     displayed = proposal || doc,
     pageIndex = Math.max(0, Math.min(requestedPageIndex, displayed.pages.length - 1)),
     page = displayed.pages[Math.min(pageIndex, displayed.pages.length - 1)]!,
@@ -475,21 +479,40 @@ export function Editor({
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
   }
-  const manualSaving = useRef(false);
+  const manualSaving = useRef(false), syncUncertain = useRef(false);
+  async function saveDocument<T>(path: string, body: unknown): Promise<T> {
+    if (syncUncertain.current) throw new Error("Reload the project to reconcile the timed-out save before saving again.");
+    try { return await documentRequest<T>(path, body, 'PUT'); }
+    catch (error) {
+      if (error instanceof DocumentRequestTimeout && error.uncertainWrite) {
+        syncUncertain.current = true;
+        setLive(false);
+        setError(message(error));
+      }
+      throw error;
+    }
+  }
+
   async function save() {
     if (busy) return;
     manualSaving.current = true;
+    let ownsSync = false;
     setBusy("Saving");
     setError("");
     try {
-      while (syncing.current) await new Promise(resolve => setTimeout(resolve, 50));
-      syncing.current = true;
+      const waitStarted = performance.now();
+      while (syncing.current) {
+        if (performance.now() - waitStarted > 20000) throw new Error("Live sync is taking too long. Wait for it to finish before saving again.");
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      if (syncUncertain.current) throw new Error("Reload the project to reconcile the timed-out save before saving again.");
+      syncing.current = true; ownsSync = true;
       const sending = clone(docRef.current), base = clone(projectRef.current.document);
-      const response = live ? await post<{ project: Project }>(`/api/projects/${project.id}/merge`, {
+      const response = live ? await documentRequest<{ project: Project }>(`/api/projects/${project.id}/merge`, {
         base, document: sending, baseRevision: projectRef.current.revision,
-      }) : await put<{ project: Project }>(
+      }) : await documentRequest<{ project: Project }>(
         `/api/projects/${project.id}/document`,
-        { document: sending, expectedRevision: projectRef.current.revision },
+        { document: sending, expectedRevision: projectRef.current.revision }, "PUT",
       );
       const merged = mergeDocuments(sending, docRef.current, response.project.document);
       let excluded = 0;
@@ -500,12 +523,13 @@ export function Editor({
       setDoc(merged);
       setProject(response.project);
       onProject(response.project);
-      setSaved(JSON.stringify(response.project.document));
+      setSaved(documentFingerprint(response.project.document));
       notify(excluded ? `Saved. ${excluded} undo states overlapping remote edits were removed.` : "All changes saved.");
     } catch (e) {
+      if (e instanceof DocumentRequestTimeout) { syncUncertain.current ||= e.uncertainWrite; setLive(false); }
       setError(message(e));
     } finally {
-      syncing.current = false; manualSaving.current = false;
+      if (ownsSync) syncing.current = false; manualSaving.current = false;
       setBusy("");
     }
   }
@@ -514,14 +538,14 @@ export function Editor({
     if (!live) return;
     let stopped = false;
     const synchronize = async () => {
-      if (syncing.current || drag.current || syncBlocked.current || stopped) return;
+      if (syncing.current || drag.current || syncBlocked.current || syncUncertain.current || stopped) return;
       syncing.current = true;
       const base = clone(projectRef.current.document), sending = clone(docRef.current);
       try {
-        const changed = JSON.stringify(sending) !== JSON.stringify(base);
+        const changed = documentFingerprint(sending) !== documentFingerprint(base);
         const result = changed
-          ? await post<{ project?: Project }>(`/api/projects/${project.id}/merge`, { base, document: sending, baseRevision: projectRef.current.revision })
-          : await api<{ project?: Project }>(`/api/projects/${project.id}/changes?since=${projectRef.current.revision}`);
+          ? await documentRequest<{ project?: Project }>(`/api/projects/${project.id}/merge`, { base, document: sending, baseRevision: projectRef.current.revision })
+          : await documentRequest<{ project?: Project }>(`/api/projects/${project.id}/changes?since=${projectRef.current.revision}`);
         // A request started before the modal opened may finish during a stroke.
         // Retain its result until the modal closes, then reconcile against local work.
         while (!stopped && creativeOpen.current && !manualSaving.current) await new Promise(resolve => setTimeout(resolve, 100));
@@ -534,11 +558,12 @@ export function Editor({
         history.current = rebaseHistory(history.current); future.current = rebaseHistory(future.current);
         setHistoryCount(history.current.length); setRedoCount(future.current.length);
         projectRef.current = remote; docRef.current = merged;
-        setProject(remote); setDoc(merged); setSaved(JSON.stringify(remote.document)); onProject(remote); setSyncStatus('Live · synced');
+        setProject(remote); setDoc(merged); setSaved(documentFingerprint(remote.document)); onProject(remote); setSyncStatus('Live · synced');
         if (excluded) notify(`${excluded} undo states overlap a remote edit and were removed to protect that edit.`);
       } catch (e) {
+        if (e instanceof DocumentRequestTimeout) syncUncertain.current ||= e.uncertainWrite;
         setSyncStatus(message(e));
-        if (e instanceof Error && /conflict/i.test(e.message)) { setLive(false); setError(`Live sync paused. ${e.message} Your local edits are preserved. Export JSON before reconciling.`); }
+        if (e instanceof Error && /conflict|timed out/i.test(e.message)) { setLive(false); setError(`Live sync paused. ${e.message} Your local edits are preserved. Export JSON before reconciling.`); }
       } finally { syncing.current = false; }
     };
     const timer = window.setInterval(() => { void synchronize(); }, 1200);
@@ -1046,6 +1071,7 @@ export function Editor({
     }
   }
   async function publish() {
+    if (syncUncertain.current) { setError("Reload the project to reconcile the timed-out save before sharing."); return; }
     if (dirty) {
       setError("Save your latest edits before publishing a snapshot.");
       return;
@@ -1064,7 +1090,7 @@ export function Editor({
     }
   }
   async function exportFile(format: string, local = false) {
-    local ||= ['react', 'glb', 'gltf'].includes(format);
+    local ||= ['json', 'react', 'glb', 'gltf'].includes(format);
     setBusy(`Exporting ${format.toUpperCase()}`);
     setError("");
     setFailedExport("");
@@ -1083,15 +1109,17 @@ export function Editor({
         } else await exportDesign(doc, format, pageIndex);
       } else {
         let revision = projectRef.current.revision;
-        if (JSON.stringify(docRef.current) !== saved) {
+        if (documentFingerprint(docRef.current) !== saved) {
           const sending = clone(docRef.current);
-          const result = await put<{ project: Project }>(
+          const result = await saveDocument<{ project: Project }>(
             `/api/projects/${project.id}/document`,
             { document: sending, expectedRevision: revision },
           );
           setProject(result.project);
           onProject(result.project);
-          setSaved(JSON.stringify(sending));
+          const merged = mergeDocuments(sending, docRef.current, result.project.document);
+          projectRef.current = result.project; docRef.current = merged; setDoc(merged);
+          setSaved(documentFingerprint(result.project.document));
           revision = result.project.revision;
         }
         if (format === "google") setGoogleUrl(await googleSlides(project.id));
@@ -1304,7 +1332,7 @@ export function Editor({
         inputSchema: { type: "object", properties: {} },
         execute: async () => {
           const sending = clone(docRef.current);
-          const response = await put<{ project: Project }>(
+          const response = await saveDocument<{ project: Project }>(
             `/api/projects/${projectRef.current.id}/document`,
             {
               document: sending,
@@ -1312,7 +1340,9 @@ export function Editor({
             },
           );
           setProject(response.project);
-          setSaved(JSON.stringify(sending));
+          const merged = mergeDocuments(sending, docRef.current, response.project.document);
+          projectRef.current = response.project; docRef.current = merged; setDoc(merged);
+          setSaved(documentFingerprint(response.project.document));
           onProject(response.project);
           return result({ revision: response.project.revision });
         },
@@ -1605,11 +1635,13 @@ export function Editor({
             <Redo2 size={18} />
           </button>
           <span className="toolbar-divider" />
+          <button className={`button small ${!preview ? "selected" : ""}`} aria-pressed={!preview} onClick={() => setPreview(false)}><Pencil size={15}/> Edit</button>
           <button
             className={`button small preview-button ${preview ? "selected" : ""}`}
-            onClick={() => setPreview(!preview)}
+            aria-pressed={preview}
+            onClick={() => setPreview(true)}
           >
-            {preview ? <Pencil size={15}/> : <Play size={15}/>} {preview ? "Edit" : "Preview"}
+            <Play size={15}/> Preview
           </button>
           <button
             className="button small export-button"
@@ -2092,7 +2124,7 @@ export function Editor({
               <button
                 className="button primary small"
                 onClick={async () => {
-                  if(proposalGuard){try{const {project:next}=await put<{project:Project}>(`/api/projects/${project.id}/document`,{document:proposal,expectedRevision:proposalGuard.baseRevision,expectedBriefRevision:proposalGuard.baseBriefRevision});remember();setDoc(next.document);docRef.current=next.document;setProject(next);onProject(next);setSaved(JSON.stringify(next.document));setProposal(null);setProposalGuard(null);notify('Proposal applied and saved.');}catch(e){setError(message(e));}return;}
+                  if(proposalGuard){try{const {project:next}=await saveDocument<{project:Project}>(`/api/projects/${project.id}/document`,{document:proposal,expectedRevision:proposalGuard.baseRevision,expectedBriefRevision:proposalGuard.baseBriefRevision});remember();setDoc(next.document);docRef.current=next.document;setProject(next);onProject(next);setSaved(documentFingerprint(next.document));setProposal(null);setProposalGuard(null);notify('Proposal applied and saved.');}catch(e){setError(message(e));}return;}
                   remember();
                   setDoc(proposal);
                   setProposal(null);
@@ -2143,6 +2175,7 @@ export function Editor({
             {displayed.kind === "3d" ? (
               <Suspense fallback={<Busy label="Opening 3D viewport…" />}>
                 <SceneView
+                  onDocument={preview ? undefined : next => change(d => Object.assign(d, next))}
                   page={page}
                   theme={displayed.theme}
                   selected={selected}
