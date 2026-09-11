@@ -36,7 +36,7 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions']);
   expect(schema.supportedDocumentVersions).toEqual([1, 2]);
   expect(schema.paintingCommand.required).toEqual(expect.arrayContaining(['expectedRevision', 'expectedGeneration', 'operationId', 'paintingId', 'layerId', 'action']));
   expect(schema.sceneCommands.oneOf.map((command: any) => command.properties.action.const)).toContain('rig-quadruped');

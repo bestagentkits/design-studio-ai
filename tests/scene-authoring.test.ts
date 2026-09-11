@@ -34,3 +34,50 @@ test('symmetric multi-part remesh has consistent outward faces at thin limb inte
   const mesh=next.pages[0].nodes.at(-1)!.scene!.mesh!;let volume=0;
   for(let i=0;i<mesh.indices.length;i+=3){const [a,b,c]=mesh.indices.slice(i,i+3).map(j=>new T.Vector3().fromArray(mesh.positions,j*3));volume+=a.dot(b.cross(c));}assert(volume>0);
 });
+
+test('shared rigs reuse one runtime skeleton and preserve legacy skin deformation',async()=>{
+ let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});
+ doc.pages[0].nodes.push({...structuredClone(doc.pages[0].nodes[0]),id:'eye',name:'eye',scene:{position:[0,.8,0],scale:[.1,.1,.1]}});
+ doc=command(doc,{action:'convert',nodeId:'eye'});doc=command(doc,{action:'attach',nodeId:'eye',rigNodeId:'body',bone:'head'});doc=command(doc,{action:'clip',nodeId:'body',preset:'idle'});
+ const divergent=structuredClone(doc);delete divergent.timeline!.tracks.find(t=>t.nodeId==='eye')!.clipName;assert.throws(()=>command(divergent,{action:'share-rig',nodeId:'body'}),/different bind space or animation/);
+ const muted=structuredClone(doc);muted.timeline!.tracks.find(t=>t.nodeId==='eye')!.muted=true;assert.throws(()=>command(muted,{action:'share-rig',nodeId:'body'}),/different bind space or animation/);
+ const rounded=structuredClone(doc);rounded.pages[0].nodes[1].scene!.bones![1].position[1]+=1e-14;assert.doesNotThrow(()=>command(rounded,{action:'share-rig',nodeId:'body'}));
+ const before=inspectScene(doc,undefined,.5);const next=command(doc,{action:'share-rig',nodeId:'body'});assert.equal(next.pages[0].nodes[1].scene!.rigId,'body');assert.equal(next.timeline!.tracks.length,1);assert.deepEqual(inspectScene(next,undefined,.5),before);
+ const {buildScene,animateScene,disposeScene}=await import('../src/shared/scene-runtime');const built=await buildScene(next);try{const body=built.objects.get('body') as T.SkinnedMesh,eye=built.objects.get('eye') as T.SkinnedMesh;assert.equal(body.skeleton,eye.skeleton);animateScene(built.scene,next,0,.5);assert(body.skeleton.bones[4].rotation.x!==0);}finally{disposeScene(built.scene);}
+});
+test('clip edits are scoped, loop at new speed and leave source keyframes intact',()=>{
+ let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'clip',nodeId:'body',preset:'idle',start:0,duration:2});doc=command(doc,{action:'clip',nodeId:'body',preset:'wag',start:4,duration:2});const keys=structuredClone(doc.timeline!.tracks);
+ const next=command(doc,{action:'edit-clip',nodeId:'body',name:'idle-0',speed:2,amplitude:.5,repeat:2});assert.deepEqual(next.timeline!.tracks,keys);assert.equal(next.pages[0].nodes[0].scene!.clips![1].end,6);
+ const n=next.pages[0].nodes[0],a=interpolateNode(n,next,.25).scene!.bones![4].rotation![0],b=interpolateNode(n,next,1.25).scene!.bones![4].rotation![0];assert(Math.abs(a-2.5)<1e-6);assert.equal(a,b);assert.equal(interpolateNode(n,next,3).scene!.bones![4].rotation![0],0);
+});
+
+test('brush respects locked weights and vertices and edge split transfers all vertex attributes',()=>{
+ let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});doc=command(doc,{action:'morph',nodeId:'body',name:'smile',vertices:[0,1],delta:[0,.1,0]});
+ const node=doc.pages[0].nodes[0],m=node.scene!.mesh!,before=structuredClone(m),center=m.positions.slice(0,3);
+ const next=command(doc,{action:'weight-brush',nodeId:'body',bone:'head',center,radius:10,mode:'add',strength:.5,lockedVertices:[0],lockedBones:['root']});const after=next.pages[0].nodes[0].scene!.mesh!;assert.deepEqual(after.skinWeights!.slice(0,4),before.skinWeights!.slice(0,4));
+ for(let i=0;i<m.positions.length/3;i++){const weight=(mesh:typeof m)=>mesh.skinWeights!.slice(i*4,i*4+4).reduce((s,w,j)=>s+(mesh.skinIndices![i*4+j]===0?w:0),0);assert(Math.abs(weight(before)-weight(after))<1e-10);assert(Math.abs(after.skinWeights!.slice(i*4,i*4+4).reduce((a,b)=>a+b,0)-1)<1e-8);}
+ const edge=m.indices.slice(0,2),refined=command(next,{action:'split-edges',nodeId:'body',edges:[edge]}).pages[0].nodes[0].scene!.mesh!;assert.equal(refined.positions.length,m.positions.length+3);assert.equal(refined.morphTargets![0].positions.length,refined.positions.length);assert.equal(refined.uv!.length,refined.positions.length/3*2);assert.equal(refined.skinIndices!.length,refined.positions.length/3*4);
+});
+test('persistent world contact keeps a transformed foot at its target without mutating saved pose',async()=>{
+ let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});doc=command(doc,{action:'clip',nodeId:'body',preset:'walk'});
+ const node=doc.pages[0].nodes[0];node.scene!.position=[2,1,-1];node.scene!.rotation=[0,35,0];node.scene!.scale=[2,2,2];
+ const {nodeMatrix}=await import('../src/shared/scene-constraints'),{scenePose}=await import('../src/shared/scene-shared-rig');const bones=node.scene!.bones!,i=bones.findIndex(b=>b.name==='frontLeftFoot'),transform=nodeMatrix(node,doc.pages[0]);const target=new T.Vector3().setFromMatrixPosition(boneWorld(bones)[i]).applyMatrix4(transform),pole=target.clone().add(new T.Vector3(0,2,2));
+ doc=command(doc,{action:'contact',nodeId:'body',id:'foot-contact',endBone:'frontLeftFoot',target:target.toArray(),pole:pole.toArray(),start:0,end:2,maxAngle:180});const saved=JSON.stringify(doc);
+ for(let t=0;t<=2;t+=.1){const pose=scenePose(doc.pages[0].nodes[0],doc,t),foot=new T.Vector3().setFromMatrixPosition(boneWorld(pose.scene!.bones!)[i]).applyMatrix4(transform);assert(foot.distanceTo(target)<.0001);}
+ assert.equal(JSON.stringify(doc),saved);
+});
+
+test('joint loop transfers attributes and a persisted checkpoint restores the original surface',()=>{
+ let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});doc=command(doc,{action:'morph',nodeId:'body',name:'smile',vertices:[0],delta:[0,.1,0]});
+ const original=structuredClone(doc.pages[0].nodes[0].scene!.mesh!);doc=command(doc,{action:'checkpoint',nodeId:'body',outputId:'original'});doc=command(doc,{action:'insert-loop',nodeId:'body',axis:'y',offset:.13});
+ const mesh=doc.pages[0].nodes[0].scene!.mesh!;assert(mesh.positions.length>original.positions.length);assert.equal(mesh.uv!.length,mesh.positions.length/3*2);assert.equal(mesh.morphTargets![0].positions.length,mesh.positions.length);assert.deepEqual(inspectScene(doc).pages[0].nodes[0].diagnostics?.filter(d=>d.severity==='warning'),[]);
+ doc=command(doc,{action:'restore-mesh',nodeId:'body',sourceId:'original'});assert.deepEqual(doc.pages[0].nodes[0].scene!.mesh,original);
+});
+
+test('shared skin retains world-space deformation under animated character transforms',async()=>{
+ let doc=command(setup(),{action:'convert',nodeId:'body'});doc=command(doc,{action:'rig-quadruped',nodeId:'body'});doc=command(doc,{action:'bind',nodeId:'body'});
+ doc.pages[0].nodes.push({...structuredClone(doc.pages[0].nodes[0]),id:'eye',name:'eye',scene:{position:[0,.8,0],scale:[.1,.1,.1]}});doc=command(doc,{action:'convert',nodeId:'eye'});doc=command(doc,{action:'attach',nodeId:'eye',rigNodeId:'body',bone:'head'});doc=command(doc,{action:'clip',nodeId:'body',preset:'idle'});
+ for(const n of doc.pages[0].nodes){n.scene!.position=[2,1,-1];n.scene!.scale=[1.5,1.5,1.5];doc.timeline!.tracks.push({id:n.id+'-move',nodeId:n.id,keyframes:[{time:0,values:{'scene.position.x':2}},{time:2,values:{'scene.position.x':3}}]});}
+ const shared=command(doc,{action:'share-rig',nodeId:'body'}),{buildScene,animateScene,disposeScene}=await import('../src/shared/scene-runtime'),old=await buildScene(doc),next=await buildScene(shared);
+ try{for(const time of [0,.5,1,2]){animateScene(old.scene,doc,0,time);animateScene(next.scene,shared,0,time);old.scene.updateMatrixWorld(true);next.scene.updateMatrixWorld(true);for(const id of ['body','eye']){const a=old.objects.get(id) as T.SkinnedMesh,b=next.objects.get(id) as T.SkinnedMesh;a.skeleton.update();b.skeleton.update();for(let i=0;i<20;i++){const p=a.getVertexPosition(i,new T.Vector3()).applyMatrix4(a.matrixWorld),q=b.getVertexPosition(i,new T.Vector3()).applyMatrix4(b.matrixWorld);assert(p.distanceTo(q)<1e-5);}}}}finally{disposeScene(old.scene);disposeScene(next.scene);}
+});

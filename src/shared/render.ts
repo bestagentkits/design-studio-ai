@@ -22,16 +22,24 @@ export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0)
   const scene = node.scene ? (() => { const { mesh, ...state } = node.scene; return { ...structuredClone(state), ...(mesh ? {mesh} : {}) }; })() : undefined;
   const result = { ...node, style: { ...node.style }, ...(scene ? {scene} : {}) };
   for (const track of doc.timeline?.tracks.filter(track => track.nodeId === node.id && !track.muted) ?? []) {
+    const owner = (node.scene?.rigId??node.data?.rigSourceId) ? doc.pages.flatMap(p=>p.nodes).find(n=>n.id===(node.scene?.rigId??node.data?.rigSourceId)) : node;
+    const clip=track.clipName?owner?.scene?.clips?.find(c=>c.name===track.clipName):undefined;
+    if(clip&&(time<clip.start||time>clip.end))continue;
+    const duration=clip?.sourceDuration??(clip?clip.end-clip.start:0);
+    const elapsed=clip?(time-clip.start)*(clip.speed??1):0;
+    const sampleTime=clip?clip.start+(time===clip.end?duration:elapsed%duration):time;
+    const blend=clip?.blend?Math.max(0,Math.min(1,(time-clip.start)/clip.blend,(clip.end-time)/clip.blend)):1;
     const frames = [...track.keyframes].sort((a, b) => a.time - b.time);
     const keys = new Set(frames.flatMap(f => Object.keys(f.values)));
     for (const key of keys) {
       const keyed = frames.filter(f => key in f.values);
       if (!keyed.length) continue;
-      const before = [...keyed].reverse().find(f => f.time <= time) ?? keyed[0];
-      const after = keyed.find(f => f.time >= time) ?? keyed[keyed.length - 1];
-      const mix = before.time === after.time ? 0 : Math.max(0, Math.min(1, (time - before.time) / (after.time - before.time)));
+      const before = [...keyed].reverse().find(f => f.time <= sampleTime) ?? keyed[0];
+      const after = keyed.find(f => f.time >= sampleTime) ?? keyed[keyed.length - 1];
+      const mix = before.time === after.time ? 0 : Math.max(0, Math.min(1, (sampleTime - before.time) / (after.time - before.time)));
       const a = before.values[key], b = after.values[key];
-      const value = typeof a === 'number' && typeof b === 'number' ? a + (b - a) * ease(mix, before.easing) : a;
+      let value = typeof a === 'number' && typeof b === 'number' ? a + (b - a) * ease(mix, before.easing) : a;
+      if(clip&&typeof value==='number'){const match=/^scene\.bones\.(\d+)\.(position|rotation)\.([xyz])$/.exec(key);if(match){const bone=node.scene?.bones?.[+match[1]],field=match[2] as 'position'|'rotation',axis='xyz'.indexOf(match[3]);const base=(field==='rotation'?bone?.bindRotation:bone?.position)?.[axis]??0;const previous=result.scene?.bones?.[+match[1]]?.[field]?.[axis]??base;value=previous+(base+(value-base)*(clip.amplitude??1)-previous)*blend;}}
       if (['x', 'y', 'width', 'height', 'rotation', 'opacity'].includes(key) && typeof value === 'number') Object.assign(result, { [key]: value });
       else if (['fill', 'fontSize', 'borderRadius', 'strokeWidth', 'stroke'].includes(key)) result.style[key] = value;
       else if (typeof value === 'number') {

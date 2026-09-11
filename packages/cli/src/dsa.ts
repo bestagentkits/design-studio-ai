@@ -1,3 +1,4 @@
+import {registerOperationCommands} from './operation-commands';
 import { registerSceneCommands } from './scene-commands';
 import { paintingCommandSchema } from '../../../src/shared/painting-command';
 import { publicCreativeProjection } from '../../../src/shared/public-creative-projection';
@@ -24,6 +25,7 @@ program.configureOutput({ writeErr: () => {} });
 const client = () => new Client(program.opts());
 registerDesignSystemCommands(program, client);
 registerSceneCommands(program, client);
+registerOperationCommands(program, client);
 registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;
@@ -131,8 +133,8 @@ projects.command('thumbnail <id>').description('Download a persistent saved-revi
   if (response.status === 202) { output({ ...(await response.json() as object), retryAfterSeconds: 2 }); return; }
   await outputFile(options.output, new Uint8Array(await response.arrayBuffer()), { format: 'png' });
 });
-projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, mp4, react (ZIP), glb, gltf, motion (ZIP), png-sequence (ZIP), spritesheet (ZIP)').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--start <seconds>', 'Frame export start time').option('--end <seconds>', 'Frame export end time').option('--fps <number>', 'Frame export FPS').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
-  if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf', 'motion', 'png-sequence', 'spritesheet'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4, react, glb, gltf, motion, png-sequence, spritesheet. Use google-slides for Google Slides.');
+projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, mp4, react (ZIP), glb, gltf, motion (ZIP), png-sequence (ZIP), spritesheet (ZIP), scene-angles (ZIP)').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--start <seconds>', 'Frame export start time').option('--end <seconds>', 'Frame export end time').option('--fps <number>', 'Frame export FPS').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
+  if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf', 'motion', 'png-sequence', 'spritesheet', 'scene-angles'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4, react, glb, gltf, motion, png-sequence, spritesheet, scene-angles. Use google-slides for Google Slides.');
   const destination = options.output ?? options.out;
   const binary = !['json', 'html', 'svg', 'gltf'].includes(options.format);
   if (binary && (!destination || destination === '-')) throw new CliError('file_required', 'Binary exports require --output FILE.');

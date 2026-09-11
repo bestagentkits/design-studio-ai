@@ -3250,6 +3250,23 @@ details summary {
   }
 }
 @media (max-width: 760px) {
+  .editor-header {
+    height: auto;
+    flex-wrap: wrap;
+    padding: var(--s2);
+  }
+  .editor-header .editor-heading,
+  .editor-header .editor-header-actions {
+    flex: 1 0 100%;
+    min-width: 0;
+  }
+  .editor-header .editor-header-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .editor-header .operations-button > span {
+    display: none;
+  }
   .appearance-trigger {
     width: 44px;
     height: 44px;

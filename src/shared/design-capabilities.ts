@@ -23,7 +23,7 @@ export const easingSchema = z.union([
   z.tuple([number.min(0).max(1), number.min(-5).max(5), number.min(0).max(1), number.min(-5).max(5)]),
 ]);
 export const keyframeSchema = z.object({ time: number.min(0).max(3600), values: z.record(z.string().max(80), z.union([z.string().max(2000), number])), easing: easingSchema.optional() });
-export const trackSchema = z.object({ id: z.string().min(1).max(120), nodeId: z.string().min(1).max(120), keyframes: z.array(keyframeSchema).max(2000), muted: z.boolean().optional(), locked: z.boolean().optional() });
+export const trackSchema = z.object({ clipName: z.string().min(1).max(80).optional(), id: z.string().min(1).max(120), nodeId: z.string().min(1).max(120), keyframes: z.array(keyframeSchema).max(2000), muted: z.boolean().optional(), locked: z.boolean().optional() });
 export const timelineSchema = z.object({ duration: number.min(.1).max(3600), fps: number.min(1).max(60), tracks: z.array(trackSchema).max(2000) });
 export const vectorSchema = z.tuple([number.min(-100000).max(100000), number.min(-100000).max(100000), number.min(-100000).max(100000)]);
 export const meshSchema = z.object({
@@ -46,9 +46,11 @@ export const meshSchema = z.object({
 export const sceneObjectSchema = z.object({
   position: vectorSchema.optional(), rotation: vectorSchema.optional(), scale: vectorSchema.optional(),
   mesh: meshSchema.optional(),
-  clips: z.array(z.object({name:z.string().min(1).max(80),start:number.min(0).max(3600),end:number.min(0).max(3600)}).refine(c=>c.end>c.start,'Clip end must follow start')).max(64).optional(),
+  constraints:z.array(z.object({id:z.string().min(1).max(120),endBone:z.string().min(1).max(120),target:vectorSchema,pole:vectorSchema,start:number.min(0).max(3600),end:number.min(0).max(3600),maxAngle:number.min(1).max(180),groundHeight:number.optional(),enabled:z.boolean()})).max(32).optional(),
+  rigId: z.string().min(1).max(120).optional(),
+  clips: z.array(z.object({name:z.string().min(1).max(80),start:number.min(0).max(3600),end:number.min(0).max(3600),sourceDuration:number.positive().max(3600).optional(),speed:number.min(.1).max(4).optional(),amplitude:number.min(0).max(2).optional(),repeat:z.number().int().min(1).max(20).optional(),blend:number.min(0).max(5).optional()}).refine(c=>c.end>c.start,'Clip end must follow start')).max(64).optional(),
   morphWeights: z.record(z.string().max(60), number.min(0).max(1)).optional(),
-  material: z.object({ paint: z.array(z.object({ uv: z.tuple([number.min(0).max(1), number.min(0).max(1)]), radius: number.min(.001).max(1), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) })).max(256).optional(), color: z.string().max(80).optional(), metalness: number.min(0).max(1).optional(), roughness: number.min(0).max(1).optional(), wireframe: z.boolean().optional(), doubleSided: z.boolean().optional(), textureAssetId: z.string().max(120).optional() }).optional(),
+  material: z.object({textureResolution:z.union([z.literal(256),z.literal(512),z.literal(1024),z.literal(2048)]).optional(),layers:z.array(z.object({id:z.string().min(1).max(120),name:z.string().min(1).max(80),map:z.enum(['color','normal','roughness']),opacity:number.min(0).max(1),visible:z.boolean().optional(),strokes:z.array(z.object({uv:z.tuple([number.min(0).max(1),number.min(0).max(1)]),radius:number.min(.001).max(1),color:z.string().regex(/^#[0-9a-fA-F]{6}$/)})).max(256)})).max(8).optional(), paint: z.array(z.object({ uv: z.tuple([number.min(0).max(1), number.min(0).max(1)]), radius: number.min(.001).max(1), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) })).max(256).optional(), color: z.string().max(80).optional(), metalness: number.min(0).max(1).optional(), roughness: number.min(0).max(1).optional(), wireframe: z.boolean().optional(), doubleSided: z.boolean().optional(), textureAssetId: z.string().max(120).optional() }).optional(),
   bones: z.array(z.object({ name: z.string().max(120), parent: z.number().int().min(-1).max(255), position: vectorSchema, rotation: vectorSchema.optional(), bindRotation: vectorSchema.optional() })).max(256).optional(),
 });
 export const sceneSchema = z.object({ camera: z.object({ position: vectorSchema, target: vectorSchema, fov: number.min(10).max(120) }), ambient: number.min(0).max(10), light: z.object({ position: vectorSchema, intensity: number.min(0).max(20), color: z.string().max(80) }) });

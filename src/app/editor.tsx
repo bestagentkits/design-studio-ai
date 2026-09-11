@@ -1,3 +1,7 @@
+import {OperationStatus} from './operation-status';
+import type {OperationJob} from '../shared/operation-jobs';
+import {startOperation,operationPath,runOperation} from './operation-client';
+import {operationJobSchema} from '../shared/operation-jobs';
 import {useMemo} from 'react';
 import {documentRequest, DocumentRequestTimeout} from './document-request';
 import {documentFingerprint} from '../shared/document-fingerprint';
@@ -482,7 +486,7 @@ export function Editor({
   const manualSaving = useRef(false), syncUncertain = useRef(false);
   async function saveDocument<T>(path: string, body: unknown): Promise<T> {
     if (syncUncertain.current) throw new Error("Reload the project to reconcile the timed-out save before saving again.");
-    try { return await documentRequest<T>(path, body, 'PUT'); }
+    try { const input=operationJobSchema.parse({kind:'save',operationId:crypto.randomUUID(),input:body});return await (await runOperation(project.id,input,undefined)).json() as T; }
     catch (error) {
       if (error instanceof DocumentRequestTimeout && error.uncertainWrite) {
         syncUncertain.current = true;
@@ -510,10 +514,7 @@ export function Editor({
       const sending = clone(docRef.current), base = clone(projectRef.current.document);
       const response = live ? await documentRequest<{ project: Project }>(`/api/projects/${project.id}/merge`, {
         base, document: sending, baseRevision: projectRef.current.revision,
-      }) : await documentRequest<{ project: Project }>(
-        `/api/projects/${project.id}/document`,
-        { document: sending, expectedRevision: projectRef.current.revision }, "PUT",
-      );
+      }) : await saveDocument<{ project: Project }>(`/api/projects/${project.id}/document`,{ document: sending, expectedRevision: projectRef.current.revision });
       const merged = mergeDocuments(sending, docRef.current, response.project.document);
       let excluded = 0;
       const rebase = (entries: DesignDocument[]) => entries.flatMap(entry => { try { return [mergeDocuments(sending, entry, response.project.document)]; } catch { excluded++; return []; } });
@@ -1124,17 +1125,8 @@ export function Editor({
         }
         if (format === "google") setGoogleUrl(await googleSlides(project.id));
         else {
-          const response = await fetch(`/api/projects/${project.id}/export`, {
-            method: "POST",
-            credentials: "same-origin",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              format,
-              pageIndex,
-              expectedRevision: revision,
-              ...(['png-sequence','spritesheet'].includes(format)?{start:frameStart,end:frameEnd,fps:frameFps}:{}),
-            }),
-          });
+          const request=operationJobSchema.parse({kind:'export',operationId:crypto.randomUUID(),input:{format,pageIndex,expectedRevision:revision,...(['png-sequence','spritesheet'].includes(format)?{start:frameStart,end:frameEnd,fps:frameFps}:{})}});
+          const response=await runOperation(project.id,request,undefined);
           if (!response.ok) {
             const data = (await response.json().catch(() => null)) as {
               error?: { message?: string };
@@ -1146,7 +1138,7 @@ export function Editor({
           }
           const blob = await response.blob();
           download(
-            `${doc.name.replace(/[^a-z0-9 _-]/gi, "") || "design"}.${['motion','png-sequence','spritesheet'].includes(format)?'zip':format}`,
+            `${doc.name.replace(/[^a-z0-9 _-]/gi, "") || "design"}.${['motion','png-sequence','spritesheet','scene-angles'].includes(format)?'zip':format}`,
             blob,
             blob.type,
           );
@@ -1160,7 +1152,7 @@ export function Editor({
       );
     } catch (e) {
       setError(message(e));
-      if (!local && !["google", "mp4", "motion", "png-sequence", "spritesheet"].includes(format))
+      if (!local && !["google", "mp4", "motion", "png-sequence", "spritesheet", "scene-angles"].includes(format))
         setFailedExport(format);
     } finally {
       setBusy("");
@@ -1215,10 +1207,21 @@ export function Editor({
       "studio_update_brief",
       "studio_approve_brief",
       "studio_inspect_design",
+      "studio_start_save",
+      "studio_reconcile_save",
     ];
     let unregisterAdditional: (() => void) | undefined;
     try {
       unregisterAdditional = registerDesignTools(context, () => docRef.current, next => change(d => Object.assign(d, next)));
+      context.registerTool({name:'studio_start_save',description:'Start a durable save of the current local document and return immediately. Retain operationId; poll the API operation tool, then reconcile. Reuse the ID only with the same document and revision.',inputSchema:{type:'object',properties:{operationId:{type:'string'}},required:['operationId']},execute:async args=>result(await startOperation(projectRef.current.id,operationJobSchema.parse({kind:'save',operationId:args.operationId,input:{document:clone(docRef.current),expectedRevision:projectRef.current.revision}})))});
+      context.registerTool({name:'studio_reconcile_save',description:'Reconcile a completed save receipt with local edits. Requires the same base revision; does not discard later local changes.',inputSchema:{type:'object',properties:{operationId:{type:'string'}},required:['operationId']},execute:async args=>{
+        const {operation}=await api<{operation:OperationJob}>(operationPath(projectRef.current.id,String(args.operationId)));
+        if(operation.kind!=='save'||operation.status!=='succeeded')throw new Error('Wait for a successful save job');
+        const {project:receipt}=await api<{project:Project}>(operation.resultUrl!);
+        if(receipt.revision!==projectRef.current.revision+1&&receipt.revision!==projectRef.current.revision)throw new Error('Reload and reconcile the newer project revision');
+        const merged=mergeDocuments(projectRef.current.document,docRef.current,receipt.document);
+        setProject(receipt);projectRef.current=receipt;docRef.current=merged;setDoc(merged);setSaved(documentFingerprint(receipt.document));onProject(receipt);return result({revision:receipt.revision});
+      }});
       context.registerTool({
         name: toolNames[0]!,
         description:
@@ -1634,6 +1637,7 @@ export function Editor({
           >
             <Redo2 size={18} />
           </button>
+          <OperationStatus projectId={project.id}/>
           <span className="toolbar-divider" />
           <button className={`button small ${!preview ? "selected" : ""}`} aria-pressed={!preview} onClick={() => setPreview(false)}><Pencil size={15}/> Edit</button>
           <button
@@ -2175,6 +2179,7 @@ export function Editor({
             {displayed.kind === "3d" ? (
               <Suspense fallback={<Busy label="Opening 3D viewport…" />}>
                 <SceneView
+                  onSeek={value=>{setTime(value);setPlaying(false);}}
                   onDocument={preview ? undefined : next => change(d => Object.assign(d, next))}
                   page={page}
                   theme={displayed.theme}
@@ -2466,6 +2471,7 @@ export function Editor({
             <div className="export-grid">
               {[
                 ...(['web', 'wireframe'].includes(doc.kind) ? [{ id: 'react', name: 'React prototype', detail: 'Runnable source + assets' }] : []),
+                ...(page.nodes.some(n=>n.type==='model3d')?[{id:'scene-angles',name:'Four angle views',detail:'PNG ZIP around the saved camera target'}]:[]),
                 ...(doc.characters?.length?[{id:'motion',name:'Motion package',detail:'Native rig + portable player'},{id:'png-sequence',name:'PNG sequence ZIP',detail:'Deterministic frames + manifest'},{id:'spritesheet',name:'Spritesheet ZIP',detail:'Atlas image + frame coordinates'}]:[]),
                 ...(doc.kind === '3d' ? [{ id: 'glb', name: 'GLB model', detail: 'Scene, materials & animation' }, { id: 'gltf', name: 'glTF scene', detail: 'Portable 3D source' }] : []),
                 { id: "png", name: "PNG image", detail: "Current page" },

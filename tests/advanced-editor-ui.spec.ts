@@ -27,7 +27,7 @@ async function read(page: Page, id: string) {
   return (await response.json() as { project: Project }).project;
 }
 async function save(page: Page, id: string) {
-  const response = page.waitForResponse(r => r.url().endsWith(`/api/projects/${id}/document`) && r.request().method() === 'PUT');
+  const response = page.waitForResponse(r => r.url().includes(`/api/projects/${id}/operations/`) && r.url().endsWith('/result') && r.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save', exact: true }).click(); expect((await response).status()).toBe(200);
   await expect(page.getByRole('button', { name: 'Save', exact: true })).toBeDisabled();
 }

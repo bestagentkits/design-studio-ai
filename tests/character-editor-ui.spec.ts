@@ -19,6 +19,7 @@ test('create rig, import real PNG, animate, compose, persist and export frames',
  await dialog.getByRole('button',{name:'Compose',exact:true}).click();await dialog.getByRole('button',{name:'Place clip in scene',exact:true}).click();
  await dialog.getByRole('button',{name:'Close dialog',exact:true}).click();
  await page.getByRole('button',{name:'Save',exact:true}).click();await expect(page.getByRole('button',{name:'Save',exact:true})).toBeDisabled();
+ await expect.poll(async()=> (await (await page.request.get(`/api/projects/${project.id}`)).json()).project.revision).toBe(project.revision+1);
  const saved=(await (await page.request.get(`/api/projects/${project.id}`)).json()).project;expect(saved.document.schemaVersion).toBe(2);expect(saved.document.characters[0].clips[0].channels).toHaveLength(5);
  const old={...saved.document,schemaVersion:1,characters:undefined,pages:saved.document.pages.map((p:any)=>({...p,nodes:[]}))};const downgrade=await page.request.put(`/api/projects/${project.id}/document`,{headers,data:{document:old,expectedRevision:saved.revision}});expect(downgrade.status()).toBe(409);
  const inspect=await page.request.get(`/api/projects/${project.id}/motion?nodeId=${saved.document.pages[0].nodes[0].id}&time=1`);expect(inspect.status()).toBe(200);expect((await inspect.json()).characters[0].pose.bones[saved.document.characters[0].bones[0].id].rotation).toBe(45);

@@ -90,3 +90,9 @@ Native diagram appearance uses `diagram-style` with a partial `style`, optional 
 ## 3D characters
 
 `dsa scene schema` discovers commands. `dsa scene inspect PROJECT --page PAGE --time 0.5` reads diagnostics. `dsa scene command PROJECT --page PAGE --revision N --file command.json` previews; add `--apply` to save through the server revision guard. See the repository [3D guide](../../docs/3d-characters.md).
+
+### Durable 3D workflow
+
+`dsa scene schema` discovers authoring commands (shared rigs, clip edits, contacts, brushes, checkpoints, loop cuts and material layers). `dsa scene scan PROJECT --page PAGE --samples 25` returns complete-animation repair locations and contact errors. `projects export --format scene-angles --start 0.5 --output views.zip` captures four views.
+
+Use `dsa operations start PROJECT --file job.json`, `operations status PROJECT ID`, and `operations result PROJECT ID --out result.glb` for durable saves/exports. Job JSON contains `kind`, a stable `operationId`, and `input` with normal save/export fields and `expectedRevision`. Reuse the identical ID/payload after a timeout. Download only after `succeeded`; a save result is its committed project receipt. Artifacts stay private and are retained until project deletion.

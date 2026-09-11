@@ -52,9 +52,12 @@ const terminate = () => { runner?.kill('SIGTERM'); server.kill('SIGTERM'); };
 process.once('SIGINT', terminate); process.once('SIGTERM', terminate);
 try {
   let ready = false;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // Cold TypeScript startup on a busy host can exceed ten seconds. Wait for
+  // this owned process and its health endpoint, with a bounded readiness budget.
+  const startupDeadline = Date.now() + 30000;
+  while (Date.now() < startupDeadline) {
     if (server.exitCode !== null) throw new Error('E2E server exited before becoming ready');
-    try { ready = listening && (await fetch(origin + '/api/health')).ok && server.exitCode === null; } catch { /* Startup has not bound the port yet. */ }
+    try { ready = listening && (await fetch(origin + '/api/health', {signal:AbortSignal.timeout(1000)})).ok && server.exitCode === null; } catch { /* Startup has not bound the port yet. */ }
     if (ready) break;
     await new Promise(accept => setTimeout(accept, 100));
   }
