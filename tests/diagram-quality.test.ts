@@ -104,3 +104,10 @@ test('thin connector hit tolerance follows its actual curve',()=>{
  assert.equal(diagramEdgeHitTarget(board,{x:point.x,y:point.y+2},6)?.id,'line');
  assert.equal(diagramEdgeHitTarget(board,{x:-500,y:-500},6),undefined);
 });
+
+test('transparent connector text survives unrelated appearance updates',()=>{
+ let d=document();d.boards[0].elements=[diagramNode('source','flowchart','process','A'),diagramNode('target','flowchart','process','B',400),diagramEdge('edge','source','target','Label')];
+ d=upgradeDocument(applyDiagramOperation(d,{op:'diagram-edge',boardId:'b',edgeId:'edge',labelColor:'none'}));
+ d=upgradeDocument(applyDiagramOperation(d,{op:'diagram-style',boardId:'b',elementIds:['edge'],style:{roughness:2},setDefault:false}));
+ const edge=d.boards[0].elements[2];assert.equal(edge.type,'connector');if(edge.type==='connector')assert.equal(edge.labelColor,'none');
+});
