@@ -20,12 +20,14 @@ test('connection metadata rejects secret fields and unsafe endpoint syntax', () 
   const config = { adapter: 'mcp', authMode: 'anonymous', endpoint: 'https://example.com/mcp' };
   const create = { displayName: 'My tools', config };
   assert.ok(connectionCreateSchema.safeParse(create).success);
-  for (const endpoint of ['not a URL', '', 'http://example.com/mcp', 'https://user:pass@example.com', 'https://example.com/?token=secret', 'https://example.com/#token'])
+  assert.ok(connectionCreateSchema.safeParse({ ...create, config: { ...config, endpoint: 'https://example.com/mcp?tenant=one' } }).success);
+  for (const endpoint of ['not a URL', '', 'http://example.com/mcp', 'https://user:pass@example.com', 'https://example.com/?token=secret', 'https://example.com/#token', 'https://example.com/#', 'https://example.com/?code_verifier=private', 'https://example.com/?jwt=private'])
     assert.equal(connectionCreateSchema.safeParse({ ...create, config: { ...config, endpoint } }).success, false);
   assert.equal(connectionCreateSchema.safeParse({ ...create, accessToken: 'never serialize' }).success, false);
   const metadata = { ...create, id: 'c-1', revision: 1, status: 'connected', remoteIdentity: null, scopes: [], capabilityFingerprint: fingerprint, updatedAt: timestamp };
   assert.ok(connectionMetadataSchema.safeParse(metadata).success);
-  assert.equal(connectionMetadataSchema.safeParse({ ...metadata, config: { ...config, authMode: 'oauth' } }).success, false);
+  assert.equal(connectionMetadataSchema.safeParse({ ...metadata, config: { ...config, authMode: 'oauth' } }).success, true);
+  assert.equal(connectionMetadataSchema.safeParse({ ...metadata, config: { adapter: 'github', authMode: 'oauth' } }).success, false);
   assert.equal(connectionMetadataSchema.safeParse({ ...metadata, encryptedCredential: 'private' }).success, false);
 });
 

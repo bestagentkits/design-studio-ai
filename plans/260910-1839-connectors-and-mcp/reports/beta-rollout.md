@@ -32,3 +32,7 @@ The first workflow passed verify and applied/deployed beta successfully (version
 ## Live status
 
 Final CI passed verify and deploy for commit `2b5ddc446edcb000f5e42bcc5e0afdef6f4ff4d6`. Cloudflare deployment `dba4583b-9ae2-41a3-b55b-d6d880f84d5b` at 2026-09-10T12:44:31.525841Z records that exact SHA in its deployment message. Worker version `08c853e9-eac9-4778-af60-ee29f57211b7` receives 100% traffic. Public beta health and both OAuth discovery documents passed again after deployment. Product connector acceptance remains incomplete regardless of beta health.
+
+## Transport update and Node regression repair
+
+Transport commit `f62316a` failed beta verify on Node request reconstruction and was not deployed. Repair `0660b5e6199dc1ee0a9f51d6138d435f4c90e932` passed [CI 34483882540](https://github.com/bestagentkits/design-studio-ai/actions/runs/34483882540), including verify and deploy. Cloudflare lists version `015cba55-0bb7-4264-b8cb-8ff106f86e35`, created 2026-09-10T13:42:53.577Z, at 100% traffic with that exact SHA. Public beta health returned OK after deployment. Lifecycle migrations and adapters still in the worktree were excluded from this targeted repair.

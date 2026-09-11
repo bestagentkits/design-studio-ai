@@ -1,3 +1,4 @@
+import { apiEndpoints } from '../src/shared/api-reference';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
@@ -81,6 +82,11 @@ test('MCP, CLI and browser tools share versioned libraries, discovery and multip
     await page.context().addCookies([{ name: 'studio_session', value: cookie.slice(cookie.indexOf('=') + 1), url: baseUrl }]);
     await page.goto(baseUrl + '/api/health'); await page.addScriptTag({ content: bundled.outputFiles[0].text });
     await page.evaluate(document => (globalThis as any).studioTools.initialize(document), project.document);
+    const registered = await page.evaluate(() => [...(globalThis as any).registry.keys()] as string[]);
+    for (const endpoint of apiEndpoints) {
+      const name = `studio_api_${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
+      assert.equal(registered.includes(name), endpoint.agentExposure === 'allowed', `${endpoint.method} ${endpoint.path}`);
+    }
     const browserTool = async <T>(name: string, args: Record<string, unknown> = {}): Promise<T> => {
       const result = await page.evaluate(async ({ name, args }) => {
         const tool = (globalThis as any).registry.get(name); if (!tool) throw new Error(`Tool not registered: ${name}`); return await tool.execute(args);

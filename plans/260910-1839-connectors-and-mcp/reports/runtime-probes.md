@@ -115,7 +115,7 @@ Added `src/shared/connectors.ts`, `connector-values.ts`, `connector-operations.t
 
 These define strict metadata/configuration, principals, selected sources, policy grants, immutable snapshot provenance, operation pins/approval metadata, state transitions and bounded run contracts. They reject self-approval fields, secret metadata fields, unbounded/non-JSON values, external JSON Schema references, traversal paths and inconsistent lease/approval/run states.
 
-They are not yet imported by application routes or clients. Ownership, authorization, credential handling, current revision comparisons and approval consumption must still be enforced by future server services. Endpoint schema validation is syntax-only; it does not block private addresses or authorize outbound fetches. All query strings are currently rejected; revisit legitimate non-credential query requirements when integrating remote configuration. Run budget values remain provisional ceilings, not measured production guarantees. No document/brief schema changed.
+They are not yet imported by application routes or clients. Ownership, authorization, credential handling, current revision comparisons and approval consumption must still be enforced by future server services. Endpoint schema validation is syntax-only; it does not block private addresses or authorize outbound fetches. The shared endpoint and transport policy permits non-credential query parameters and rejects known credential-bearing names, fragments and embedded user information. Run budget values remain provisional ceilings, not measured production guarantees. No document/brief schema changed.
 
 ## Verification
 

@@ -53,3 +53,7 @@ With this wrapper, same real HTTP probe: registration201, token creation201, tok
 Owned server PIDs98053,99886,2596,3948 and the intermediate clone runtime were stopped via SIGTERM; port18844 released. Temporary harnesses live under /tmp. No production rate limits changed, no remote traffic, no repository source edits. Parent owns the production patch and focused HTTP regression tests, including streamed/chunked body-limit and cancellation coverage. This is local Node evidence, not a rerun of the full beta CI.
 
 Unresolved questions: none for the reproduced cause. Full exact-head CI remains a separate gate.
+
+## Repair verification
+
+Commit `0660b5e` materializes Node requests at the boundary. Independent review confirmed abort propagation; committed real HTTP regressions pass 3/3. The three formerly failing browser specs pass 7 desktop and 7 mobile checks. Typecheck/build pass. The full working-tree suite passed 243 tests before later lifecycle edits; that count is not an exact-commit CI result. Beta CI run 34483882540 tests the committed repair separately.

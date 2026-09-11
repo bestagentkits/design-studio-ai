@@ -21,8 +21,8 @@ export const connectionMetadataSchema = connectionCreateSchema.extend({
   scopes: z.array(z.string().min(1).max(300)).max(100),
   capabilityFingerprint: connectorHashSchema.nullable(), updatedAt: connectorTimestampSchema,
 }).superRefine((value, context) => {
-  if (value.status === 'connected' && value.config.authMode !== 'anonymous' && !value.remoteIdentity)
-    context.addIssue({ code: 'custom', message: 'Authenticated connections require a stable remote identity.' });
+  if (value.status === 'connected' && value.config.adapter !== 'mcp' && !value.remoteIdentity)
+    context.addIssue({ code: 'custom', message: 'Native account connections require a stable remote identity.' });
 });
 
 export const connectorSelectionSchema = z.discriminatedUnion('adapter', [
@@ -50,13 +50,13 @@ export const connectorToolSchema = z.strictObject({
   effect: z.enum(['read', 'write', 'unknown']),
 });
 export const sourceSnapshotSchema = z.strictObject({
-  id: connectorIdSchema, projectId: connectorIdSchema, bindingId: connectorIdSchema,
+  id: connectorIdSchema, projectId: connectorIdSchema, bindingId: connectorIdSchema.nullable(),
   adapter: connectorAdapterSchema, remoteIdentity: z.string().min(1).max(2048),
   remoteVersion: z.string().min(1).max(512), contentHash: connectorHashSchema,
   mimeType: z.string().min(1).max(120), bytes: z.number().int().nonnegative().max(20 * 1024 * 1024),
   extractionVersion: z.string().min(1).max(100), fetchedAt: connectorTimestampSchema,
   status: z.enum(['available', 'disconnected']),
-});
+}).refine(snapshot => snapshot.bindingId !== null || snapshot.status === 'disconnected', 'Unbound source copies must be disconnected.');
 export const connectorErrorCodeSchema = z.enum([
   'missing_grant', 'needs_reauthorization', 'approval_required', 'revision_conflict',
   'schema_changed', 'unsupported_protocol', 'limit_exceeded', 'outcome_unknown',

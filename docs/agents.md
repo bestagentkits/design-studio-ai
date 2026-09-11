@@ -8,7 +8,7 @@ Install the [released CLI tarball](https://github.com/bestagentkits/design-studi
 
 To build from source, install dependencies with `npm ci` and `npm ci --prefix packages/cli`, then run `npm run build --prefix packages/cli`. From `packages/cli`, run `npm pack`; install the resulting tarball with `npm install -g <path-to-tarball>`. The build also generates `dist/document.schema.json` and `dist/operations.schema.json`.
 
-Set `DESIGN_STUDIO_URL=https://studio.agentkit.best` and inject `DESIGN_STUDIO_API_KEY` from workspace Settings. `dsa` does not save a configuration file, keychain record, or login session. `--url` and `--api-key` override these values for one invocation; use environment injection to avoid shell history. HTTP is accepted for localhost development only.
+Set `DESIGN_STUDIO_URL=https://studio.agentkit.best` and inject `DESIGN_STUDIO_API_KEY` from workspace Settings. `dsa` does not save a configuration file, keychain record, or login session. `--url` and `--api-key` override these values for one invocation; use environment injection to avoid shell history. HTTP is accepted for localhost development only. Invalid Authorization headers fail authentication even when a browser session cookie is present.
 
 Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying its directory into the installed skills directory of your agent runtime. The repository layout is also suitable for a skill installer that accepts a repository and skill path. Copy the complete directory, including `references/`. The skill routes each design kind to composition and review guidance, alongside brief capture, catalog discovery, targeted edits, and authorized exports/publishing. Start with its [shared layout and quality reference](../skills/design-studio-ai/references/layout-and-quality.md); the [skill index](../skills/design-studio-ai/SKILL.md#choose-the-design-kind-guidance) links the kind-specific references.
 
@@ -102,3 +102,8 @@ Build the complete installable skill archive with `npm run pack:skill`. The [pac
 ## Provider connections
 
 Use the shared [provider guide](providers.md#official-and-custom-connections) for official DeepSeek, Gemini/OpenAI/Leonardo/Grok image generation and custom API connections. API-key MCP clients can call `list_provider_connections` to find saved custom IDs without receiving credentials. REST `/api/schema` exposes provider IDs and configuration/generation schemas; MCP and WebMCP use the same IDs. Saved custom IDs start with `custom-`. Credential management remains account/API-key only; MCP OAuth and WebMCP can generate with configured providers but cannot change credentials. CLI `providers set --help` describes base URL, API format and auth options; inject credentials through environment variables or stdin. Model catalog fallback is not proof of provider capability.
+
+
+## External connector setup boundary
+
+Experimental connection metadata is available at `/api/connections` when the operator enables connectors. API-key, OAuth and WebMCP callers require an explicit project discovery grant and `projectId`; existing Studio access does not create connector authority. Connection creation, disconnect, bearer setup and outgoing OAuth are interactive-session operations excluded from browser agent tools. The OpenAPI `x-studio-agent-exposure` field owns this distinction. Successful MCP setup does not imply tool execution or chat integration is available.

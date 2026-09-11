@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hasConnectorQueryCredentials } from './connector-url-policy';
 
 export const connectorIdSchema = z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/);
 export const connectorRevisionSchema = z.number().int().positive().max(Number.MAX_SAFE_INTEGER);
@@ -42,8 +43,8 @@ export function boundedConnectorJson(maxBytes: number, localReferencesOnly = fal
 export const connectorEndpointSchema = z.string().max(2048).url().superRefine((value, context) => {
   let url: URL;
   try { url = new URL(value); } catch { return; }
-  if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.search)
-    context.addIssue({ code: 'custom', message: 'Use an HTTPS endpoint without credentials, query or fragment.' });
+  if (url.protocol !== 'https:' || url.username || url.password || value.includes('#') || /[\x00-\x20\\]/.test(value) || hasConnectorQueryCredentials(url))
+    context.addIssue({ code: 'custom', message: 'Use an HTTPS endpoint without credentials or fragment.' });
 });
 
 export const connectorPrincipalSchema = z.discriminatedUnion('kind', [

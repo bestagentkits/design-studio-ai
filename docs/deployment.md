@@ -1,6 +1,6 @@
 # Deployment and self-hosting
 
-The live application is [studio.agentkit.best](https://studio.agentkit.best). Cloudflare and Node run the same [Hono handler](../server/index.ts). Runtime settings are owned by [.env.example](../.env.example), [wrangler.jsonc](../wrangler.jsonc), [compose.yaml](../compose.yaml), and the [Node entry point](../server/node.ts).
+The live application is [studio.agentkit.best](https://studio.agentkit.best). Cloudflare and Node run the same [Hono handler](../server/index.ts), with runtime-specific transport composition in the [Worker entry point](../server/worker.ts) and [Node entry point](../server/node.ts). Runtime settings are owned by [.env.example](../.env.example), [wrangler.jsonc](../wrangler.jsonc), [compose.yaml](../compose.yaml), and the [Node entry point](../server/node.ts).
 
 ## Local Node
 
@@ -135,3 +135,12 @@ The initial audit reported five high-severity findings through upstream browser-
 The affected browser-downloading code is not used by the Cloudflare runtime. PowerPoint raster inputs are application-generated PNGs; uploaded media passes type/signature validation, and cloud rendering blocks external fetches. These boundaries reduce exposure without erasing the upstream findings. Successful tests and deployment do not establish a clean dependency audit.
 
 For additional browser checks, install Firefox/WebKit with `npx playwright install firefox webkit`, then run `STUDIO_CROSS_BROWSER=1 npm run test:e2e -- tests/editor-ergonomics.spec.ts tests/observability-ui.spec.ts --project=firefox` (repeat with `--project=webkit`). Each invocation uses an isolated database; the default release suite covers Chromium desktop/mobile.
+
+
+## Experimental external connector setup
+
+`CONNECTORS_ENABLED=true` enables the connection metadata and MCP setup routes owned by [connector-routes.ts](../server/connector-routes.ts). It is off by default; disabled routes return `connector_unconfigured`. Set it in the Node process environment or Cloudflare Worker variables only after applying all migrations. No production or beta flag is changed merely by a local build.
+
+Outgoing OAuth publishes a first-party client metadata document at `/api/connectors/mcp/client-metadata`, using the HTTPS `APP_URL` origin and exact `/api/connectors/mcp/callback` redirect. Setup requires a signed-in browser session and matching Origin. The callback requires that same session. Successful setup verifies protocol access; project binding, tool execution and chat UI are separate work.
+
+Node startup performs bounded connector retention and private-object cleanup after migration. Authenticated connector requests also perform maintenance for Workers; project deletion queues snapshot objects durably and attempts cleanup. Failed storage deletions remain queued for a later request or restart. Preserve the existing encryption key.

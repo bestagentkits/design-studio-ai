@@ -72,36 +72,46 @@ export async function createSession(c: Context<Env>, user: User) {
   setCookie(c, 'studio_session', token, { httpOnly: true, secure: origin(c).startsWith('https:'), sameSite: 'Lax', path: '/', maxAge: 7 * 86400 });
 }
 export async function authenticate(c: Context<Env>) {
-  const bearer = c.req.header("Authorization")?.match(/^Bearer (\S+)$/)?.[1];
+  const authorization = c.req.header("Authorization");
+  const bearer = authorization?.match(/^Bearer (\S+)$/)?.[1];
   const cookie = getCookie(c, "studio_session");
   c.set("user", null);
   c.set("authMethod", null);
   c.set('tokenKind', null);
+  c.set('principal', null);
+  // Explicit malformed authorization must not inherit a more privileged browser session.
+  if (authorization !== undefined && !bearer) return;
   if (bearer) {
     const digest = await hash(bearer);
     const api = await c.env.DB.prepare(
-      "SELECT u.id,u.email,u.name FROM users u JOIN api_tokens t ON t.user_id=u.id WHERE t.hash=?",
+      "SELECT u.id,u.email,u.name,t.id AS token_id FROM users u JOIN api_tokens t ON t.user_id=u.id WHERE t.hash=?",
     )
       .bind(digest)
-      .first<User>();
+      .first<User & { token_id: string }>();
     const oauth = api
       ? null
       : await c.env.DB.prepare(
-          "SELECT u.id,u.email,u.name FROM users u JOIN oauth_tokens t ON t.user_id=u.id WHERE t.hash=? AND t.kind=? AND t.resource=? AND t.expires_at>?",
+          "SELECT u.id,u.email,u.name,t.client_id,t.family FROM users u JOIN oauth_tokens t ON t.user_id=u.id WHERE t.hash=? AND t.kind=? AND t.resource=? AND t.expires_at>?",
         )
           .bind(digest, "access", `${origin(c)}/mcp`, Date.now())
-          .first<User>();
-    c.set("user", api ?? oauth);
+          .first<User & { client_id: string; family: string }>();
+    const authenticated = api ?? oauth;
+    // Never expose private authentication identifiers through /api/auth/me.
+    c.set("user", authenticated ? { id: authenticated.id, email: authenticated.email, name: authenticated.name } : null);
+    if (api) c.set("principal", { kind: "api", userId: api.id, tokenId: api.token_id });
+    else if (oauth) c.set("principal", { kind: "oauth", userId: oauth.id, clientId: oauth.client_id, familyId: oauth.family });
     c.set("authMethod", api || oauth ? "token" : null);
     c.set('tokenKind', api ? 'api' : oauth ? 'oauth' : null);
   } else if (cookie) {
+    const digest = await hash(cookie);
     const user = await c.env.DB.prepare(
       "SELECT u.id,u.email,u.name FROM users u JOIN sessions s ON s.user_id=u.id WHERE s.hash=? AND s.expires_at>?",
     )
-      .bind(await hash(cookie), Date.now())
+      .bind(digest, Date.now())
       .first<User>();
     c.set("user", user);
     c.set("authMethod", user ? "session" : null);
+    if (user) c.set("principal", { kind: "session", userId: user.id, sessionId: digest });
   }
 }
 export async function rateLimit(c: Context<Env>, action: string, limit = 10) {

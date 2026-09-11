@@ -1,3 +1,4 @@
+import { cleanupConnectorObjects } from './connector-object-cleanup';
 import { updateEvent } from './observability-store';
 import { Hono } from "hono";
 import { z } from "zod";
@@ -354,6 +355,9 @@ projectRoutes.delete("/:id", async (c) => {
     .run();
   for (const asset of assets.results)
     await c.env.ASSETS_BUCKET.delete(asset.storage_key);
+  // Snapshot deletion queues private objects durably; cleanup failure can be retried later.
+  const { env: bindings } = c;
+  await cleanupConnectorObjects(bindings).catch(() => undefined);
   return c.json({ ok: true });
 });
 projectRoutes.post("/:id/assets", async (c) => {

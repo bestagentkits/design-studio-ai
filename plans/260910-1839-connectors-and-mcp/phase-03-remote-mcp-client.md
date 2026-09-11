@@ -1,11 +1,11 @@
 ---
 title: "Phase 3: Connect remote MCP servers and expose bounded capabilities"
-status: todo
+status: in-progress
 ---
 
 # Connect remote MCP servers and expose bounded capabilities
 
-Priority: P2. Status: pending. Depends on: 1, 2. Estimate: 5-7 engineering days.
+Priority: P2. Status: in progress (local adapter and OAuth foundation; product routes not enabled). Depends on: 1, 2. Estimate: 5-7 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 

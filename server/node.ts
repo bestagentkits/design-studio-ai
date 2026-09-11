@@ -1,3 +1,6 @@
+import { maintainConnectorState } from './connector-retention';
+import { cleanupConnectorObjects } from './connector-object-cleanup';
+import { createNodeConnectorFetch } from './connector-transport-node';
 import { serve } from "@hono/node-server";
 import { materializeNodeRequest } from './node-request';
 import { mkdir, readFile, readdir } from "node:fs/promises";
@@ -37,6 +40,8 @@ for (const name of (await readdir(resolve("migrations")))
 }
 const port = Number(process.env.PORT ?? 8787);
 const env: Bindings = {
+  CONNECTORS_ENABLED: (() => { const { env: variables } = process; return variables.CONNECTORS_ENABLED; })(),
+  CONNECTOR_FETCH: createNodeConnectorFetch(),
   GOOGLE_FONTS_API_KEY: (() => { const { env: variables } = process; return variables.GOOGLE_FONTS_API_KEY; })(),
   DB: db,
   ASSETS_BUCKET: new FileBucket(resolve(dataDir, "assets")),
@@ -59,6 +64,8 @@ const env: Bindings = {
       ? ""
       : "http://localhost:5173,http://127.0.0.1:5173"),
 };
+await maintainConnectorState(env);
+await cleanupConnectorObjects(env);
 const server = serve(
   {
     fetch: (request, connection) => {

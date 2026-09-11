@@ -1,3 +1,4 @@
+import { hasConnectorQueryCredentials } from '../src/shared/connector-url-policy';
 export class ConnectorTransportError extends Error {}
 
 // Conservative public-unicast policy, based on the IANA special-purpose registries:
@@ -57,10 +58,7 @@ export function validateConnectorUrl(input: string | URL): URL {
       /(?:^|\.)(?:localhost|local|localdomain|internal|home|lan|invalid|test|example|onion|arpa|alt)$/.test(hostname)) throw new ConnectorTransportError('Connector hostname is not a public DNS name');
     if (/(?:^|\.)example\.(?:com|net|org)$/.test(hostname)) throw new ConnectorTransportError('Connector hostname is reserved for documentation');
   }
-  for (const key of url.searchParams.keys()) {
-    const normalized = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (/(?:token|secret|password|passwd|credential|authorization|signature|apikey|accesskey)/.test(normalized) || /^(?:key|sig|auth|code|se|sp|sv|sr|srt|ss|skoid|sktid|skt|ske|sks|skv)$/.test(normalized)) throw new ConnectorTransportError('Connector URL must not contain query credentials');
-  }
+  if (hasConnectorQueryCredentials(url)) throw new ConnectorTransportError('Connector URL must not contain query credentials');
   url.hostname = hostname;
   return url;
 }

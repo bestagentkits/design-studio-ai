@@ -21,7 +21,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     execute: async () => result({ providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
   }];
   // Only first-party documented endpoints are callable; the browser supplies its own session.
-  for (const endpoint of apiEndpoints.filter(e => !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
+  for (const endpoint of apiEndpoints.filter(e => e.agentExposure === 'allowed')) {
     const operation = `${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
     tools.push({ name: `studio_api_${operation}`, description: endpoint.summary + '. Operates on the saved server state; pass current revisions for writes. Publications are public snapshots.',
       annotations: { readOnlyHint: endpoint.method === 'GET' },

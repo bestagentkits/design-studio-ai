@@ -1,11 +1,11 @@
 ---
 title: "Phase 2: Persist connections, project permissions and operation state"
-status: todo
+status: in-progress
 ---
 
 # Persist connections, project permissions and operation state
 
-Priority: P2. Status: pending. Depends on: 1. Estimate: 5-7 engineering days.
+Priority: P2. Status: in progress (local foundation; routes not enabled). Depends on: 1. Estimate: 5-7 engineering days.
 
 Context: [plan](plan.md), [architecture](architecture.md), [evidence](reports/research-and-source-evidence.md).
 

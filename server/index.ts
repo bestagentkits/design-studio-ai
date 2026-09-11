@@ -1,4 +1,5 @@
 import { providerSettingsSchema, providerIdSchema, builtInProviders } from '../src/shared/providers';
+import { connectorRoutes } from './connector-routes';
 import { mediaInputSchema, generationInputSchema, providerInterviewSchema } from '../src/shared/provider-requests';
 import { telemetryQuerySchema, clientEventSchema } from '../src/shared/observability';
 import { observabilityMiddleware, bindTelemetryActor, errorCode } from './observability';
@@ -170,6 +171,7 @@ const credentials = z.object({
   name: z.string().trim().min(1).max(100).optional(),
 });
 app.route('/api/observability', observabilityRoutes);
+app.route('/api', connectorRoutes);
 app.route('/api/auth/github', githubRoutes);
 app.post("/api/auth/register", async (c) => {
   if (c.env.ALLOW_REGISTRATION !== "true")
