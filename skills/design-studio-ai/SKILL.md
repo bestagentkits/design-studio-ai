@@ -30,7 +30,7 @@ dsa projects get PROJECT_ID
 
 The get result contains `{project:{id,revision,document,...}}`. Save the observed revision with the working document. Read actual page and node IDs; never invent IDs for existing elements.
 
-For browser WebMCP, discover `studio_capabilities` and read `studio_get_design` before editing the open canvas. `studio_apply_operations` edits local state; Live mode autosaves, otherwise call `studio_save_design` explicitly. Tools named `studio_api_…` act on saved server state, so save and verify the revision before using them to export or publish local edits. WebMCP is experimental; use network MCP or CLI when the browser does not expose it. The [public reference](https://studio.agentkit.best/docs/webmcp) explains inputs and boundaries; use the configured server's reference when self-hosting.
+For browser WebMCP, registered operation/document inputs are compact envelopes; fetch the full nested schemas through `studio_capabilities` before composing payloads. Execution still validates the complete shared contracts. Discover `studio_capabilities` and read `studio_get_design` before editing the open canvas. `studio_apply_operations` edits local state; Live mode autosaves, otherwise call `studio_save_design` explicitly. Tools named `studio_api_…` act on saved server state, so save and verify the revision before using them to export or publish local edits. WebMCP is experimental; use network MCP or CLI when the browser does not expose it. The [public reference](https://studio.agentkit.best/docs/webmcp) explains inputs and boundaries; use the configured server's reference when self-hosting.
 
 ## Choose the design-kind guidance
 

@@ -4,7 +4,7 @@ import {exportOptionsSchema} from '../shared/export-contract';
 import { mediaInputSchema, generationInputSchema, providerInterviewSchema } from '../shared/provider-requests';
 import { providerIdSchema, builtInProviders } from '../shared/providers';
 import { z } from 'zod';
-import { operationsSchema, mutateDocument } from '../shared/operations';
+import { operationsSchema, operationSchema, mutateDocument } from '../shared/operations';
 import { documentSchema, type DesignDocument } from '../shared/schema';
 import { apiEndpoints } from '../shared/api-reference';
 import { componentNames, componentSchema, layoutSchema, sceneObjectSchema } from '../shared/design-capabilities';
@@ -16,8 +16,10 @@ interface Context { registerTool: (tool: Tool) => void; unregisterTool?: (name: 
 export function registerDesignTools(context: Context, get: () => DesignDocument, set: (doc: DesignDocument) => void) {
   const result = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
   const tools: Tool[] = [{
-    name: 'studio_apply_operations', description: 'Atomically edit the open document using shared operations: add/update/delete/reparent nodes, page/layout, themes, tracks and keyframes. Changes appear immediately; live mode autosaves. Get the document first.',
-    inputSchema: z.toJSONSchema(z.object({ operations: operationsSchema })),
+    name: 'studio_apply_operations', description: 'Atomically edit the open document using shared operations: add/update/delete/reparent nodes, page/layout, themes, tracks and keyframes. Changes appear immediately; live mode autosaves. Get the document and studio_capabilities operation schemas first.',
+    // Registration stays shallow: expanded node/character unions exceed browser host limits.
+    // Execution still uses the complete shared validator; discover nested fields with studio_capabilities.
+    inputSchema: { type: 'object', properties: { operations: { ...z.toJSONSchema(operationsSchema), items: { type: 'object', properties: { op: { type: 'string', enum: operationSchema.options.map(option => option.shape.op.value) } }, required: ['op'], additionalProperties: true } } }, required: ['operations'], additionalProperties: false },
     execute: async args => { const next = mutateDocument(get(), args.operations); set(next); return result({ document: next }); },
   }, {
     name: 'studio_capabilities', description: 'Discover canonical document/operation/component/layout/3D schemas and available API operations.', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true },
@@ -28,7 +30,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     const operation = `${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
     tools.push({ name: `studio_api_${operation}`, description: endpoint.summary + '. Operates on the saved server state; pass current revisions for writes. Publications are public snapshots.',
       annotations: { readOnlyHint: endpoint.method === 'GET' },
-      inputSchema: { type: 'object', properties: { parameters: { type: 'object', additionalProperties: { type: 'string' } }, query: { type: 'object', additionalProperties: { type: 'string' } }, ...(endpoint.body ? { body: endpoint.method==='PUT'&&endpoint.path.endsWith('/document')?z.toJSONSchema(documentWriteSchema):endpoint.path.endsWith('/export') ? z.toJSONSchema(exportOptionsSchema) : endpoint.path.endsWith('/media') ? z.toJSONSchema(mediaInputSchema) : endpoint.path.endsWith('/generate') ? z.toJSONSchema(generationInputSchema) : endpoint.path.endsWith('/brief/interview') ? z.toJSONSchema(providerInterviewSchema) : { type: 'object' } } : {}) }, ...(endpoint.body ? { required: ['body'] } : {}) },
+      inputSchema: { type: 'object', properties: { parameters: { type: 'object', additionalProperties: { type: 'string' } }, query: { type: 'object', additionalProperties: { type: 'string' } }, ...(endpoint.body ? { body: endpoint.method==='PUT'&&endpoint.path.endsWith('/document')?z.toJSONSchema(documentWriteSchema.extend({ document: z.object({}).loose().describe('Canonical DesignDocument. Discover the full document schema with studio_capabilities before writing.') })):endpoint.path.endsWith('/export') ? z.toJSONSchema(exportOptionsSchema) : endpoint.path.endsWith('/media') ? z.toJSONSchema(mediaInputSchema) : endpoint.path.endsWith('/generate') ? z.toJSONSchema(generationInputSchema) : endpoint.path.endsWith('/brief/interview') ? z.toJSONSchema(providerInterviewSchema) : { type: 'object' } } : {}) }, ...(endpoint.body ? { required: ['body'] } : {}) },
       execute: async args => {
         const parameters = args.parameters as Record<string, string> | undefined;
         const path = endpoint.path.replace(/\{(\w+)\}/g, (_, key: string) => { if (!parameters?.[key]) throw new Error(`Missing path parameter: ${key}`); return encodeURIComponent(parameters[key]); });
