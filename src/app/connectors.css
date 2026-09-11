@@ -13,3 +13,9 @@
 .connector-choices input { flex-shrink: 0; margin-top: 4px; }
 .connector-choices small { display: block; }
 @media (max-width: 600px) { .connector-actions > .button { flex: 1 1 140px; } }
+
+.connector-mobile-entry { display: none; }
+@media (max-width: 760px) {
+  .editor-header-actions .connector-header-entry { display: none; }
+  .connector-mobile-entry { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; flex-shrink: 0; border-bottom: 1px solid var(--line); color: var(--ink); background: var(--surface); }
+}

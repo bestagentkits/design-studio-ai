@@ -1526,7 +1526,7 @@ export function Editor({
           </div>
         </div>
         <div className="editor-header-actions">
-          {connectorsEnabled&&<button className="button small" onClick={()=>setShowConnections(true)}>Tools & sources</button>}
+          {connectorsEnabled&&<button className="button small connector-header-entry" onClick={()=>setShowConnections(true)}>Tools & sources</button>}
           <ThemeToggle />
           <button
             className="icon-button"
@@ -1582,6 +1582,7 @@ export function Editor({
           </button>
         </div>
       </header>
+      {connectorsEnabled&&<button className="connector-mobile-entry" onClick={()=>setShowConnections(true)}><Settings2 size={16}/>Tools & sources</button>}
       {brief && (
         <button className="brief-return" onClick={() => setBriefManual(false)}>
           <Sparkles size={14} />

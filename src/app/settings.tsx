@@ -147,6 +147,7 @@ export function Settings({
           >
             <Code2 size={17} /> Agent connections
           </button>
+          {connectorsEnabled&&<button className={tab === "connections" ? "selected" : ""} aria-pressed={tab === "connections"} onClick={()=>setTab("connections")}>External services</button>}
           <button
             className={tab === "account" ? "selected" : ""}
             aria-pressed={tab === "account"}
@@ -155,7 +156,6 @@ export function Settings({
             <span className="mini-avatar">{user.name.slice(0, 1)}</span> Your
             account
           </button>
-          {connectorsEnabled&&<button className={tab === "connections" ? "selected" : ""} aria-pressed={tab === "connections"} onClick={()=>setTab("connections")}>External services</button>}
         </nav>
         <div className="settings-content">
           {tab === "connections" && (connectorsEnabled ? <ConnectionsSettings/> : <p>External connections are not enabled on this studio.</p>)}
