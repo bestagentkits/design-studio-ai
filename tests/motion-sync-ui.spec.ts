@@ -1,3 +1,4 @@
+import {readFile} from 'node:fs/promises';
 import {test,expect} from './authenticated-browser';
 import {createDocument} from '../src/shared/catalog';
 import {newCharacter,addCharacterLayer,gridMesh} from '../src/shared/character-editing';
@@ -56,6 +57,13 @@ test('stalled Live request releases Save and Share without retrying an uncertain
   await expect(page.getByRole('checkbox',{name:'Live',exact:true})).not.toBeChecked();
   await page.getByRole('button',{name:'Share',exact:true}).click();
   await expect(page.getByRole('alert').filter({hasText:'reconcile the timed-out save'})).toBeVisible();
+  await page.getByRole('button',{name:'Export',exact:true}).click();
+  const downloadPromise=page.waitForEvent('download');
+  await page.getByRole('button',{name:'Design JSON Fully editable source',exact:true}).click();
+  const download=await downloadPromise;
+  const backup=JSON.parse(await readFile((await download.path())!,'utf8'));
+  expect(backup.name).toBe('Pending local edit');
+  expect(backup.id).toBe(project.id);
   const saved=(await (await page.request.get(`/api/projects/${project.id}`)).json()).project;
   expect(saved.revision).toBe(project.revision);
  }finally{release();await page.unrouteAll({behavior:'wait'});await page.request.delete(`/api/projects/${project.id}`,{headers});}
