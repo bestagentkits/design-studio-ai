@@ -301,8 +301,13 @@ export function Editor({
   const presenting = screenMode === 'present', preview = screenMode === 'preview';
   const setPresenting = (value: boolean) => setScreenMode(value ? 'present' : 'edit');
   const setPreview = (value: boolean) => setScreenMode(value ? 'preview' : 'edit');
-  const [leftPane, setLeftPane] = useScreenState('left', 'open', ['open', 'closed']);
-  const [rightPane, setRightPane] = useScreenState('right', 'open', ['open', 'closed']);
+  const [editLeftPane, setEditLeftPane] = useScreenState('left', 'open', ['open', 'closed']);
+  const [editRightPane, setEditRightPane] = useScreenState('right', 'open', ['open', 'closed']);
+  // Preview starts canvas-only; opening a pane must not change edit-mode preferences.
+  const [previewLeftPane, setPreviewLeftPane] = useScreenState('previewLeft', 'closed', ['open', 'closed']);
+  const [previewRightPane, setPreviewRightPane] = useScreenState('previewRight', 'closed', ['open', 'closed']);
+  const [leftPane, setLeftPane] = preview ? [previewLeftPane, setPreviewLeftPane] : [editLeftPane, setEditLeftPane];
+  const [rightPane, setRightPane] = preview ? [previewRightPane, setPreviewRightPane] : [editRightPane, setEditRightPane];
   function setPageIndex(index: number) { setPageIndexState(index); writeScreen({ page: docRef.current.pages[index]?.id ?? null }); }
   useEffect(() => { const restore = () => setPageIndexState(Math.max(0, docRef.current.pages.findIndex(p => p.id === screenParam('page')))); window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, []);
   const [domBounds, setDomBounds] = useState<DesignNode[]>([]);

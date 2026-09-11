@@ -2283,13 +2283,8 @@ details summary {
   padding: var(--s4);
   border-radius: var(--r-small);
 }
-.preview-mode .left-panel,
-.preview-mode .inspector,
 .preview-mode .canvas-toolbar {
   display: none;
-}
-.preview-mode .editor-workspace {
-  display: flex;
 }
 .preview-mode .canvas-region {
   flex: 1;
