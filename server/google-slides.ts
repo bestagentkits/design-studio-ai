@@ -19,7 +19,7 @@ googleRoutes.post("/:id/google-slides", async (c) => {
     Authorization: `Bearer ${body.accessToken}`,
   };
   const create = await upstream(
-    "https://slides.googleapis.com/v1/presentations",
+    "https://slides.googleapis.com/v1/presentations?fields=presentationId",
     { method: "POST", headers, body: JSON.stringify({ title: doc.name }) },
   );
   const presentation = JSON.parse(

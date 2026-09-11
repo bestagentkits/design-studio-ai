@@ -1,5 +1,11 @@
 # Live acceptance — 2026-09-11
 
+## Slides response diagnosis — 2026-09-11 10:15 UTC
+
+A separately named diagnostic presentation reproduced the failure with sanitized server diagnostics: `native_connector_response_rejected`, origin slides.googleapis.com, reason `provider_response_too_large`; the operation then reported `invalid_provider_response` without a recorded ID. The initial execute telemetry took 2,955 ms wall / 57 ms CPU, so the earlier timeout hypothesis was not supported.
+
+Cause: nativeJson limits JSON to 262,144 bytes, while unfiltered Slides creation returns full presentation/layout metadata. Both connected and legacy creation calls now request `fields=presentationId`, retaining bounded response handling. [Google partial-response documentation](https://developers.google.com/workspace/slides/api/guides/performance) supports this parameter. The provider test now supplies oversized layout metadata when no projection is requested: before the fix both identity-retention scenarios failed; after the fix success and partial-population identity tests pass. All 367 tests, typecheck and build pass. Fixed beta code deployed as `3fb6c4c4-570b-4aab-a850-1099eec43a57`; final live acceptance is recorded separately below when observed. Diagnostics emit fixed error classifications only, never credentials, request bodies or provider response contents.
+
 ## Current Google acceptance checkpoint — 2026-09-11 10:05 UTC
 
 This checkpoint supersedes earlier pending/setup statements below. Google OAuth and real Picker are working on isolated beta. A native-dialog top-layer bug initially placed Picker behind the project modal. Commit `e020dee3390ab7523508ce69223983305126e298` temporarily closes the mounted parent dialog while Picker is active and restores it on completion/cancel. Typecheck, all 367 tests and production build passed; [CI 34585612298](https://github.com/bestagentkits/design-studio-ai/actions/runs/34585612298) independently completed verify and deploy successfully. Active beta version was verified as `d22343f8-bc7e-4847-a210-a0845a45940d`. Live in-app browser checks verified folder selection, source selection, cancellation and parent modal restoration; this Picker-specific check does not establish other browsers.

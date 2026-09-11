@@ -31,7 +31,11 @@ async function googleFixture(t:TestContext){
       if(req.url.includes('alt=media'))res.writeHead(200).end(state.corruptRemote?Buffer.from('changed'):remoteUpload.bytes);
       else res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify(remoteUpload.metadata));return;
     }
-    if(req.url==='/v1/presentations'){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({presentationId:'created-presentation'}));return;}
+    if(req.url?.startsWith('/v1/presentations')&&!req.url.includes(':batchUpdate')){
+      const fields=new URL(req.url,'http://localhost').searchParams.get('fields');
+      // Unfiltered Google creation responses include large layout/master metadata.
+      res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({presentationId:'created-presentation',...(fields==='presentationId'?{}:{layouts:[{metadata:'x'.repeat(300000)}]})}));return;
+    }
     if(req.url?.includes(':batchUpdate')){if(state.failPopulation){res.writeHead(500).end();return;}res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
     if(req.url?.includes('/drive/v3/files/chosen-folder')){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({id:'chosen-folder',name:'Exports',mimeType:'application/vnd.google-apps.folder',version:'1',capabilities:{canAddChildren:true}}));return;}
     if(state.deny){res.writeHead(401).end();return;}
@@ -102,13 +106,13 @@ for(const partial of [false,true])test(`connected Slides requires approval and r
   const prepared=await request('connector-operations',{bindingId:'drive-destination',action:'create_google_slides',arguments:{title:'Reviewed slides',folderId:'chosen-folder'},expectedVersions:catalog.versions,idempotencyKey:'isolated-slides-export'});
   assert.equal(prepared.status,201,await prepared.clone().text());const operation=(await prepared.json() as any).operation;
   assert.equal((await request(`connector-operations/${operation.id}/execute`,{expectedRevision:1})).status,409);
-  assert.equal(f.calls.filter(call=>call.path==='/v1/presentations').length,0);
+  assert.equal(f.calls.filter(call=>call.path.startsWith('/v1/presentations')&&!call.path.includes(':batchUpdate')).length,0);
   const approval=await request(`connector-operations/${operation.id}/decision`,{expectedRevision:1,decision:'approve'});assert.equal(approval.status,200);
   const approved=(await approval.json() as any).operation;
   const result=await request(`connector-operations/${operation.id}/execute`,{expectedRevision:approved.revision});assert.equal(result.status,200,await result.clone().text());
   const finished=(await result.json() as any).operation;assert.equal(finished.status,partial?'outcome_unknown':'succeeded');assert.deepEqual(finished.remoteIds,['created-presentation']);
   assert.equal((await request(`connector-operations/${operation.id}/execute`,{expectedRevision:finished.revision})).status,409);
-  assert.equal(f.calls.filter(call=>call.path==='/v1/presentations').length,1);
+  assert.equal(f.calls.filter(call=>call.path.startsWith('/v1/presentations')&&!call.path.includes(':batchUpdate')).length,1);
   const stored=await f.db.prepare('SELECT remote_ids_json FROM connector_operations WHERE id=?').bind(operation.id).first<{remote_ids_json:string}>();assert.equal(stored!.remote_ids_json,'["created-presentation"]');
 });
 

@@ -13,7 +13,7 @@ import { googleBindingAuthority,googleFileMetadata } from './google-drive';
 import { googleSlidesRequests } from '../google-slides-content';
 import { documentSchema } from '../../src/shared/schema';
 import { nativeJson } from './native-transport';
-import { fail } from '../security';
+import { ApiError, fail } from '../security';
 const argumentsSchema=z.strictObject({title:z.string().trim().min(1).max(200),folderId:z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)});
 export async function googleSlidesTool(connectionId:string){
   const definition={remoteName:'create_google_slides',description:'Create a native Google Slides presentation from the exact saved design, then move it into the selected Drive folder. Unsupported nodes and private images are rejected. Partial results retain their presentation ID; never repeat an uncertain create.',inputSchema:z.toJSONSchema(argumentsSchema),effect:'write' as const};
@@ -80,7 +80,7 @@ export async function executeGoogleOperation(env:Bindings,principal:ConnectorPri
       return await finishConnectorOperation(env,principal,row.id,revision,lease,{status:'succeeded',remoteIds:[presentationId],result:{fileId:presentationId,filename:args.filename,folderId:args.folderId,format:args.format,bytes:prepared.artifact.bytes,sha256:prepared.artifact.content_hash}});
     }
     dispatched=true;
-    const created=await nativeJson(env,'https://slides.googleapis.com/v1/presentations',{method:'POST',headers,body:JSON.stringify({title:'title' in args?args.title:''})});
+    const created=await nativeJson(env,'https://slides.googleapis.com/v1/presentations?fields=presentationId',{method:'POST',headers,body:JSON.stringify({title:'title' in args?args.title:''})});
     presentationId=z.object({presentationId:z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)}).parse(created).presentationId;
     // Record the returned remote identity even if cancellation raced with the response.
     await env.DB.prepare("UPDATE connector_operations SET remote_ids_json=? WHERE id=? AND user_id=? AND remote_ids_json='[]'")
@@ -91,6 +91,7 @@ export async function executeGoogleOperation(env:Bindings,principal:ConnectorPri
     await nativeJson(env,`https://slides.googleapis.com/v1/presentations/${presentationId}:batchUpdate`,{method:'POST',headers,body:JSON.stringify({requests})});
     return await finishConnectorOperation(env,principal,row.id,revision,lease,{status:'succeeded',remoteIds:[presentationId],result:{presentationId,url:`https://docs.google.com/presentation/d/${presentationId}/edit`,folderId:value.folderId}});
   }catch(error){
+    console.warn(JSON.stringify({event:'google_connector_operation_failed',action:row.action,remoteIdentityRecorded:!!presentationId,reason:error instanceof ApiError?error.code:error instanceof z.ZodError?'invalid_provider_identity':'transport_or_runtime_error'}));
     try{return await finishConnectorOperation(env,principal,row.id,revision,lease,{status:dispatched?'outcome_unknown':'failed',remoteIds:presentationId?[presentationId]:[],errorCode:presentationId?(upload?'upload_outcome_unknown':'partial_presentation'):dispatched?'outcome_unknown':'destination_unavailable'});}
     catch{await markConnectorOperationUncertain(env,principal.userId,row.id,revision,lease);throw error;}
   }

@@ -1,6 +1,7 @@
 import type { Bindings } from '../types';
 import { limitedBytes } from '../providers';
-import { fail } from '../security';
+import { ApiError, fail } from '../security';
+import { ConnectorTransportError } from '../connector-network-policy';
 const origins=new Set(['https://oauth2.googleapis.com','https://openidconnect.googleapis.com','https://www.googleapis.com','https://slides.googleapis.com','https://api.github.com','https://github.com']);
 /** Native adapters choose fixed provider endpoints; remote responses never supply follow-up URLs. */
 export async function nativeRequest(env:Bindings,url:string,init:RequestInit={}){
@@ -15,5 +16,10 @@ export async function nativeRequest(env:Bindings,url:string,init:RequestInit={})
 export async function nativeJson(env:Bindings,url:string,init:RequestInit={},limit=262144){
   const response=await nativeRequest(env,url,init);
   try{return JSON.parse(new TextDecoder().decode(await limitedBytes(response,limit))) as unknown;}
-  catch{fail(502,'invalid_provider_response','The provider response could not be read.');}
+  catch(error){
+    // Only fixed local classifications are logged; provider bodies and credentials stay private.
+    const reason=error instanceof ApiError?error.code:error instanceof SyntaxError?'invalid_json':error instanceof ConnectorTransportError?'transport_error':'response_read_failed';
+    console.warn(JSON.stringify({event:'native_connector_response_rejected',origin:new URL(url).origin,reason}));
+    fail(502,'invalid_provider_response','The provider response could not be read.');
+  }
 }
