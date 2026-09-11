@@ -36,6 +36,7 @@ export const apiEndpoints = [
   { method: 'POST', path: '/api/projects/{id}/generate', summary: 'Generate a design proposal with a configured provider', body: { provider: 'openai', expectedRevision: 1, prompt: 'Refine the header spacing' } },
   { method: 'POST', path: '/api/projects/{id}/media', summary: 'Generate images with OpenAI, Gemini, Leonardo, Grok or custom providers; OpenAI speech and fal media also supported', body: { provider: 'openai', kind: 'image', prompt: 'A ceramic vase in soft light' } },
   { method: 'GET', path: '/api/projects/{id}/media/{jobId}', summary: 'Read generation job status', body: undefined },
+  { method: 'GET', path: '/api/projects/{id}/thumbnail', summary: 'Load a private saved-revision PNG cover; first request renders and stores it (202 when busy)', body: undefined },
   { method: 'POST', path: '/api/projects/{id}/export', summary: 'Export saved design', body: { format: 'html' } },
   { method: 'POST', path: '/api/projects/{id}/publish', summary: 'Publish an immutable snapshot', body: {} },
   { method: 'DELETE', path: '/api/projects/{id}/publish', summary: 'Unpublish the current public snapshot', body: undefined },
@@ -63,6 +64,7 @@ export function openApiDocument(schemas: Record<string, unknown>) {
       const definition = z.toJSONSchema(telemetryQuerySchema) as { properties: Record<string, unknown> };
       for (const [name, schema] of Object.entries(definition.properties)) parameters.push({ name, in: 'query', schema });
     }
+    if (path.endsWith('/thumbnail')) parameters.push({ name: 'revision', in: 'query', schema: { type: 'integer', minimum: 1 }, description: 'Saved revision; defaults to current. Only the two latest completed covers are retained.' });
     const upload = method === 'POST' && path.endsWith('/assets');
     const content = upload
       ? { 'multipart/form-data': { schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } } }
@@ -71,6 +73,7 @@ export function openApiDocument(schemas: Record<string, unknown>) {
       ...(body ? { requestBody: { required: true, content } } : {}),
       responses: { '2XX': { description: 'Success; exports return file bytes with Content-Type and Content-Disposition' }, '400': { description: 'Invalid request' }, '401': { description: 'Authentication required' }, '403': { description: 'Insufficient scope' }, '404': { description: 'Resource not found' }, '409': { description: 'Revision or merge conflict' } },
     };
+    if (path.endsWith('/thumbnail')) (paths[path][method.toLowerCase()] as any).responses = { '200': { description: 'Private cached PNG', content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } }, '202': { description: 'Rendering in progress; retry after 2 seconds' }, '400': { description: 'Invalid saved revision or unsupported media' }, '429': { description: 'Thumbnail render rate limit reached' }, '502': { description: 'Rendering failed' }, '401': { description: 'Authentication required' }, '404': { description: 'Project or retained revision unavailable' }, '409': { description: 'Revision changed during rendering' }, '503': { description: 'Render cooldown; retry later' } };
   }
   return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.4.0' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }, schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => /^[\w.-]+$/.test(name))) }, paths };

@@ -15,7 +15,7 @@ Current implementation/status update: [2026-09-11 checklist reconciliation](impl
 - In-flight Live responses wait while creative workspaces are open; new polling is suspended. A failed paint update retains one bounded in-memory transaction, prepared uploads are reused on retry, PNG backup and explicit discard are available. Durable cross-reload recovery is still open.
 - Typed clone/reference remapping, SVG/DOM rendering, public/export projection that omits raw paint layers/tiles and hidden board content. Blank painting embeds render safely; nonblank missing composites remain explicit errors.
 
-Executable owners: `src/shared/{schema,board-schema,painting-schema,board-operations,document-merge,paint-runtime,paint-stroke,paint-composite,paint-png,public-creative-projection}.ts`, `src/app/{creative-workspace,painting-workspace}.tsx`, `src/app/{painting-session,painting-recovery}.ts`, `server/{projects,painting-assets,asset-lifecycle,creative-save-receipts}.ts` and additive `migrations/0010-creative-asset-lifecycle.sql`.
+Executable owners: `src/shared/{schema,board-schema,painting-schema,board-operations,document-merge,paint-runtime,paint-stroke,paint-composite,paint-png,public-creative-projection}.ts`, `src/app/{creative-workspace,painting-workspace}.tsx`, `src/app/{painting-session,painting-recovery}.ts`, `server/{projects,painting-assets,asset-lifecycle,creative-save-receipts}.ts` and additive `migrations/0011-creative-asset-lifecycle.sql`.
 
 ## Review dispositions
 

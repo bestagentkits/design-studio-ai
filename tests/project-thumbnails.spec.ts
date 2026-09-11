@@ -46,6 +46,12 @@ test('saved thumbnails contain design pixels, reuse their revision and refresh a
     const initial = await pixels(image);
     expect(initial.center[3]).toBe(255); expect(initial.center[0]).toBeGreaterThan(180); expect(initial.center[1]).toBeLessThan(80);
     const src = await image.getAttribute('src');
+    expect(src).toContain('/thumbnail?revision=1');
+    expect(reads).toBe(0);
+    await page.reload();
+    await page.locator('.project-open').filter({ hasText: document.name }).scrollIntoViewIfNeeded();
+    expect((await pixels(image)).center).toEqual(initial.center);
+    expect(reads).toBe(0);
     await page.locator('.project-open').filter({ hasText: document.name }).click();
     await expect(page.getByRole('button', { name: 'Back to workspace', exact: true })).toBeVisible();
     const before = reads;
@@ -84,6 +90,6 @@ test('DOM, slides, motion and 3D covers render artwork rather than blank images'
       else expect(actual.colors).toBeGreaterThan(8);
       if (document.kind === '3d') expect(actual.blue).toBeGreaterThan(50);
     }
-    await page.locator('.projects-section').screenshot({ path: `plans/260911-1125-project-thumbnails/projects-${info.project.name}.png` });
+    await page.locator('.projects-section').screenshot({ path: `plans/260911-1206-persistent-thumbnails/projects-${info.project.name}.png` });
   } finally { for (const id of ids) await page.request.delete(`/api/projects/${id}`, { headers }); }
 });

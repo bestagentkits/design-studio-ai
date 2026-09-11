@@ -119,3 +119,7 @@ Use the shared [provider guide](providers.md#official-and-custom-connections) fo
 ## Character motion
 
 See [character motion](character-motion.md) and discover current operation schemas. `dsa motion PROJECT_ID --node NODE_ID --time 1` / MCP `inspect_motion` reads poses. Motion generation returns baseRevision/baseBriefRevision; carry both into the explicit document write (`expectedRevision`, `expectedBriefRevision`). Frame exports accept `--start`, `--end`, `--fps`; `motion`, `png-sequence`, and `spritesheet` return ZIPs. Native motion is not a Spine interchange format.
+
+## Persistent project covers
+
+Project summaries include `thumbnailUrl` (current saved revision) and `thumbnailRevision` (latest completed cover or null). GET `/api/projects/{id}/thumbnail?revision=N` returns a private PNG, or 202 with `Retry-After: 2` while rendering is busy. MCP `get_project_thumbnail`, WebMCP `studio_api_get_projects_id_thumbnail`, and `dsa projects thumbnail ID --revision N --output cover.png` use the same cache. A 202 is pending, not a completed download; retry after the indicated delay. Only the two latest completed covers are retained. Cloud render asset/import limits apply; no provider call occurs.

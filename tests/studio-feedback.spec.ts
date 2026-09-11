@@ -54,7 +54,8 @@ test('motion space playback, collapsible panes, and real saved thumbnails', asyn
   await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
   await page.locator('.project-open').filter({ hasText: 'Feedback motion' }).scrollIntoViewIfNeeded();
   const image = page.getByRole('img', { name: 'Preview of Feedback motion', exact: true }); await image.scrollIntoViewIfNeeded(); await expect(image).toBeVisible({ timeout: 25000 });
-  expect(await image.getAttribute('src')).toMatch(/^data:image\/(webp|png)/);
+  expect(await image.getAttribute('src')).toMatch(/\/thumbnail\?revision=1$/);
+  expect(await image.evaluate(async (element: HTMLImageElement) => { await element.decode(); return element.naturalWidth > 0 && element.naturalWidth <= 480; })).toBe(true);
   await page.goBack(); await expect(page.locator('.editor-shell')).toBeVisible();
 });
 test('3D materials and 2D layers remain editable and ordered', async ({ page, baseURL }, testInfo) => {

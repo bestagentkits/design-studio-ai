@@ -31,10 +31,12 @@ export interface ProjectRow {
   created_at: string;
   updated_at: string;
   published_slug: string | null;
+  thumbnail_revision?: number | null;
+  thumbnail_deleting?: number;
 }
 export async function projectRow(c: Context<Env>, projectId: string) {
   const row = await c.env.DB.prepare(
-    "SELECT * FROM projects WHERE id=? AND user_id=?",
+    "SELECT projects.*, (SELECT MAX(revision) FROM project_thumbnails WHERE project_id=projects.id AND state='ready') AS thumbnail_revision FROM projects WHERE id=? AND user_id=?",
   )
     .bind(projectId, owner(c))
     .first<ProjectRow>();
@@ -50,6 +52,8 @@ export const serializeProject = (row: ProjectRow, base: string) => ({
   kind: row.kind,
   document: JSON.parse(row.document) as DesignDocument,
   revision: row.revision,
+  thumbnailUrl: `/api/projects/${row.id}/thumbnail?revision=${row.revision}`,
+  thumbnailRevision: row.thumbnail_revision ?? null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
   ...(row.published_slug
@@ -246,7 +250,7 @@ projectRoutes.get("/", async (c) => {
       name: "name COLLATE NOCASE ASC",
     }[c.req.query("sort") ?? "updated"] ?? "updated_at DESC";
   const rows = await c.env.DB.prepare(
-    `SELECT * FROM projects WHERE user_id=? AND (name LIKE ? OR description LIKE ?) ${kind ? "AND kind=?" : ""} ORDER BY ${sort} LIMIT 500`,
+    `SELECT projects.*, (SELECT MAX(revision) FROM project_thumbnails WHERE project_id=projects.id AND state='ready') AS thumbnail_revision FROM projects WHERE user_id=? AND (name LIKE ? OR description LIKE ?) ${kind ? "AND kind=?" : ""} ORDER BY ${sort} LIMIT 500`,
   )
     .bind(userId, `%${q}%`, `%${q}%`, ...(kind ? [kind] : []))
     .all<ProjectRow>();
@@ -371,10 +375,12 @@ projectRoutes.put("/:id/document", async (c) => {
 });
 projectRoutes.delete("/:id", async (c) => {
   const row = await projectRow(c, c.req.param("id"));
+  // Close thumbnail publication before reading storage keys, so deletion cannot miss a late cover.
+  await c.env.DB.prepare("UPDATE projects SET thumbnail_deleting=1 WHERE id=? AND user_id=?").bind(row.id, owner(c)).run();
   const assets = await c.env.DB.prepare(
-    "SELECT storage_key FROM assets WHERE project_id=? AND user_id=?",
+    "SELECT storage_key FROM assets WHERE project_id=? AND user_id=? UNION ALL SELECT storage_key FROM project_thumbnails WHERE project_id=? AND storage_key IS NOT NULL",
   )
-    .bind(row.id, owner(c))
+    .bind(row.id, owner(c), row.id)
     .all<{ storage_key: string }>();
   await c.env.DB.prepare("DELETE FROM projects WHERE id=? AND user_id=?")
     .bind(row.id, owner(c))

@@ -409,6 +409,16 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         `/api/projects/${encodeURIComponent(projectId)}/share`,
       ),
   );
+  server.registerTool('get_project_thumbnail', {
+    description: 'Get the private persisted PNG cover for a saved revision. A cache miss renders once; 202 returns rendering status and retryAfterSeconds. No provider call.',
+    inputSchema: { projectId: z.string(), revision: z.number().int().positive().optional() },
+    annotations: { readOnlyHint: true },
+  }, async ({ projectId, revision }) => {
+    const response = await app.request(`${origin(c)}/api/projects/${encodeURIComponent(projectId)}/thumbnail${revision ? `?revision=${revision}` : ''}`, { headers: { Authorization: c.req.header('Authorization')! } }, telemetryEnv(c, toolSpan.getStore()));
+    if (response.status === 202) return result({ ...(await response.json() as object), retryAfterSeconds: 2 });
+    if (!response.ok) return { isError: true, ...result(await response.json()) };
+    return { content: [{ type: 'image' as const, mimeType: 'image/png', data: Buffer.from(await response.arrayBuffer()).toString('base64') }] };
+  });
   server.registerTool(
     "export_project",
     {

@@ -1062,7 +1062,7 @@ export function App() {
                                 <div
                                   className={`project-thumbnail thumb-${item.kind}`}
                                 >
-                                  <ProjectThumbnail id={item.id} revision={item.revision} name={item.name} />
+                                  <ProjectThumbnail id={item.id} revision={item.revision} thumbnailRevision={item.thumbnailRevision} name={item.name} />
                                 </div>
                                 <div className="project-detail">
                                   <strong>{item.name}</strong>
