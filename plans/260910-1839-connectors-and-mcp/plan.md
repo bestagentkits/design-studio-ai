@@ -49,7 +49,7 @@ Estimates are planning ranges, not commitments; protocol/egress probes can chang
 ## Acceptance
 
 - [ ] MCP-first milestone: connect a real remote server, discover/enable tools, call from chat, inspect results, approve a write, reconnect and revoke. Pass focused REST/UI/agent boundaries before treating this milestone as usable.
-- [ ] GitHub: pin source files to a commit; export actual React files into a new branch and PR; retries do not duplicate PRs and never merge or force-push.
+- [x] GitHub: pin source files to a commit; export actual React files into a new branch and PR; retries do not duplicate PRs and never merge or force-push. Live source/PR and controlled retry evidence: [acceptance](reports/live-acceptance.md).
 - [ ] Drive: select real files, ingest supported source content/assets, upload inspected PDF/PPTX, and create supported Google Slides using a stored connection.
 - [ ] Denied/revoked/stale grants and changed tool schemas fail on the server; legacy Studio tokens gain no implicit connector authority.
 - [ ] Tool runs survive browser refresh and approval pauses, report uncertain external writes, and preserve brief/document concurrency.

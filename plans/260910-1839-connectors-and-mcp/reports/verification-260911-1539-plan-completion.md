@@ -1,5 +1,7 @@
 # Full plan verification — 2026-09-11
 
+Subsequent checkpoint: GitHub source-to-PR acceptance is now complete; the actual remote file hashes match the reviewed archive. Remote PDF CPU and boundary measurements are also recorded. See [live acceptance](live-acceptance.md) and [PDF edge results](pdf-edge-budget-results.md). Historical gaps below describe the initial verification time. Google, model/MCP OAuth/write and peak-memory acceptance remain open.
+
 ## Verdict
 
 CI and isolated beta deployment are complete. The full connector plan is **not complete**: implementation and automated checks do not satisfy its remaining live-provider and runtime acceptance requirements. No scope was removed and no production release is claimed.

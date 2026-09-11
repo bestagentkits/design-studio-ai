@@ -1,0 +1,86 @@
+{
+  "observed": "2026-09-11",
+  "runtime": "remote Cloudflare Workers",
+  "measurements": [
+    {
+      "timestamp": 1789116890358,
+      "path": "/20-max-bytes",
+      "status": 200,
+      "cpuTimeMs": 179,
+      "wallTimeMs": 221,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116858503,
+      "path": "/oversize",
+      "status": 413,
+      "cpuTimeMs": 14,
+      "wallTimeMs": 38,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116857937,
+      "path": "/empty",
+      "status": 422,
+      "cpuTimeMs": 3,
+      "wallTimeMs": 4,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116857623,
+      "path": "/21",
+      "status": 413,
+      "cpuTimeMs": 2,
+      "wallTimeMs": 2,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116857405,
+      "path": "/20",
+      "status": 200,
+      "cpuTimeMs": 125,
+      "wallTimeMs": 135,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116857056,
+      "path": "/1",
+      "status": 200,
+      "cpuTimeMs": 93,
+      "wallTimeMs": 100,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116835762,
+      "path": "/empty",
+      "status": 401,
+      "cpuTimeMs": 1,
+      "wallTimeMs": 2,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116835200,
+      "path": "/21",
+      "status": 413,
+      "cpuTimeMs": 2,
+      "wallTimeMs": 2,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116834169,
+      "path": "/20",
+      "status": 200,
+      "cpuTimeMs": 129,
+      "wallTimeMs": 138,
+      "outcome": "ok"
+    },
+    {
+      "timestamp": 1789116833548,
+      "path": "/1",
+      "status": 200,
+      "cpuTimeMs": 81,
+      "wallTimeMs": 89,
+      "outcome": "ok"
+    }
+  ]
+}
