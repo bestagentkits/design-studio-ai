@@ -61,7 +61,7 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     await page.getByRole('button', { name: 'Theme', exact: true }).click();
     await page.getByLabel('Preset', { exact: true }).selectOption('moss');
     await page.getByLabel('Heading font', { exact: true }).fill('Arial');
-    const saving = page.waitForResponse(response => response.url().endsWith(`/api/projects/${project.id}/document`) && response.request().method() === 'PUT');
+    const saving = page.waitForResponse(response => response.url().includes(`/api/projects/${project.id}/operations/`) && response.url().endsWith('/result') && response.request().method() === 'GET');
     await page.getByRole('button', { name: 'Save', exact: true }).click();
     const saved = await saving;
     expect(saved.status()).toBe(200);
@@ -116,7 +116,7 @@ test('register, sign in, edit and save a template, find, duplicate, publish and 
     } finally { await publicContext.close(); }
     await page.getByRole('button', { name: 'Close dialog', exact: true }).click();
     await page.getByRole('button', { name: 'Export', exact: true }).click();
-    const exporting = page.waitForResponse(response => response.url().endsWith(`/api/projects/${project.id}/export`) && response.request().method() === 'POST');
+    const exporting = page.waitForResponse(response => response.url().includes(`/api/projects/${project.id}/operations/`) && response.url().endsWith('/result') && response.request().method() === 'GET');
     const downloading = page.waitForEvent('download');
     await page.getByRole('button', { name: 'PNG image Current page' }).click();
     const exported = await exporting;

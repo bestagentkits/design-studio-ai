@@ -1,3 +1,4 @@
+import {drainOperations} from './operation-worker';
 import { serve } from "@hono/node-server";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -76,7 +77,9 @@ const server = serve(
       `Design Studio AI listening on http://${process.env.HOST ?? "127.0.0.1"}:${port}`,
     ),
 );
+let operationRunning=false;const operationTimer=setInterval(async()=>{if(operationRunning)return;operationRunning=true;try{await drainOperations(env);}catch(error){console.error('Operation runner failed',error instanceof Error?error.name:'unknown');}finally{operationRunning=false;}},1000);
 const shutdown = () => {
+  clearInterval(operationTimer);
   server.close(() => {
     db.close();
     process.exit(0);

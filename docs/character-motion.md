@@ -16,6 +16,8 @@ Geometry is an atomic merge field. Concurrent edits to one mesh conflict even wh
 
 [character-webgl.ts](../src/shared/character-webgl.ts), [character-canvas.ts](../src/shared/character-canvas.ts), and [character-svg.ts](../src/shared/character-svg.ts) share affine and weighted vertex evaluation. Native WebGL handles textured triangles and up to eight stencil masks; Canvas2D handles multiply blending on transparent surfaces and provides context-loss/unavailable fallback. The static SVG representation retains mesh textures using clipped affine triangles. Runtime shaders are trusted application code, never document inputs.
 
+The editor keeps decoded character images across Live document refreshes. Changed image URLs are decoded before replacing the current frame. **Edit** and **Preview** remain available in either mode. Save compares normalized content, so timestamps and JSON property ordering do not leave an unchanged project dirty. A timed-out write pauses Live and requires reconciliation before another save or snapshot; preserve local edits before reloading.
+
 ## Agent and export workflows
 
 `GET /api/projects/:id/motion` returns compact rig/clip/skin IDs and optional pose sampling via `characterId`, `nodeId`, `time`. MCP `inspect_motion` and CLI `dsa motion` use it. Writes use the regular operation and expected document revision contract.

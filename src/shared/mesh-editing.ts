@@ -23,7 +23,7 @@ export function editMesh(input: MeshData, operation: MeshEdit): MeshData {
   if (['translate', 'scale', 'extrude', 'inset', 'delete-faces'].includes(edit.op) && !selected.size) throw new Error('Select geometry before editing');
   if (edit.op === 'subdivide') faces();
   const topology = ['extrude', 'inset', 'delete-faces', 'subdivide', 'weld'].includes(edit.op);
-  if (topology && mesh.skinIndices) throw new Error('Topology edits require an unskinned mesh. Finish topology before binding the skeleton.');
+  if (topology && (mesh.skinIndices || mesh.morphTargets?.length || mesh.colors)) throw new Error('Topology edits require an unskinned mesh without morph targets or vertex colors. Finish topology first.');
   if (edit.op === 'translate' || edit.op === 'scale') {
     for (const i of selected) { if (i >= vertexCount) throw new Error('Unknown vertex'); for (let axis = 0; axis < 3; axis++) mesh.positions[i * 3 + axis] = edit.op === 'translate' ? mesh.positions[i * 3 + axis] + vector[axis] : mesh.positions[i * 3 + axis] * vector[axis]; }
   } else if (edit.op === 'delete-faces') {

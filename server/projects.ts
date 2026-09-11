@@ -1,3 +1,15 @@
+import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
+import { mutateDocument } from '../src/shared/operations';
+import { inspectScene, inspectSceneAnimation } from '../src/shared/scene-inspection';
+import { executePaintingCommand } from './painting-commands';
+import { inspectElementImage } from '../src/shared/creative-elements-image-bounds';
+import { inspectGif } from '../src/shared/gif-bounds';
+import { documentSaveSchema } from '../src/shared/document-save-contract';
+import { creativeSaveIdentity, readCreativeReceipt } from './creative-save-receipts';
+import { reserveAsset } from './asset-lifecycle';
+import { publicCreativeProjection } from '../src/shared/public-creative-projection';
+import { preparePaintingAssets } from './painting-assets';
+import { ownedDocumentAssetIds, remapDocumentAssets } from '../src/shared/document-asset-references';
 import {documentWriteSchema} from '../src/shared/document-write';
 import {characterEvolutionErrors} from '../src/shared/character-validation';
 import { inspectMotion, motionInspectionSchema } from '../src/shared/motion-inspection';
@@ -52,15 +64,7 @@ export const serializeProject = (row: ProjectRow, base: string) => ({
     : {}),
 });
 export async function validateAssets(c: Context<Env>, doc: DesignDocument, projectId?: string) {
-  const refs = new Set<string>();
-  for (const asset of doc.assets) {
-    if (asset.url.startsWith("/api/assets/"))
-      refs.add(asset.url.split("/").pop()!);
-  }
-  for (const page of doc.pages)
-    for (const node of page.nodes)
-      if (node.src?.startsWith("/api/assets/"))
-        refs.add(node.src.split("/").pop()!);
+  const refs = ownedDocumentAssetIds(doc);
   const references = [...refs];
   // D1 limits bound parameters per statement; chunks avoid one query per asset.
   for (let offset = 0; offset < references.length; offset += 90) {
@@ -81,10 +85,21 @@ export async function saveDocument(
   document: unknown,
   expectedRevision: number,
   expectedBriefRevision?: number,
+  operationId?: string,
+  receiptIdentity?: { key: string; hash: string },
 ) {
   const row = await projectRow(c, projectId);
-  const parsed = documentSchema.parse(document);
-  if (JSON.parse(row.document).schemaVersion > parsed.schemaVersion) fail(409, 'schema_downgrade', 'Reload with a client supporting this document version before saving.');
+  // Diagnose a stale v1 client before validating fields that only exist in v2.
+  if (document && typeof document === 'object' && 'schemaVersion' in document && document.schemaVersion === 1 && JSON.parse(row.document).schemaVersion === 2) {
+    if (expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Project changed. Reload before saving.');
+    fail(409, 'document_upgrade_required', 'This project uses document v2. Upgrade your client and reload before saving.');
+  }
+  let parsed = documentSchema.parse(document);
+  const identity = receiptIdentity ?? await creativeSaveIdentity(parsed, expectedRevision, operationId, expectedBriefRevision);
+  if (identity) { const receipt = await readCreativeReceipt(c, row.id, identity); if (receipt) return receipt; }
+  if (expectedRevision !== row.revision) fail(409, "revision_conflict", "Project changed. Reload before saving.");
+  const stored = documentSchema.parse(JSON.parse(row.document));
+  if (stored.schemaVersion === 2 && parsed.schemaVersion !== 2) fail(409, "document_upgrade_required", "This project uses document v2. Upgrade your client and reload before saving.");
   if (parsed.id !== row.id || parsed.kind !== row.kind)
     fail(
       400,
@@ -93,23 +108,32 @@ export async function saveDocument(
     );
   const evolution=characterEvolutionErrors(JSON.parse(row.document).characters??[],parsed.characters??[]);if(evolution.length)fail(400,'invalid_topology',evolution.join('; '));
   await validateAssets(c, parsed, row.id);
+  await preparePaintingAssets(c, row.id, parsed, stored);
   parsed.metadata.updatedAt = now();
-  const result = await c.env.DB.prepare(
+  // Server-generated or restored asset references must obey the same canonical limits.
+  parsed = documentSchema.parse(parsed);
+  const statement = c.env.DB.prepare(
     "UPDATE projects SET document=?,name=?,revision=revision+1,updated_at=? WHERE id=? AND user_id=? AND revision=? AND (? IS NULL OR COALESCE((SELECT revision FROM design_briefs WHERE project_id=projects.id AND user_id=projects.user_id),0)=?)",
   )
     .bind(
       JSON.stringify(parsed),
       parsed.name,
-      now(),
+      parsed.metadata.updatedAt,
       row.id,
       owner(c),
-      expectedRevision,
-      expectedBriefRevision??null, expectedBriefRevision??null,
-    )
-    .run();
-  if (!result.meta.changes)
+      row.revision,
+      expectedBriefRevision ?? null, expectedBriefRevision ?? null,
+    );
+  const committed = serializeProject({ ...row, document: JSON.stringify(parsed), name: parsed.name, revision: row.revision + 1, updated_at: parsed.metadata.updatedAt }, origin(c));
+  const results = await c.env.DB.batch([statement, ...(identity ? [
+    c.env.DB.prepare("INSERT INTO creative_save_receipts(operation_id,project_id,user_id,payload_hash,revision,response,created_at) SELECT ?,?,?,?,?,?,? WHERE changes()=1").bind(identity.key, row.id, owner(c), identity.hash, committed.revision, JSON.stringify(committed), Date.now()),
+    c.env.DB.prepare("DELETE FROM creative_save_receipts WHERE project_id=? AND user_id=? AND operation_id NOT LIKE 'job-%' AND operation_id NOT IN (SELECT operation_id FROM creative_save_receipts WHERE project_id=? AND user_id=? ORDER BY revision DESC LIMIT 8)").bind(row.id, owner(c), row.id, owner(c)),
+  ] : [])]);
+  const result = results[0] as { meta?: { changes?: number } };
+  if (!result.meta?.changes && identity){const receipt=await readCreativeReceipt(c,row.id,identity);if(receipt)return receipt;}
+  if (!result.meta?.changes)
     fail(409, "revision_conflict", "Project changed. Reload before saving.");
-  return serializeProject(await projectRow(c, projectId), origin(c));
+  return committed;
 }
 export async function storeAsset(
   c: Context<Env>,
@@ -167,14 +191,15 @@ export async function storeAsset(
       "invalid_media",
       "File bytes do not match the selected media type.",
     );
+  if (['image/png','image/jpeg','image/webp'].includes(mimeType)) { try { inspectElementImage(bytes, mimeType); } catch (e) { fail(400, 'invalid_media', e instanceof Error ? e.message : 'Invalid image'); } }
+  if (mimeType === 'image/gif') { try { inspectGif(bytes); } catch (e) { fail(400, 'invalid_media', e instanceof Error ? e.message : 'Invalid GIF'); } }
   const assetId = id();
   const storageKey = `${owner(c)}/${projectId}/${assetId}`;
-  await c.env.ASSETS_BUCKET.put(storageKey, data, {
-    httpMetadata: { contentType: mimeType },
-  });
+  const reservation = await reserveAsset(c, projectId, data.byteLength);
   try {
-    await c.env.DB.prepare(
-      "INSERT INTO assets(id,user_id,project_id,name,mime_type,size,storage_key,created_at) VALUES(?,?,?,?,?,?,?,?)",
+    await c.env.ASSETS_BUCKET.put(storageKey, data, { httpMetadata: { contentType: mimeType } });
+    const inserted = await c.env.DB.prepare(
+      "INSERT INTO assets(id,user_id,project_id,name,mime_type,size,storage_key,created_at) SELECT ?,?,?,?,?,?,?,? FROM asset_reservations WHERE id=? AND expires_at>=?",
     )
       .bind(
         assetId,
@@ -185,12 +210,14 @@ export async function storeAsset(
         data.byteLength,
         storageKey,
         now(),
+        reservation, Date.now(),
       )
       .run();
+    if (!inserted.meta.changes) fail(408, "asset_upload_expired", "Upload expired before its asset was committed. Retry the upload.");
   } catch (error) {
     await c.env.ASSETS_BUCKET.delete(storageKey);
     throw error;
-  }
+  } finally { await c.env.DB.prepare("DELETE FROM asset_reservations WHERE id=?").bind(reservation).run(); }
   return {
     id: assetId,
     name,
@@ -282,12 +309,9 @@ projectRoutes.post("/", async (c) => {
       if (!bytes) fail(400, 'invalid_asset', 'A source asset could not be copied.');
       mapping.set(sourceId, await storeAsset(c, projectId, source.name, source.mime_type, await bytes.arrayBuffer()));
     }
-    if (mapping.size) {
-      const assetIds = new Map(parsed.assets.map(asset=>[asset.id,mapping.get(asset.url.split('/').pop()!)?.id??asset.id]));
-      for(const character of parsed.characters??[]) for(const attachment of character.attachments) {if(attachment.assetId)attachment.assetId=assetIds.get(attachment.assetId)??attachment.assetId;if(attachment.frames)attachment.frames=attachment.frames.map(id=>assetIds.get(id)??id);}
-      parsed.assets = parsed.assets.map(asset => mapping.get(asset.url.split('/').pop()!) ?? asset);
-      for (const asset of mapping.values()) if (!parsed.assets.some(a => a.id === asset.id)) parsed.assets.push(asset);
-      for (const page of parsed.pages) for (const node of page.nodes) if (node.src?.startsWith('/api/assets/')) node.src = mapping.get(node.src.split('/').pop()!)!.url;
+    if (mapping.size) remapDocumentAssets(parsed, mapping);
+    await preparePaintingAssets(c, projectId, parsed);
+    if (mapping.size || parsed.schemaVersion === 2) {
       await c.env.DB.prepare('UPDATE projects SET document=? WHERE id=? AND user_id=?').bind(JSON.stringify(documentSchema.parse(parsed)), projectId, owner(c)).run();
     }
   } catch (error) {
@@ -340,7 +364,8 @@ projectRoutes.patch("/:id", async (c) => {
   });
 });
 projectRoutes.put("/:id/document", async (c) => {
-  const body = documentWriteSchema.parse(await c.req.json());
+  // The owned save service validates the canonical document after its version guard.
+  const body = documentWriteSchema.extend({ document: z.unknown() }).parse(await c.req.json());
   return c.json({
     project: await saveDocument(
       c,
@@ -348,6 +373,7 @@ projectRoutes.put("/:id/document", async (c) => {
       body.document,
       body.expectedRevision,
       body.expectedBriefRevision,
+      body.operationId,
     ),
   });
 });
@@ -356,9 +382,9 @@ projectRoutes.delete("/:id", async (c) => {
   // Close thumbnail publication before reading storage keys, so deletion cannot miss a late cover.
   await c.env.DB.prepare("UPDATE projects SET thumbnail_deleting=1 WHERE id=? AND user_id=?").bind(row.id, owner(c)).run();
   const assets = await c.env.DB.prepare(
-    "SELECT storage_key FROM assets WHERE project_id=? AND user_id=? UNION ALL SELECT storage_key FROM project_thumbnails WHERE project_id=? AND storage_key IS NOT NULL",
+    "SELECT storage_key FROM assets WHERE project_id=? AND user_id=? UNION ALL SELECT storage_key FROM project_thumbnails WHERE project_id=? AND storage_key IS NOT NULL UNION ALL SELECT input_key FROM operation_jobs WHERE project_id=? UNION ALL SELECT result_key FROM operation_jobs WHERE project_id=? AND result_key IS NOT NULL",
   )
-    .bind(row.id, owner(c), row.id)
+    .bind(row.id, owner(c), row.id, row.id, row.id)
     .all<{ storage_key: string }>();
   await c.env.DB.prepare("DELETE FROM projects WHERE id=? AND user_id=?")
     .bind(row.id, owner(c))
@@ -390,7 +416,7 @@ async function createPublication(c: Context<Env>) {
   const projectId = c.req.param("id");
   if (!projectId) fail(400, "invalid_project", "Project ID is required.");
   const row = await projectRow(c, projectId);
-  const doc = JSON.parse(row.document) as DesignDocument;
+  const doc = publicCreativeProjection(documentSchema.parse(JSON.parse(row.document)));
   const refs = await validateAssets(c, doc, row.id);
   const slug = id();
   const replace = (url: string) =>
@@ -493,3 +519,25 @@ export async function published(c: Context<Env>, slug: string) {
 }
 
 projectRoutes.get('/:id/motion',async c=>{const row=await projectRow(c,c.req.param('id'));const input=motionInspectionSchema.parse(c.req.query());const doc=documentSchema.parse(JSON.parse(row.document));if(input.nodeId&&!doc.pages.some(p=>p.nodes.some(n=>n.id===input.nodeId&&n.character)))fail(404,'not_found','Unknown character instance');if(input.characterId&&!doc.characters?.some(x=>x.id===input.characterId))fail(404,'not_found','Unknown character');return c.json({revision:row.revision,...inspectMotion(documentSchema.parse(JSON.parse(row.document)),input)});});
+
+projectRoutes.get('/:id/scene', async c => {
+  const row=await projectRow(c,c.req.param('id')); const query=z.object({pageId:z.string().optional(),time:z.coerce.number().finite().min(0).max(3600).default(0)}).parse(c.req.query());
+  const doc=documentSchema.parse(JSON.parse(row.document));if(query.pageId&&!doc.pages.some(p=>p.id===query.pageId))fail(404,'not_found','Unknown page');
+  return c.json({revision:row.revision,...inspectScene(doc,query.pageId,query.time)});
+});
+projectRoutes.post('/:id/scene', async c => {
+  const row=await projectRow(c,c.req.param('id')),input=sceneRequestSchema.parse(await c.req.json());
+  if(row.revision!==input.expectedRevision)fail(409,'conflict','Project revision changed. Read and reconcile before applying geometry.');
+  let next:DesignDocument;try{next=mutateDocument(documentSchema.parse(JSON.parse(row.document)),[{op:'scene-command',pageId:input.pageId,command:input.command}]);}catch(error){if(error instanceof z.ZodError)throw error;fail(400,'invalid_scene_command',error instanceof Error?error.message:'Scene command failed');throw error;}
+  const revision=input.preview?row.revision:(await saveDocument(c,row.id,next,input.expectedRevision)).revision;
+  return c.json({revision,preview:input.preview,...inspectScene(next,input.pageId)});
+});
+projectRoutes.post('/:id/paint', async c => c.json({ project: await executePaintingCommand(c, c.req.param('id'), await c.req.json()) }));
+
+projectRoutes.get('/:id/scene/animation',async c=>{
+ const row=await projectRow(c,c.req.param('id')),doc=documentSchema.parse(JSON.parse(row.document));
+ const query=z.object({pageId:z.string().min(1),start:z.coerce.number().min(0).max(3600).default(0),end:z.coerce.number().min(0).max(3600).optional(),samples:z.coerce.number().int().min(2).max(61).default(25)}).parse(c.req.query());
+ if(!doc.pages.some(p=>p.id===query.pageId))fail(400,'invalid_page','Unknown page');
+ if((query.end??doc.timeline?.duration??0)<query.start)fail(400,'invalid_range','End must follow start');
+ return c.json({revision:row.revision,...inspectSceneAnimation(doc,query.pageId,query.start,query.end,query.samples)});
+});

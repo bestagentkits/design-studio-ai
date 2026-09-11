@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "design-studio-ai",
-  "main": "server/index.ts",
+  "main": "server/worker.ts",
   "compatibility_date": "2026-09-07",
   "compatibility_flags": ["nodejs_compat"],
   "assets": {
@@ -15,6 +15,7 @@
   "vars": { "APP_URL": "https://studio.agentkit.best", "ALLOW_REGISTRATION": "true" },
   "routes": [{ "pattern": "studio.agentkit.best", "custom_domain": true }],
   "observability": { "enabled": true },
+  "queues":{"producers":[{"binding":"OPERATION_QUEUE","queue":"design-studio-operations"}],"consumers":[{"queue":"design-studio-operations","max_batch_size":1,"max_batch_timeout":1,"max_concurrency":1,"max_retries":20}]},
   "browser": { "binding": "BROWSER" },
   "limits": { "cpu_ms": 30000 }
 }

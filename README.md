@@ -11,7 +11,7 @@ An agent-first design workspace for web interfaces, slides, reports, wireframes,
 - Responsive project library with search, filters, sorting, duplication, and saved designs.
 - Structured flex/grid layouts, nested groups, Ant and shadcn-style components, versioned reusable design systems, and live human/agent editing.
 - Native [2D character motion](docs/character-motion.md): bones, skins, weighted meshes, per-property clips, constraints, physics and scene blending.
-- Mesh/UV/rigging tools, textured animated 3D scenes, multi-layer keyframe editing, presentation modes, font/model discovery and interactive API docs.
+- [Editable 3D characters](docs/3d-characters.md): remesh/loft, quadruped rigs, weights, IK, morph targets and UV painting; textured animated 3D scenes, multi-layer keyframe editing, presentation modes, font/model discovery and interactive API docs.
 - BYOK text, image, speech, music/effects, and video generation, plus supported source-media edits. See [providers](docs/providers.md).
 - JSON, HTML, SVG, PNG, PDF, PowerPoint, WebM, supported MP4 recording, React prototype ZIP, GLB/glTF, and authorized Google Slides export.
 - Immutable public snapshots, REST, authenticated Streamable HTTP MCP with OAuth/API keys, experimental browser WebMCP, and the `dsa` CLI with an [agent skill](skills/design-studio-ai/SKILL.md).
@@ -77,10 +77,10 @@ Set `ENCRYPTION_KEY` and the public `APP_URL` in your environment or a local Com
 
 Create an API token in Settings and inject `DESIGN_STUDIO_API_KEY` into the agent environment. `DESIGN_STUDIO_URL` defaults to the live studio. Network MCP is at `https://studio.agentkit.best/mcp`, with OAuth discovery on the same origin.
 
-Install the published [v0.3.3 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.3) CLI tarball:
+Install the published [v0.4.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.0) CLI tarball:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.3/bestagentkits-design-studio-ai-0.3.3.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/bestagentkits-design-studio-ai-0.4.0.tgz
 dsa --help
 ```
 
@@ -90,13 +90,13 @@ The package is **not published to the npm registry**. To build and install from 
 cd packages/cli
 npm pack
 cd ../..
-npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.3.tgz
+npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.0.tgz
 dsa --help
 dsa schema
 dsa projects list
 ```
 
-The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.3/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
+The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
 
 ## Verify and contribute
 

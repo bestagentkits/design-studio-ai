@@ -24,6 +24,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `schema [--operations]` | JSON Schema from the shared validators; semantic checks still run on writes |
 | `catalog`, `themes list/get`, `templates list/get/instantiate`, `blocks list/get` | Bundled design resources; instantiated IDs are unique |
 | `projects list/get/create/rename/delete/clone` | Persisted project management; clone copies owned asset bytes |
+| `projects paint ID --file command.json` | Server-rendered stroke/fill using observed revision, painting generation and exact retry ID |
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
 | `projects document merge/changes` | Three-way merge using the exact earlier base, and revision polling |
 | `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
@@ -105,6 +106,12 @@ CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build pr
 
 Build the complete installable skill archive with `npm run pack:skill`. The [packaging script](../scripts/package-skill.mjs) includes the entrypoint and all design-kind references in `dist/design-studio-ai-skill.zip`.
 
+## Creative documents
+
+Clients must read both v1 and v2 and preserve typed boards, paintings, semantic diagram metadata and immutable assets. Discover shared board transforms, paste, diagram and generation-checked layer/group operations through the live operation schema. Use `POST /api/projects/{id}/paint`, MCP `paint_document`, or `dsa projects paint PROJECT_ID --file command.json` for server-rendered strokes/fills; `paintingCommand` in `/api/schema` owns the request shape, and generated WebMCP exposes the same endpoint. Carry the observed document revision, painting generation and operation ID. Retry the identical command under that ID after uncertain delivery; never fabricate pixel hashes or retry with a guessed revision. See [creative tools](creative-tools.md) for recovery, Elements/GIF timing, publication privacy and device limits. A v1-only client cannot save an upgraded v2 project.
+
+Native diagram appearance uses `diagram-style` with a partial `style`, optional `elementIds`, `setDefault` and `savePreset`. An empty selection changes no existing objects; omitting it targets semantic nodes and connectors. `diagram-update` edits labels and text sizing; `diagram-edge` edits bindings-independent routing, bends, label position and color. Preserve user overrides and use the shared live schema for exact fields. Bundled Vietnamese fonts and SVG geometry are shared with the editor.
+
 ## Catalog and editor parity
 
 Discover built-in templates and themes through REST `/api/catalog`, `dsa templates list`, `dsa themes list`, or the available MCP/WebMCP catalog tools. The shared [catalog](../src/shared/catalog.ts) owns discovery; [presets](../src/shared/catalog-presets.ts) supply starting points that still need the user's content and review. A visual theme does not add a component library or a working business backend.
@@ -121,6 +128,11 @@ Use the shared [provider guide](providers.md#official-and-custom-connections) fo
 
 See [character motion](character-motion.md) and discover current operation schemas. `dsa motion PROJECT_ID --node NODE_ID --time 1` / MCP `inspect_motion` reads poses. Motion generation returns baseRevision/baseBriefRevision; carry both into the explicit document write (`expectedRevision`, `expectedBriefRevision`). Frame exports accept `--start`, `--end`, `--fps`; `motion`, `png-sequence`, and `spritesheet` return ZIPs. Native motion is not a Spine interchange format.
 
+## 3D authoring
+
+Use `dsa scene schema`, `scene inspect`, and revision-checked `scene command` (preview by default, `--apply` to save). WebMCP provides `studio_scene_command` and `studio_inspect_scene`; network MCP provides `author_scene` and `inspect_scene`. See [3D characters](3d-characters.md) for coordinates, operation boundaries, rigging and export review.
 ## Persistent project covers
 
 Project summaries include `thumbnailUrl` (current saved revision) and `thumbnailRevision` (latest completed cover or null). GET `/api/projects/{id}/thumbnail?revision=N` returns a private PNG, or 202 with `Retry-After: 2` while rendering is busy. MCP `get_project_thumbnail`, WebMCP `studio_api_get_projects_id_thumbnail`, and `dsa projects thumbnail ID --revision N --output cover.png` use the same cache. A 202 is pending, not a completed download; retry after the indicated delay. Only the two latest completed covers are retained. Cloud render asset/import limits apply; no provider call occurs.
+
+See [durable operation jobs](operation-jobs.md) for save/export recovery, result retention and Cloudflare queue provisioning.

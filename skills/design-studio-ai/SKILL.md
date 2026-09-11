@@ -121,6 +121,16 @@ Publish when already authorized by the user's request, using `publish PROJECT_ID
 
 Report the project/artifact URL or output path, what was changed, verification performed, and any actual remaining configuration or format limitation. Do not claim provider generation, deployment, export fidelity, or publication without observed success.
 
+## Boards and paint
+
+Read the live v1/v2 document and operation schemas. Preserve board/painting roots, semantic diagram metadata, emoji identity and immutable asset references. Use shared transforms, paste and diagram operations for board edits; generation-checked layer/group operations for paint structure. For real raster strokes/fills, use MCP `paint_document`, CLI `projects paint PROJECT_ID --file command.json`, or the generated WebMCP API action for `POST /api/projects/{id}/paint`. Discover `paintingCommand` through `/api/schema` before constructing requests.
+
+For native diagrams, use `diagram-style` for partial appearance changes, optional `elementIds` for selection, `setDefault` for new-object defaults and `savePreset` for a reusable board style. Preserve explicit per-object choices. Use `diagram-update` for label/font/autoSize and `diagram-edge` for routing/bends/labelPosition. Bundled Patrick Hand, Noto Sans, Lora and Roboto Mono support Vietnamese and offline SVG; other font names depend on font availability. Inspect the actual layout and exported artifact after changing fonts or routing.
+
+Carry the observed project revision, painting generation and a unique operation ID. Repeat the identical command under that ID only when its outcome is uncertain; same-painting pixel/settings changes conflict. Never fabricate pixel hashes or derived composites. Direct source replacement needs uploaded real RGBA8 PNG tiles. Keep scope approval and its revision separate from document changes.
+
+Elements artwork records provenance; imported SVG is safely flattened to PNG and loses vector editing. GIF sources retain original owned bytes plus an explicit poster and millisecond playback fields. Static output uses the saved poster; inspect timed exports for actual motion and z-order. Public projections omit private painting source and hidden board elements; JSON remains private editable source. Use authenticated export when media is not embedded locally. Physical iPad/Pencil performance remains unmeasured; report only devices and artifacts actually checked.
+
 ## Native 2D character motion
 
 Discover live v2 document and operation schemas. Use `dsa motion PROJECT_ID` or MCP `inspect_motion` to inspect IDs, then named character operations for focused edits. Keep setup poses separate from clip keys. Attachments reference asset IDs; import remote artwork before portable export. Skins reuse rig/clips; placements and controls belong to each node instance.
@@ -129,6 +139,7 @@ For simple timeline motion, `dsa motion-template list` and `dsa motion-template 
 
 `generate --mode motion` returns validated operations, a preview document and baseRevision/baseBriefRevision. Apply only after explicit review, preserving both revisions via document PUT expectedRevision/expectedBriefRevision. On conflict, re-read and reconcile; never retry with a guessed revision. `motion`, `png-sequence` and `spritesheet` exports are ZIPs; frame ranges use --start/--end/--fps and exclude the end frame. Native Studio packages do not imply Spine or game-engine format support. See the live /docs/motion guide.
 
+For editable 3D character meshes and animation, discover scene commands and follow [3D scenes](references/3d.md); use compact authoring operations, inspect sampled deformation and reopen the export.
 ## Saved covers
 
 Use `get_project_thumbnail` (MCP) or `dsa projects thumbnail ID --output cover.png` for a small persisted cover. Optional revision selects a retained saved revision. Project summaries expose `thumbnailUrl` and latest ready `thumbnailRevision`. A busy render returns 202/status rendering: retry after 2 seconds; do not claim an image exists yet. Covers are private, maximum 480px per side, generated lazily with the shared server renderer, and retain the latest two completed revisions. Import external media before cloud rendering. Use full exports for detailed visual review.

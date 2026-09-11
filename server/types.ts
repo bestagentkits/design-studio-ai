@@ -14,16 +14,17 @@ export interface Bucket {
   put(
     key: string,
     data: ArrayBuffer | Uint8Array,
-    options?: { httpMetadata?: { contentType: string } },
+    options?: { httpMetadata?: { contentType: string; contentDisposition?:string } },
   ): Promise<unknown>;
   get(key: string): Promise<{
     body: ReadableStream;
-    httpMetadata?: { contentType?: string };
+    httpMetadata?: { contentType?: string; contentDisposition?:string };
     arrayBuffer(): Promise<ArrayBuffer>;
   } | null>;
   delete(key: string): Promise<unknown>;
 }
 export interface Bindings {
+  OPERATION_QUEUE?: {send(message:{id:string}):Promise<void>};
   DB: Database;
   ASSETS_BUCKET: Bucket;
   BROWSER?: Parameters<typeof puppeteer.launch>[0]; EXPORT_BROWSER?: () => Promise<import("./exports").ExportBrowser>;

@@ -1,3 +1,4 @@
+import { diagramFontCss } from './diagram-font-data';
 import type { DesignDocument } from './schema';
 
 const localFonts = new Set(['arial', 'arial black', 'helvetica', 'helvetica neue', 'georgia', 'times', 'times new roman', 'courier', 'courier new', 'verdana', 'tahoma', 'trebuchet ms', 'calibri', 'cambria', 'segoe ui', 'apple color emoji', 'segoe ui emoji', 'blinkmacsystemfont', 'system-ui', 'ui-sans-serif', 'ui-serif', 'ui-monospace', 'sans-serif', 'serif', 'monospace', 'cursive', 'fantasy', 'inherit']);
@@ -7,6 +8,7 @@ export function googleFontFamily(value: string): string | null {
 }
 export function documentFontFamilies(doc: DesignDocument): string[] {
   const values = [doc.theme.fonts.heading, doc.theme.fonts.body, ...doc.pages.flatMap(page => page.nodes.map(node => String(node.style?.fontFamily ?? '')))];
+  if (doc.schemaVersion === 2) values.push(...doc.boards.flatMap(b => b.elements.flatMap(e => e.visible ? [...(e.type === 'text' ? [e.fontFamily] : []), ...(e.diagram ? [e.diagram.fontFamily] : []), ...(e.type === 'connector' ? [e.labelFontFamily] : [])] : [])));
   return [...new Set(values.map(googleFontFamily).filter((value): value is string => !!value))].sort();
 }
 export function googleFontsStylesheetUrl(families: readonly string[]): string | null {
@@ -27,7 +29,9 @@ async function waitForFontFaces(target: Document, families: string[]) {
   } finally { clearTimeout(timer); }
 }
 export async function loadDocumentFonts(doc: DesignDocument, target: Document = document): Promise<void> {
-  const families = documentFontFamilies(doc);
+  if (!target.querySelector('style[data-diagram-font]')) { const style = target.createElement('style'); style.dataset.diagramFont = ''; style.textContent = diagramFontCss; target.head.append(style); }
+  await Promise.all(['Patrick Hand','Noto Sans','Lora','Roboto Mono'].map(f=>target.fonts.load(`24px "${f}"`)));
+  const families = documentFontFamilies(doc).filter(family => !['patrick hand', 'noto sans', 'lora', 'roboto mono'].includes(family.toLowerCase()));
   const href = googleFontsStylesheetUrl(families);
   if (!href) return;
   if ([...target.querySelectorAll<HTMLStyleElement>('style[data-studio-fonts-embedded]')].some(style => style.getAttribute('data-studio-fonts-embedded') === href)) {

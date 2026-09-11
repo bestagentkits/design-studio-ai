@@ -1,3 +1,5 @@
+import { boardSvg } from './board-render';
+
 import { characterSvg } from './character-svg';
 import { resolveLayout } from './layout';
 import { ease } from './easing';
@@ -17,22 +19,34 @@ export function resolveFont(value: unknown, theme: Theme): string {
   return String(raw ?? theme.fonts.body).replace(/[^a-zA-Z0-9 ,_-]/g, '') || 'Arial';
 }
 export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0): DesignNode {
-  const result = { ...node, style: { ...node.style }, ...(node.scene ? { scene: structuredClone(node.scene) } : {}) };
+  // Geometry is immutable during playback. Clone only animated state, not large mesh buffers.
+  const scene = node.scene ? (() => { const { mesh, ...state } = node.scene; return { ...structuredClone(state), ...(mesh ? {mesh} : {}) }; })() : undefined;
+  const result = { ...node, style: { ...node.style }, ...(scene ? {scene} : {}) };
   for (const track of doc.timeline?.tracks.filter(track => track.nodeId === node.id && !track.muted) ?? []) {
+    const owner = (node.scene?.rigId??node.data?.rigSourceId) ? doc.pages.flatMap(p=>p.nodes).find(n=>n.id===(node.scene?.rigId??node.data?.rigSourceId)) : node;
+    const clip=track.clipName?owner?.scene?.clips?.find(c=>c.name===track.clipName):undefined;
+    if(clip&&(time<clip.start||time>clip.end))continue;
+    const duration=clip?.sourceDuration??(clip?clip.end-clip.start:0);
+    const elapsed=clip?(time-clip.start)*(clip.speed??1):0;
+    const sampleTime=clip?clip.start+(time===clip.end?duration:elapsed%duration):time;
+    const blend=clip?.blend?Math.max(0,Math.min(1,(time-clip.start)/clip.blend,(clip.end-time)/clip.blend)):1;
     const frames = [...track.keyframes].sort((a, b) => a.time - b.time);
     const keys = new Set(frames.flatMap(f => Object.keys(f.values)));
     for (const key of keys) {
       const keyed = frames.filter(f => key in f.values);
       if (!keyed.length) continue;
-      const before = [...keyed].reverse().find(f => f.time <= time) ?? keyed[0];
-      const after = keyed.find(f => f.time >= time) ?? keyed[keyed.length - 1];
-      const mix = before.time === after.time ? 0 : Math.max(0, Math.min(1, (time - before.time) / (after.time - before.time)));
+      const before = [...keyed].reverse().find(f => f.time <= sampleTime) ?? keyed[0];
+      const after = keyed.find(f => f.time >= sampleTime) ?? keyed[keyed.length - 1];
+      const mix = before.time === after.time ? 0 : Math.max(0, Math.min(1, (sampleTime - before.time) / (after.time - before.time)));
       const a = before.values[key], b = after.values[key];
-      const value = typeof a === 'number' && typeof b === 'number' ? a + (b - a) * ease(mix, before.easing) : a;
+      let value = typeof a === 'number' && typeof b === 'number' ? a + (b - a) * ease(mix, before.easing) : a;
+      if(clip&&typeof value==='number'){const match=/^scene\.bones\.(\d+)\.(position|rotation)\.([xyz])$/.exec(key);if(match){const bone=node.scene?.bones?.[+match[1]],field=match[2] as 'position'|'rotation',axis='xyz'.indexOf(match[3]);const base=(field==='rotation'?bone?.bindRotation:bone?.position)?.[axis]??0;const previous=result.scene?.bones?.[+match[1]]?.[field]?.[axis]??base;value=previous+(base+(value-base)*(clip.amplitude??1)-previous)*blend;}}
       if (['x', 'y', 'width', 'height', 'rotation', 'opacity'].includes(key) && typeof value === 'number') Object.assign(result, { [key]: value });
       else if (['fill', 'fontSize', 'borderRadius', 'strokeWidth', 'stroke'].includes(key)) result.style[key] = value;
       else if (typeof value === 'number') {
         const transform = /^scene\.(position|rotation|scale)\.([xyz])$/.exec(key);
+        const morph = /^scene\.morphWeights\.([a-zA-Z0-9_-]+)$/.exec(key);
+        if (morph && result.scene?.mesh?.morphTargets?.some(t=>t.name===morph[1])) { result.scene.morphWeights ??= {}; result.scene.morphWeights[morph[1]]=Math.max(0,Math.min(1,value)); }
         const bone = /^scene\.bones\.(\d+)\.(position|rotation)\.([xyz])$/.exec(key);
         if (transform) {
           const field = transform[1] as 'position' | 'rotation' | 'scale';
@@ -96,6 +110,15 @@ function nodeSvg(n: DesignNode, doc: DesignDocument, time = 0): string {
       return `<text x="0" y="${y}" font-family="Arial" font-size="14" fill="${textColor}">${escapeHtml(block.label)}</text><text x="${num(n.width, 0, 0)}" y="${y}" text-anchor="end" font-family="Arial" font-size="14" font-weight="700" fill="${block.accent ? accent : textColor}">${escapeHtml(block.value)}</text>`;
     }).join('');
     markup = `<rect width="${n.width}" height="${n.height}" rx="${radius}" fill="${fill}"/><text x="0" y="18" font-family="Arial" font-size="16" font-weight="700" fill="${textColor}">${escapeHtml(view.title)}</text>${rows}`;
+  } else if (n.type === 'board' && doc.schemaVersion === 2 && n.crop) {
+    const board = doc.boards.find(b => b.id === n.boardId);
+    if (!board) throw new Error('Board is unavailable');
+    markup = boardSvg(board, doc, n.crop, n.width, n.height);
+  } else if (n.type === 'artwork' && doc.schemaVersion === 2) {
+    const painting = doc.paintings.find(p => p.id === n.paintingId);
+    const asset = doc.assets.find(a => a.id === painting?.composite?.assetId);
+    if (!asset && painting?.layers.some(l => l.tiles.length)) throw new Error('Painting needs a current composite before rendering');
+    markup = asset ? `<image href="${escapeHtml(asset.url)}" width="${n.width}" height="${n.height}" preserveAspectRatio="none"/>` : '';
   } else if (n.type === 'text') {
     const size = num(s.fontSize, 24, 1, 1000);
     const lineHeight = num(s.lineHeight, 1.2, 0.5, 4) * size;

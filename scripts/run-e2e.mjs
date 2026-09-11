@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -18,6 +18,23 @@ if (!process.argv.slice(2).some(argument => argument === '--project' || argument
   }
   process.exit(code);
 }
+// Authentication limits are production behavior; independent specs receive independent databases.
+if (!process.env.STUDIO_E2E_SPEC_ISOLATED) {
+  const args = process.argv.slice(2), requested = args.filter(arg => arg.endsWith('.spec.ts'));
+  const files = requested.length ? requested : (await readdir('tests')).filter(name => name.endsWith('.spec.ts')).sort().map(name => `tests/${name}`);
+  let result = 0, interrupted = false;
+  for (const file of files) {
+    const project = args.find(arg => arg.startsWith('--project='))?.split('=')[1] || args[args.indexOf('--project') + 1] || 'selected';
+    const output = args.some(arg => arg === '--output' || arg.startsWith('--output=')) ? [] : [`--output=test-results/${project}/${file.split('/').at(-1).replace(/\.spec\.ts$/, '')}`];
+    const child = spawn(process.execPath, [process.argv[1], ...args.filter(arg => !requested.includes(arg)), file, ...output], { stdio: 'inherit', env: { ...process.env, STUDIO_E2E_SPEC_ISOLATED: '1' } });
+    const stop = () => { interrupted = true; child.kill('SIGTERM'); }; process.once('SIGINT', stop); process.once('SIGTERM', stop);
+    const code = await new Promise(resolve => child.once('exit', value => resolve(value ?? 1)));
+    process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
+    if (code !== 0) result = Number(code);
+    if (interrupted) break;
+  }
+  process.exit(result);
+}
 const port = Number(process.env.E2E_PORT || 8791);
 const origin = `http://127.0.0.1:${port}`;
 await new Promise((accept, reject) => { const probe = net.createServer(); probe.once('error', reject); probe.listen(port, '127.0.0.1', () => probe.close(accept)); });
@@ -35,9 +52,12 @@ const terminate = () => { runner?.kill('SIGTERM'); server.kill('SIGTERM'); };
 process.once('SIGINT', terminate); process.once('SIGTERM', terminate);
 try {
   let ready = false;
-  for (let attempt = 0; attempt < 100; attempt++) {
+  // Cold TypeScript startup on a busy host can exceed ten seconds. Wait for
+  // this owned process and its health endpoint, with a bounded readiness budget.
+  const startupDeadline = Date.now() + 30000;
+  while (Date.now() < startupDeadline) {
     if (server.exitCode !== null) throw new Error('E2E server exited before becoming ready');
-    try { ready = listening && (await fetch(origin + '/api/health')).ok && server.exitCode === null; } catch { /* Startup has not bound the port yet. */ }
+    try { ready = listening && (await fetch(origin + '/api/health', {signal:AbortSignal.timeout(1000)})).ok && server.exitCode === null; } catch { /* Startup has not bound the port yet. */ }
     if (ready) break;
     await new Promise(accept => setTimeout(accept, 100));
   }

@@ -12,8 +12,10 @@ test('browser registration stays compact while retaining canonical validation an
   const tools = new Map<string, Tool>();
   const unregister = registerDesignTools({ registerTool: tool => tools.set(tool.name, tool), unregisterTool: name => { tools.delete(name); } }, () => document, next => { document = next; });
   // Conservative regression budgets, not a claim about every host's exact limits.
+  // The tool surface grew with operation/scene/paint/import endpoints; the per-tool
+  // budget below remains the binding browser-host constraint.
   const metadata = [...tools.values()].map(({ execute, ...tool }) => tool);
-  assert.ok(Buffer.byteLength(JSON.stringify(metadata)) < 32000);
+  assert.ok(Buffer.byteLength(JSON.stringify(metadata)) < 48000);
   for (const tool of metadata) assert.ok(Buffer.byteLength(JSON.stringify(tool)) < 4096, tool.name);
   const capabilities = await tools.get('studio_capabilities')!.execute({}) as { content: { text: string }[] };
   const schemas = JSON.parse(capabilities.content[0].text);

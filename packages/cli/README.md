@@ -14,13 +14,13 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.3.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.0.tgz`, or install the published release directly:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.3/bestagentkits-design-studio-ai-0.3.3.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/bestagentkits-design-studio-ai-0.4.0.tgz
 ```
 
-The [v0.3.3 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.3) includes CLI and skill archives. The package is not published to the npm registry.
+The [v0.4.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.0) includes CLI and skill archives. The package is not published to the npm registry.
 
 The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
 
@@ -75,8 +75,24 @@ For concurrent editing, retain the exact document and revision you read. `projec
 
 `api METHOD /api/path --file request.json` provides an explicit REST escape hatch constrained to the configured server. It neither bypasses server auth nor evaluates local code. Requests reject redirects to keep tokens bound to the configured origin.
 
+## Creative documents
+
+The bundled schema reads v1/v2 and exposes board transforms, paste, semantic diagrams and painting layer/group operations through `schema --operations`. Preserve v2 roots when applying edits. `projects paint PROJECT_ID --file command.json` executes a real server-side stroke/fill using the live `paintingCommand` schema; include the observed revision, painting generation and a unique operation ID. An uncertain write can be retried with the identical command and ID. Direct painting replacement still requires owned PNG tiles and verified source hashes. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. Static GIF export uses the saved poster; timed browser exports sample actual frames. See [creative tools](../../docs/creative-tools.md) for persistence, SVG flattening, public projections and acceptance limits.
+
+Native diagram appearance uses `diagram-style` with a partial `style`, optional `elementIds`, `setDefault` and `savePreset`. An empty selection changes no existing objects; omitting it targets semantic nodes and connectors. `diagram-update` edits labels and text sizing; `diagram-edge` edits bindings-independent routing, bends, label position and color. Preserve user overrides and use the shared live schema for exact fields. Bundled Vietnamese fonts and SVG geometry are shared with the editor.
+
 ## Native character motion
 
 `dsa motion PROJECT_ID --node NODE_ID --time 1` inspects an instance; omit the node to list reusable rigs/clips/skins. Use live `schema --operations` for named character, channel, key and bake edits. Character documents use schema v2; saving v1 over v2 is rejected.
 
 `generate --mode motion` returns a bounded operation proposal and base document/brief revisions. Review it before applying with `projects document put --revision N --brief-revision B`. Native `motion` export is a ZIP; `png-sequence` and `spritesheet` use `--start`, `--end`, `--fps`, with an exclusive end boundary. These are Studio formats, not Spine/game-engine interchange. See [motion guide](https://studio.agentkit.best/docs/motion) for import, constraints and current export limits.
+
+## 3D characters
+
+`dsa scene schema` discovers commands. `dsa scene inspect PROJECT --page PAGE --time 0.5` reads diagnostics. `dsa scene command PROJECT --page PAGE --revision N --file command.json` previews; add `--apply` to save through the server revision guard. See the repository [3D guide](../../docs/3d-characters.md).
+
+### Durable 3D workflow
+
+`dsa scene schema` discovers authoring commands (shared rigs, clip edits, contacts, brushes, checkpoints, loop cuts and material layers). `dsa scene scan PROJECT --page PAGE --samples 25` returns complete-animation repair locations and contact errors. `projects export --format scene-angles --start 0.5 --output views.zip` captures four views.
+
+Use `dsa operations start PROJECT --file job.json`, `operations status PROJECT ID`, and `operations result PROJECT ID --out result.glb` for durable saves/exports. Job JSON contains `kind`, a stable `operationId`, and `input` with normal save/export fields and `expectedRevision`. Reuse the identical ID/payload after a timeout. Download only after `succeeded`; a save result is its committed project receipt. Artifacts stay private and are retained until project deletion.

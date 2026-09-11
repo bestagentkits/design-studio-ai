@@ -1,3 +1,4 @@
+import { publicCreativeProjection } from '../shared/public-creative-projection';
 import {documentSchema} from '../shared/schema';
 import type { DesignDocument, DesignNode } from "../shared/schema";
 import { renderHtml, renderSvg } from "../shared/render";
@@ -86,7 +87,7 @@ export async function exportDesign(
     );
     return;
   }
-  const doc = await portableDocument(input, ['react', 'glb', 'gltf', 'html'].includes(format)),
+  const doc = await portableDocument(publicCreativeProjection(input), ['react', 'glb', 'gltf', 'html'].includes(format)),
     page = doc.pages[pageIndex]!;
   if (format === 'react') {
     const [{ createReactArchive }, response] = await Promise.all([import('../shared/react-export'), fetch('/studio-react-runtime.json')]);

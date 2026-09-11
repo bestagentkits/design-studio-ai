@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve } from 'node:path';
 import { serve } from '@hono/node-server';
 import { app } from '../server/index';
+import { processOperation } from '../server/operation-worker';
 import { FileBucket, SqliteDatabase } from '../server/node-adapters';
 import { secret } from '../server/security';
 import type { Bindings } from '../server/types';
@@ -18,6 +19,7 @@ let database: SqliteDatabase;
 let server: ReturnType<typeof serve>;
 let baseUrl: string;
 let apiKey: string;
+let bindings: Bindings;
 
 function run(args: string[], options: { input?: string; token?: string; executable?: string; url?: string } = {}): Promise<{ code: number; stdout: string; stderr: string }> {
   return new Promise((resolveRun, reject) => {
@@ -47,7 +49,7 @@ before(async () => {
   directory = await mkdtemp(join(tmpdir(), 'dsa-cli-test-'));
   database = new SqliteDatabase(join(directory, 'studio.sqlite'));
   for (const name of (await readdir(resolve('migrations'))).filter(name => name.endsWith('.sql')).sort()) await database.exec(await readFile(resolve('migrations', name), 'utf8'));
-  const bindings: Bindings = { ASSETS: builtStaticAssets, DB: database, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret(), PROVIDER_ALLOWED_ORIGINS: 'https://cli-provider.example' };
+  bindings = { ASSETS: builtStaticAssets, DB: database, ASSETS_BUCKET: new FileBucket(join(directory, 'assets')), ALLOW_REGISTRATION: 'true', ENCRYPTION_KEY: secret(), PROVIDER_ALLOWED_ORIGINS: 'https://cli-provider.example' };
   server = serve({ fetch: request => app.fetch(request, bindings), hostname: '127.0.0.1', port: 0 });
   await new Promise<void>(resolveListening => { if (server.listening) resolveListening(); else server.once('listening', resolveListening); });
   const address = server.address(); assert.ok(address && typeof address !== 'string');
@@ -93,7 +95,7 @@ test('standalone built executable prints help and version without checkout depen
 });
 
 test('schema and templates use the actual shared document format', async () => {
-  const schema = await json(['schema']); assert.deepEqual(schema.schema.properties.schemaVersion.anyOf.map((v: {const:number})=>v.const), [1,2]);
+  const schema = await json(['schema']); assert.deepEqual(schema.schema.oneOf.map((branch: any) => branch.properties.schemaVersion.const), [1, 2]);
   const operationSchema = await json(['schema', '--operations']); assert.equal(operationSchema.schema.type, 'array');
   const catalog = await json(['templates', 'list']);
   for (const template of catalog.templates) {
@@ -179,4 +181,15 @@ test('CLI custom connections support secure input, metadata updates and no-auth 
   assert.notEqual(conflict.code, 0); assert.equal(conflict.stderr.includes('never-send'), false);
   assert.equal((await json(['providers', 'set', 'custom-cli', '--auth-method', 'none'])).authMethod, 'none');
   await json(['providers', 'remove', 'custom-cli']);
+});
+
+
+test('CLI operation IDs recover a save and download the real durable result',async()=>{
+ const project=(await json(['projects','create','--name','Durable CLI'])).project;
+ const payload={kind:'save',operationId:'cli-save',input:{document:{...project.document,name:'Durable result'},expectedRevision:project.revision}};
+ const started=await json(['operations','start',project.id,'--file','-'],{input:JSON.stringify(payload)});assert.equal(started.operation.status,'queued');
+ const row=await database.prepare('SELECT id FROM operation_jobs WHERE project_id=? AND operation_id=?').bind(project.id,'cli-save').first<{id:string}>();assert(row);await processOperation(bindings,row.id);
+ assert.equal((await json(['operations','status',project.id,'cli-save'])).operation.revision,project.revision+1);
+ const replay=await json(['operations','start',project.id,'--file','-'],{input:JSON.stringify(payload)});assert.equal(replay.operation.status,'succeeded');
+ const out=join(directory,'durable-result.json');await json(['operations','result',project.id,'cli-save','--out',out]);const receipt=JSON.parse(await readFile(out,'utf8'));assert.equal(receipt.project.document.name,'Durable result');assert.equal(receipt.project.revision,project.revision+1);
 });

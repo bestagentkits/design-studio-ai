@@ -6,6 +6,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 | --- | --- |
 | Understand product intent, constraints, and requested outcomes | [Product brief](product-brief.md) |
 | Locate shared contracts, runtime boundaries, and their executable owners | [Architecture](architecture.md) |
+| Maintain creative boards, paint persistence and public-source boundaries | [Creative tools](creative-tools.md) |
 | Rig and animate native 2D characters | [Character motion](character-motion.md) |
 | Configure hosting, secrets, storage, backups, or rollback | [Deployment](deployment.md) |
 | Connect an external agent through the product's API, MCP, WebMCP, or CLI | [Agent access](agents.md) |
@@ -17,3 +18,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 Use the executable owners linked from each guide for current schemas, routes, commands, and configuration. These guides provide context and navigation; the product brief records requested scope rather than proof of completion.
 
 [Plans and reports](../plans/) preserve implementation decisions and observed checks. [Release verification](../plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) is evidence for that release, not current implementation authority. Use source and tests to establish behavior for a new change.
+
+[Editable 3D characters](3d-characters.md) covers mesh, rig, expressions, UV painting and agent commands.
+
+See [durable operation jobs](operation-jobs.md) for save/export recovery, result retention and Cloudflare queue provisioning.

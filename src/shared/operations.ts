@@ -1,3 +1,10 @@
+import { sceneCommandSchema } from './scene-authoring-schema';
+import { applySceneCommand } from './scene-authoring';
+import { paintingLayerOperationSchemas, isPaintingLayerOperation, applyPaintingLayerOperation } from './painting-layer-operations';
+import { diagramOperationSchemas, isDiagramOperation, applyDiagramOperation } from './diagram-operations';
+import { boardEditingSchemas, isBoardEditingOperation, applyBoardEditingOperation } from './board-editing';
+import { duplicateCreativeEmbeds } from './creative-duplication';
+import { creativeOperationSchemas, isCreativeOperation, applyCreativeOperation } from './board-operations';
 import {characterEvolutionErrors} from './character-validation';
 import { z } from 'zod';
 import { characterOperationSchemas, characterOperationSchema, applyCharacterOperation } from './character-operations';
@@ -9,7 +16,12 @@ import { resolveLayout, subtree } from './layout';
 const measuredBoundsSchema = z.object({ id: z.string(), x: z.number().finite().min(-100000).max(100000), y: z.number().finite().min(-100000).max(100000), width: z.number().finite().min(0).max(20000), height: z.number().finite().min(0).max(20000) });
 
 export const operationSchema = z.discriminatedUnion('op', [
+  ...creativeOperationSchemas,
+  ...paintingLayerOperationSchemas,
+  ...diagramOperationSchemas,
+  ...boardEditingSchemas,
   ...characterOperationSchemas,
+  z.object({ op: z.literal('scene-command'), pageId: z.string(), command: sceneCommandSchema }),
   z.object({ op: z.literal('add-node'), pageId: z.string(), node: nodeSchema }),
   z.object({ op: z.literal('update-node'), nodeId: z.string(), changes: nodeSchema.partial().omit({ id: true }) }),
   z.object({ op: z.literal('remove-node'), nodeId: z.string() }),
@@ -52,9 +64,14 @@ function convertChildrenToAbsolute(doc: DesignDocument, page: DesignPage, parent
 }
 export function mutateDocument(document: DesignDocument, input: unknown): DesignDocument {
   const operations = operationsSchema.parse(input);
-  const doc = structuredClone(document);
+  let doc = structuredClone(document);
   for (const action of operations) {
-    if (action.op === 'bake-character' || action.op === 'upsert-character' || action.op === 'remove-character' || action.op === 'upsert-bone' || action.op === 'upsert-slot' || action.op === 'upsert-attachment' || action.op === 'upsert-skin' || action.op === 'upsert-clip' || action.op === 'upsert-constraint' || action.op === 'remove-character-item' || action.op === 'upsert-channel' || action.op === 'remove-channel' || action.op === 'upsert-motion-key' || action.op === 'remove-motion-key') { applyCharacterOperation(doc,characterOperationSchema.parse(action)); }
+    if (isPaintingLayerOperation(action)) doc = applyPaintingLayerOperation(doc, action);
+    else if (isDiagramOperation(action)) doc = applyDiagramOperation(doc, action);
+    else if (isBoardEditingOperation(action)) doc = applyBoardEditingOperation(doc, action);
+    else if (isCreativeOperation(action)) doc = applyCreativeOperation(doc, action);
+    else if (action.op === 'bake-character' || action.op === 'upsert-character' || action.op === 'remove-character' || action.op === 'upsert-bone' || action.op === 'upsert-slot' || action.op === 'upsert-attachment' || action.op === 'upsert-skin' || action.op === 'upsert-clip' || action.op === 'upsert-constraint' || action.op === 'remove-character-item' || action.op === 'upsert-channel' || action.op === 'remove-channel' || action.op === 'upsert-motion-key' || action.op === 'remove-motion-key') { applyCharacterOperation(doc,characterOperationSchema.parse(action)); }
+    else if (action.op === 'scene-command') applySceneCommand(doc, action.pageId, action.command);
     else if (action.op === 'rename') doc.name = action.name;
     else if (action.op === 'set-theme') doc.theme = action.theme;
     else if (action.op === 'apply-theme') { const theme = themes.find(t => t.id === action.themeId); if (!theme) throw new Error('Unknown theme'); doc.theme = structuredClone(theme); }
@@ -126,6 +143,7 @@ export function mutateDocument(document: DesignDocument, input: unknown): Design
         for (const interaction of copy.interactions ?? []) if (interaction.action !== 'url') interaction.target = mapping.get(interaction.target) ?? interaction.target;
         return copy;
       });
+      duplicateCreativeEmbeds(doc, copies);
       const last = Math.max(...originals.map(n => page.nodes.indexOf(n))); page.nodes.splice(last + 1, 0, ...copies);
       const copyBounds = resolveLayout(page).nodes.find(n => n.id === mapping.get(action.nodeId))!, delta = { x: copyBounds.x - originalBounds.x, y: copyBounds.y - originalBounds.y };
       const offsets = new Map<string, { x: number; y: number }>([[action.nodeId, offset]]);

@@ -20,7 +20,7 @@ async function setup(page: Page, origin: string) {
   return project;
 }
 async function save(page: Page, id: string) {
-  const request = page.waitForResponse(response => response.url().endsWith(`/api/projects/${id}/document`) && response.request().method() === 'PUT');
+  const request = page.waitForResponse(response => response.url().includes(`/api/projects/${id}/operations/`) && response.url().endsWith('/result') && response.request().method() === 'GET');
   await page.getByRole('button', { name: 'Save', exact: true }).click(); expect((await request).status()).toBe(200);
   return (await (await page.request.get(`/api/projects/${id}`)).json() as { project: Project }).project;
 }

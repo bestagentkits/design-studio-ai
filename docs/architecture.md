@@ -119,6 +119,12 @@ Sanitized client events use a strict allowlist and remain distinguishable from s
 
 Release evidence and pending checks live in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md). A build, filename, or configured key does not establish deployment, format validity, or provider success.
 
+Creative document versioning, immutable tiles, safe composites and current integration limits are described in [Creative tools](creative-tools.md).
+
 ## Native character motion
 
 [Character motion](character-motion.md) documents the v2 schema, shared operations, GPU/Canvas/SVG evaluators, proposal guards and portable/frame exports. The existing project kind and document revision remain independent from schema version.
+
+## 3D character authoring
+
+[Editable 3D characters](3d-characters.md) describes the shared bounded scene-command pipeline, worker execution, inspection and portable skin/morph/paint data. The schema and operation owners remain canonical across clients.
