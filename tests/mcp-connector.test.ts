@@ -17,6 +17,8 @@ const error = (code: string) => (value: unknown) => value instanceof ApiError &&
 async function peer(t: TestContext, settings: { sse?: boolean; profile?: McpProfile; cycle?: boolean; many?: boolean; denied?: boolean; hang?: boolean; unsafeSchema?: boolean; redirect?: boolean; pingBurst?: boolean; disconnect?: boolean; toolResult?: 'input_required' | 'header_mismatch' } = {}) {
   const requests: { method: string; authorization: string | undefined }[] = [];
   let aborted = 0, terminated = 0;
+  let notifyAborted!: () => void;
+  const requestAborted = new Promise<void>(resolve => { notifyAborted = resolve; });
   // A real HTTP contract peer, not a third-party provider or a mocked SDK client.
   const server = createServer(async (request, response) => {
     if (request.method === 'GET') { response.writeHead(405).end(); return; }
@@ -29,7 +31,7 @@ async function peer(t: TestContext, settings: { sse?: boolean; profile?: McpProf
     if (settings.disconnect) { response.destroy(); return; }
     if (!rpc.method) { response.writeHead(202).end(); return; }
     if (rpc.id === undefined) { response.writeHead(202).end(); return; }
-    if (settings.hang) { response.on('close', () => { aborted++; }); return; }
+    if (settings.hang) { response.on('close', () => { aborted++; notifyAborted(); }); return; }
     if (rpc.method === 'tools/call' && settings.toolResult && requests.filter(item => item.method === 'tools/call').length === 1) {
       const reply = settings.toolResult === 'header_mismatch' ? { error: { code: -32020, message: 'Header mismatch' } } : { result: { resultType: 'input_required', requestState: 'opaque-peer-state' } };
       response.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ jsonrpc: '2.0', id: rpc.id, ...reply })); return;
@@ -62,7 +64,7 @@ async function peer(t: TestContext, settings: { sse?: boolean; profile?: McpProf
     const request = new Request(input, init); targets.push(request.url); assert.equal(request.url, endpoint);
     return fetch(base, { method: request.method, headers: request.headers, body: request.body, signal: request.signal, redirect: 'manual', duplex: 'half' } as RequestInit);
   } } as Bindings;
-  return { env, requests, targets, aborted: () => aborted, terminated: () => terminated };
+  return { env, requests, targets, requestAborted, aborted: () => aborted, terminated: () => terminated };
 }
 for (const profile of ['modern', 'legacy'] as const) for (const sse of [false, true]) test(`${profile} ${sse ? 'SSE' : 'JSON'} uses authenticated bounded catalog and closes its client`, async t => {
   const { env, requests, terminated } = await peer(t, { profile, sse }); let saved: McpRequestScope | undefined;
@@ -94,10 +96,11 @@ test('unsafe remote regex remains unsupported metadata and never grants executio
   const catalog = await withMcpClient(env, connection, credential, readMcpCatalog, { profile: 'modern' });
   assert.ok(catalog.tools.every(tool => !tool.schemaSupported && tool.effect === 'unknown'));
 });
-test('MCP deadline aborts a real hanging HTTP request', async t => {
-  const { env, aborted } = await peer(t, { hang: true });
-  await assert.rejects(withMcpClient(env, connection, credential, readMcpCatalog, { profile: 'modern', timeoutMs: 100 }), error('connector_timeout'));
-  await new Promise(resolve => setTimeout(resolve, 30)); assert.equal(aborted(), 1);
+test('MCP deadline aborts a real hanging HTTP request', { timeout: 5000 }, async t => {
+  const { env, aborted, requests, requestAborted } = await peer(t, { hang: true });
+  await assert.rejects(withMcpClient(env, connection, credential, readMcpCatalog, { profile: 'modern', timeoutMs: 1000 }), error('connector_timeout'));
+  await requestAborted;
+  assert.equal(requests.length, 1); assert.equal(aborted(), 1);
 });
 test('MCP content stays inert, bounds media, rejects tool errors and never resolves links', () => {
   const decoded = decodeMcpContent({ content: [{ type: 'text', text: '<script>untrusted()</script>' }, { type: 'image', mimeType: 'image/png', data: 'YQ==' }, { type: 'audio', mimeType: 'audio/wav', data: 'YQ==' }, { type: 'resource_link', name: 'source', uri: 'https://untrusted.invalid/source' }, { type: 'resource', resource: { uri: 'source://html', text: '<iframe/>', mimeType: 'text/html' } }], structuredContent: { value: 42 } });
