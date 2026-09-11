@@ -29,6 +29,8 @@ One document covers web interfaces, slides, reports, wireframes, 3D, and video. 
 
 Optional structured capabilities live in [design-capabilities.ts](../src/shared/design-capabilities.ts). A page or container can use flex, grid, or explicit absolute layout, with sizing and transform pivots. Parent references form the editable layer tree; nodes without an explicit parent layout retain legacy page-space coordinates. Explicit absolute containers use local child coordinates. New Web/App templates use structured layout. [DocumentView](../src/app/document-view.tsx) renders real interactive components; [layout.ts](../src/shared/layout.ts) resolves geometry for structural operations and static SVG. Text/component intrinsic sizing requires browser measurement for pixel fidelity.
 
+Live artifacts ([live-artifact.ts](../src/shared/live-artifact.ts)) are nodes whose `data.live` holds a bounded renderer id plus scalar params; the editor re-renders them in place and the inspector edits params through the same `update-node` operation. Motion primitives ([motion-templates.ts](../src/shared/motion-templates.ts)) compile validated reveal/stagger/kinetic-type/chart-race data into timeline keyframes using only the keys the shared interpolator applies (`x`, `y`, `width`, `height`, `rotation`, `opacity`).
+
 The [component inspector](../src/app/component-inspector.tsx), [scene inspector](../src/app/scene-inspector.tsx), and [layer tree](../src/app/layer-tree.tsx) stay on the shared document and operation contracts so manual and agent edits remain interchangeable.
 
 The component renderer uses Ant Design and themeable Radix/native controls. Structured PowerPoint pages are rasterized to preserve browser layout; legacy text and primitive shapes remain native PowerPoint objects. [React source export](../src/shared/react-export.ts) packages the document, trusted component source, dependencies, and embedded assets into a runnable frontend project. Browser and authenticated GLB/glTF export use the [shared scene runtime](../src/shared/scene-runtime.ts), including sampled animation and skinning. REST, MCP and CLI export also return React ZIP and GLB/glTF bytes. Server exports embed owned assets; React includes portable source assets, while glTF embeds buffers/textures without external sidecars.
@@ -75,7 +77,7 @@ Passwords use salted PBKDF2. Opaque sessions are hashed, expire, and use HttpOnl
 
 Publishing freezes a snapshot with snapshot-scoped assets; later private edits do not alter it. Unpublish removes the project's snapshots. Escaped published markup receives CSP/response headers. Uploaded media is bounded and type/signature checked. Imported markup becomes allowed document data rather than trusted application HTML.
 
-Provider origins are fixed or explicitly HTTPS-allowlisted by the operator. Requests reject redirects, bound time/bytes, and redact upstream diagnostics. Private media edits send bytes or a supported data URI directly to the chosen provider without automatically publishing the source.
+Provider origins are fixed or explicitly HTTPS-allowlisted by the operator. Requests reject redirects, bound time/bytes, and redact upstream diagnostics. A per-target SSRF guard (`server/ssrf.ts`) additionally rejects loopback, private, link-local, CGNAT and reserved literal addresses even when an origin is allowlisted. Private media edits send bytes or a supported data URI directly to the chosen provider without automatically publishing the source.
 
 ## Agent surfaces
 

@@ -9,6 +9,7 @@ import { documentSchema, type DesignDocument } from '../shared/schema';
 import { apiEndpoints } from '../shared/api-reference';
 import { componentNames, componentSchema, layoutSchema, sceneObjectSchema } from '../shared/design-capabilities';
 import { designSystemSchema } from '../shared/design-systems';
+import { folderImportSchema } from '../shared/design-system-folder';
 import { assetUploadBody } from './api-request-body';
 
 interface Tool { name: string; description: string; inputSchema: Record<string, unknown>; annotations?: Record<string, boolean>; execute: (args: Record<string, unknown>) => Promise<unknown> }
@@ -30,7 +31,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     const operation = `${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
     tools.push({ name: `studio_api_${operation}`, description: endpoint.summary + '. Operates on the saved server state; pass current revisions for writes. Publications are public snapshots.',
       annotations: { readOnlyHint: endpoint.method === 'GET' },
-      inputSchema: { type: 'object', properties: { parameters: { type: 'object', additionalProperties: { type: 'string' } }, query: { type: 'object', additionalProperties: { type: 'string' } }, ...(endpoint.body ? { body: endpoint.method==='PUT'&&endpoint.path.endsWith('/document')?z.toJSONSchema(documentWriteSchema.extend({ document: z.object({}).loose().describe('Canonical DesignDocument. Discover the full document schema with studio_capabilities before writing.') })):endpoint.path.endsWith('/export') ? z.toJSONSchema(exportOptionsSchema) : endpoint.path.endsWith('/media') ? z.toJSONSchema(mediaInputSchema) : endpoint.path.endsWith('/generate') ? z.toJSONSchema(generationInputSchema) : endpoint.path.endsWith('/brief/interview') ? z.toJSONSchema(providerInterviewSchema) : { type: 'object' } } : {}) }, ...(endpoint.body ? { required: ['body'] } : {}) },
+      inputSchema: { type: 'object', properties: { parameters: { type: 'object', additionalProperties: { type: 'string' } }, query: { type: 'object', additionalProperties: { type: 'string' } }, ...(endpoint.body ? { body: endpoint.method==='PUT'&&endpoint.path.endsWith('/document')?z.toJSONSchema(documentWriteSchema.extend({ document: z.object({}).loose().describe('Canonical DesignDocument. Discover the full document schema with studio_capabilities before writing.') })):endpoint.path.endsWith('/export') ? z.toJSONSchema(exportOptionsSchema) : endpoint.path.endsWith('/media') ? z.toJSONSchema(mediaInputSchema) : endpoint.path.endsWith('/generate') ? z.toJSONSchema(generationInputSchema) : endpoint.path.endsWith('/brief/interview') ? z.toJSONSchema(providerInterviewSchema) : endpoint.path.endsWith('/import') ? z.toJSONSchema(folderImportSchema) : { type: 'object' } } : {}) }, ...(endpoint.body ? { required: ['body'] } : {}) },
       execute: async args => {
         const parameters = args.parameters as Record<string, string> | undefined;
         const path = endpoint.path.replace(/\{(\w+)\}/g, (_, key: string) => { if (!parameters?.[key]) throw new Error(`Missing path parameter: ${key}`); return encodeURIComponent(parameters[key]); });

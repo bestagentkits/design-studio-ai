@@ -3,11 +3,12 @@ import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },
   { method: 'GET', path: '/api/schema', summary: 'Document and operation schemas', body: undefined },
-  { method: 'GET', path: '/api/catalog', summary: 'Templates, themes and blocks', body: undefined },
+  { method: 'GET', path: '/api/catalog', summary: 'Templates, themes, blocks and generation prompts', body: undefined },
   { method: 'GET', path: '/api/fonts', summary: 'Search Google Fonts catalog', body: undefined },
   { method: 'GET', path: '/api/providers/{provider}/models', summary: 'Discover provider models', body: undefined },
   { method: 'GET', path: '/api/design-systems', summary: 'List your design systems', body: undefined },
   { method: 'POST', path: '/api/design-systems', summary: 'Create a reusable design system', body: { name: 'My system', system: 'shadcn', theme: {}, components: [], compositions: [] } },
+  { method: 'POST', path: '/api/design-systems/import', summary: 'Compile a portable DESIGN.md + tokens.css + manifest.json folder into a design system', body: { manifest: { id: 'acme', name: 'Acme' }, designMd: '# Acme', tokensCss: ':root { --bg: #fff; --fg: #000; --accent: #123; --font-display: "Inter"; --font-body: "Inter"; }' } },
   { method: 'GET', path: '/api/design-systems/{id}', summary: 'Read a design system (optional version query)', body: undefined },
   { method: 'GET', path: '/api/design-systems/{id}/versions', summary: 'List immutable design-system versions', body: undefined },
   { method: 'PUT', path: '/api/design-systems/{id}', summary: 'Append a design-system version with conflict protection', body: { expectedVersion: 1, definition: {} } },

@@ -32,7 +32,8 @@ export const blocks: Block[] = [
   { id: 'card', name: 'Feature card', description: 'A reusable card for an idea or feature.', nodes: [shape('Card', 64, 64, 320, 260), text('01 / THE DETAILS', 88, 90, 270, 40, 14), text('Made with intention.', 88, 160, 270, 90, 32, true), text('Small details. Lasting impact.', 88, 270, 270, 30, 16)] },
   { id: 'chart', name: 'Bar chart', description: 'Editable data visualization.', nodes: [{ id: 'block-chart', type: 'chart', name: 'Bar chart', x: 64, y: 64, width: 600, height: 300, data: { labels: ['Discover', 'Design', 'Deliver'], values: [35, 65, 90] }, style: { fill: '$accent' } }] },
   { id: 'image', name: 'Image', description: 'Add an image and set its source from your assets.', nodes: [{ id: 'block-image', type: 'image', name: 'Image', x: 64, y: 64, width: 480, height: 320, style: { fill: '$surface' } }] },
-  { id: 'quote', name: 'Pull quote', description: 'Give a meaningful idea a little more space.', nodes: [shape('Quote accent', 64, 64, 4, 160, '$accent', 0), text('“Simplicity is the result of careful thought.”', 96, 64, 600, 160, 40, true)] }
+  { id: 'quote', name: 'Pull quote', description: 'Give a meaningful idea a little more space.', nodes: [shape('Quote accent', 64, 64, 4, 160, '$accent', 0), text('“Simplicity is the result of careful thought.”', 96, 64, 600, 160, 40, true)] },
+  { id: 'live-kpi', name: 'Live metric', description: 'A metric card that re-renders when its params change.', nodes: [{ id: 'block-live-kpi', type: 'shape', name: 'Live metric', x: 64, y: 64, width: 320, height: 120, style: { fill: '$surface', borderRadius: 12 }, data: { live: { renderer: 'kpi', params: { title: 'Metric', label: 'Value', value: 0 } } } }] }
 ];
 export function createBlock(id: string, offset = 0): DesignNode[] {
   const block = blocks.find(b => b.id === id);

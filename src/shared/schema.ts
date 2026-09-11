@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { characterSchema, characterInstanceSchema } from './character-schema';
 import { characterErrors, instanceErrors } from './character-validation';
 import { layoutSchema, sizingSchema, componentSchema, interactionSchema, timelineSchema, sceneObjectSchema, sceneSchema } from './design-capabilities';
+import { liveArtifactSchema } from './live-artifact';
 
 export const kinds = ['web', 'slides', 'report', 'wireframe', '3d', 'video'] as const;
 export type ProjectKind = typeof kinds[number];
@@ -72,6 +73,7 @@ export const documentSchema = z.object({
       if (node.scene?.bones) node.scene.bones.forEach((bone, index) => { if (bone.parent >= index) ctx.addIssue({ code: 'custom', message: 'Bone parents must precede their children' }); });
       if (node.scene?.mesh?.skinIndices && node.scene.mesh.skinIndices.some(i => i >= (node.scene?.bones?.length ?? 0))) ctx.addIssue({ code: 'custom', message: 'Skin references an unknown bone' });
       if (node.scene?.material?.textureAssetId && !doc.assets.some(a => a.id === node.scene!.material!.textureAssetId)) ctx.addIssue({ code: 'custom', message: 'Texture references an unknown asset' });
+      if (node.data && 'live' in node.data && !liveArtifactSchema.safeParse(node.data.live).success) ctx.addIssue({ code: 'custom', message: `Node ${node.id} has an invalid live-artifact manifest` });
       for (const interaction of node.interactions ?? []) {
         if (interaction.action === 'navigate' && !doc.pages.some(p => p.id === interaction.target)) ctx.addIssue({ code: 'custom', message: 'Navigation target must be an existing page' });
         if (interaction.action === 'url' && !isSafeUrl(interaction.target)) ctx.addIssue({ code: 'custom', message: 'Interaction URL must be safe' });

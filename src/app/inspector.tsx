@@ -19,6 +19,7 @@ import { themes } from "../shared/catalog";
 import { resolveColor } from "../shared/render";
 import { Field } from "./ui";
 import { mutateDocument } from '../shared/operations';
+import { parseLiveArtifact, type LiveArtifact } from '../shared/live-artifact';
 const SceneInspector = lazy(() => import('./scene-inspector').then(module => ({ default: module.SceneInspector })));
 import { navigateButtonGroup } from "./keyboard-navigation";
 
@@ -52,6 +53,13 @@ export function Inspector({
   // The selection may show an interpolated pose; durable edits must preserve
   // the stored scene/bind pose and unrelated animated style properties.
   const storedNode = node && doc.pages.flatMap(p => p.nodes).find(n => n.id === node.id);
+  const liveData = parseLiveArtifact(node?.data);
+  function liveEdit(patch: Partial<LiveArtifact>) {
+    if (node) { const live = parseLiveArtifact(node.data); if (live) update({ data: { ...node.data, live: { ...live, ...patch } } }); }
+  }
+  function liveParam(key: string, value: string) {
+    if (node) { const live = parseLiveArtifact(node.data); if (live) update({ data: { ...node.data, live: { ...live, params: { ...live.params, [key]: value } } } }); }
+  }
   function style(key: string, value: string | number) {
     if (storedNode) update({ style: { ...storedNode.style, [key]: value } });
   }
@@ -518,6 +526,26 @@ export function Inspector({
                   }}
                 />
               </Field>
+            </section>
+          )}
+          {liveData && (
+            <section>
+              <h3>Live artifact</h3>
+              <Field label="Renderer">
+                <select
+                  value={liveData.renderer}
+                  onChange={(e) => liveEdit({ renderer: e.target.value as LiveArtifact['renderer'] })}
+                >
+                  <option value="kpi">KPI</option>
+                  <option value="stat-list">Stat list</option>
+                  <option value="progress">Progress</option>
+                </select>
+              </Field>
+              {Object.entries(liveData.params).map(([key, value]) => (
+                <Field key={key} label={key}>
+                  <input value={String(value)} onChange={(e) => liveParam(key, e.target.value)} />
+                </Field>
+              ))}
             </section>
           )}
           {node.type === "model3d" && (

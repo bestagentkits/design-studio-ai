@@ -1,5 +1,5 @@
 import { screenParam, writeScreen } from './screen-state';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent } from 'react';
 import { applyDesignSystem, captureSystemComponent, designSystemSchema, insertSystemItem, type DesignSystem, type DesignSystemDefinition } from '../shared/design-systems';
 import { componentNames } from '../shared/design-capabilities';
 import type { DesignDocument, DesignNode, DesignPage } from '../shared/schema';
@@ -11,9 +11,10 @@ export function DesignSystemLibrary({ doc, page, node, change }: { doc: DesignDo
   const navigation = useRef(0);
   const [draft, setDraft] = useState<DesignSystemDefinition>(), [error, setError] = useState(''), [busy, setBusy] = useState(false), [query, setQuery] = useState('');
   const [versions, setVersions] = useState<{ version: number; createdAt: string }[]>([]), [json, setJson] = useState('');
+  const [importOpen, setImportOpen] = useState(false), [folder, setFolder] = useState<{ manifest?: string; designMd?: string; tokensCss?: string }>({});
   async function refresh() { const result = await api<{ systems: DesignSystem[] }>('/api/design-systems'); setSystems(result.systems); return result.systems; }
-  async function choose(system: DesignSystem, updateUrl = true) { const request = ++navigation.current; if (updateUrl) writeScreen({ library: system.id }); select(system); setDraft(structuredClone(system.definition)); setJson(''); setError(''); setVersions([]); const result = await api<{ versions: typeof versions }>(`/api/design-systems/${system.id}/versions`); if (request === navigation.current) setVersions(result.versions); }
-  function create(updateUrl = true) { navigation.current++; if (updateUrl) writeScreen({ library: 'new' }); select(undefined); setVersions([]); setJson(''); setDraft({ name: `${doc.theme.name} library`, description: '', system: 'shadcn', theme: structuredClone(doc.theme), components: [], compositions: [] }); }
+  async function choose(system: DesignSystem, updateUrl = true) { const request = ++navigation.current; if (updateUrl) writeScreen({ library: system.id }); select(system); setDraft(structuredClone(system.definition)); setJson(''); setError(''); setImportOpen(false); setFolder({}); setVersions([]); const result = await api<{ versions: typeof versions }>(`/api/design-systems/${system.id}/versions`); if (request === navigation.current) setVersions(result.versions); }
+  function create(updateUrl = true) { navigation.current++; if (updateUrl) writeScreen({ library: 'new' }); select(undefined); setVersions([]); setJson(''); setImportOpen(false); setFolder({}); setDraft({ name: `${doc.theme.name} library`, description: '', system: 'shadcn', theme: structuredClone(doc.theme), components: [], compositions: [] }); }
   useEffect(() => {
     const restore = () => { const request = ++navigation.current, id = screenParam('library'); setOpen(!!id); if (!id) return; void refresh().then(items => { if (request !== navigation.current || screenParam('library') !== id) return; const system = items.find(s => s.id === id); if (system) return choose(system, false); create(false); }).catch(e => { if (request === navigation.current) setError(message(e)); }); };
     restore(); window.addEventListener('popstate', restore); return () => { navigation.current++; window.removeEventListener('popstate', restore); };
@@ -37,12 +38,28 @@ export function DesignSystemLibrary({ doc, page, node, change }: { doc: DesignDo
     edit({ compositions: [...draft.compositions, copy] });
   }
   const edit = (patch: Partial<DesignSystemDefinition>) => { setDraft(current => current && ({ ...current, ...patch })); setJson(''); };
+  const fileText = (field: keyof typeof folder) => async (event: ChangeEvent<HTMLInputElement>) => { const text = await event.target.files?.[0]?.text(); setFolder(current => ({ ...current, [field]: text })); };
+  async function importFolder() {
+    if (!folder.manifest || !folder.tokensCss) { setError('Choose manifest.json and tokens.css first.'); return; }
+    await run(async () => {
+      let manifest: unknown;
+      try { manifest = JSON.parse(folder.manifest!); } catch { setError('manifest.json is not valid JSON.'); return; }
+      const response = await post<{ system: DesignSystem }>('/api/design-systems/import', { manifest, designMd: folder.designMd ?? '', tokensCss: folder.tokensCss! });
+      await refresh(); await choose(response.system); setImportOpen(false); setFolder({});
+    });
+  }
   return <><button onClick={() => { setOpen(true); void refresh().catch(e => setError(message(e))); create(); }}>Manage design systems</button>{doc.designSystem && <p>{doc.designSystem.name} · version {doc.designSystem.version}</p>}
     {open && <Modal title="Design systems" wide onClose={close}><div className="system-library">
-      <nav aria-label="Design system library"><input aria-label="Search design systems" placeholder="Search libraries…" value={query} onChange={e => setQuery(e.target.value)}/><button onClick={() => create()}>New design system</button>
+      <nav aria-label="Design system library"><input aria-label="Search design systems" placeholder="Search libraries…" value={query} onChange={e => setQuery(e.target.value)}/><button onClick={() => create()}>New design system</button><button onClick={() => { setImportOpen(v => !v); setFolder({}); setError(''); }}>Import folder…</button>
         {systems.filter(s => s.definition.name.toLowerCase().includes(query.toLowerCase())).map(s => <button key={s.id} aria-pressed={selected?.id === s.id} onClick={() => void run(() => choose(s))}><strong>{s.definition.name}</strong><small>{s.definition.system} · v{s.version} · {s.definition.components.length + s.definition.compositions.length} items</small><span className="system-swatches">{Object.entries(s.definition.theme.colors).slice(0, 6).map(([name, color]) => <i key={name} style={{ background: color }} title={name}/>)}</span></button>)}
       </nav>
-      {draft && <section className="system-editor"><div className="property-grid"><Field label="Library name"><input value={draft.name} onChange={e => edit({ name: e.target.value })}/></Field><Field label="Component system"><select value={draft.system} onChange={e => edit({ system: e.target.value as 'antd' | 'shadcn' })}><option value="shadcn">shadcn-style</option><option value="antd">Ant Design</option></select></Field></div>
+      {importOpen && <section className="system-editor"><h3>Import a portable folder</h3>
+        <Field label="manifest.json"><input type="file" accept=".json,application/json" onChange={fileText('manifest')}/></Field>
+        <Field label="DESIGN.md"><input type="file" accept=".md,.txt,text/markdown" onChange={fileText('designMd')}/></Field>
+        <Field label="tokens.css"><input type="file" accept=".css,text/css" onChange={fileText('tokensCss')}/></Field>
+        <button className="primary" disabled={busy || !folder.manifest || !folder.tokensCss} onClick={() => void importFolder()}>Compile and create library</button>
+      </section>}
+      {!importOpen && draft && <section className="system-editor"><div className="property-grid"><Field label="Library name"><input value={draft.name} onChange={e => edit({ name: e.target.value })}/></Field><Field label="Component system"><select value={draft.system} onChange={e => edit({ system: e.target.value as 'antd' | 'shadcn' })}><option value="shadcn">shadcn-style</option><option value="antd">Ant Design</option></select></Field></div>
         <Field label="Description"><textarea value={draft.description} onChange={e => edit({ description: e.target.value })}/></Field>
         <h3>Design tokens</h3><div className="system-token-grid">{Object.entries(draft.theme.colors).map(([key, value]) => <Field key={key} label={`${key} token`}><input value={value} onChange={e => edit({ theme: { ...draft.theme, colors: { ...draft.theme.colors, [key]: e.target.value } } })}/></Field>)}</div>
         <button onClick={() => edit({ theme: structuredClone(doc.theme) })}>Use current canvas tokens</button>

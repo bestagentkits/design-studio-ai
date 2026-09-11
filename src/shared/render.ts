@@ -3,6 +3,7 @@ import { resolveLayout } from './layout';
 import { ease } from './easing';
 import { documentFontFamilies, googleFontsStylesheetUrl } from './font-loading';
 import { isSafeUrl, type DesignDocument, type DesignNode, type Theme } from './schema';
+import { parseLiveArtifact, renderLiveArtifact } from './live-artifact';
 
 export const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 export function resolveColor(value: unknown, theme: Theme, fallback = '#000000'): string {
@@ -85,7 +86,17 @@ function nodeSvg(n: DesignNode, doc: DesignDocument, time = 0): string {
   const sw = num(s.strokeWidth, 0, 0, 100);
   const radius = num(s.borderRadius, n.type === 'frame' ? theme.radius : 0, 0, 10000);
   let markup = '';
-  if (n.type === 'text') {
+  const live = parseLiveArtifact(n.data);
+  if (live) {
+    const view = renderLiveArtifact(live, theme);
+    const textColor = escapeHtml(resolveColor('$text', theme));
+    const accent = escapeHtml(resolveColor(theme.colors.accent ?? theme.colors.primary ?? '$accent', theme));
+    const rows = view.blocks.map((block, index) => {
+      const y = 40 + index * 26;
+      return `<text x="0" y="${y}" font-family="Arial" font-size="14" fill="${textColor}">${escapeHtml(block.label)}</text><text x="${num(n.width, 0, 0)}" y="${y}" text-anchor="end" font-family="Arial" font-size="14" font-weight="700" fill="${block.accent ? accent : textColor}">${escapeHtml(block.value)}</text>`;
+    }).join('');
+    markup = `<rect width="${n.width}" height="${n.height}" rx="${radius}" fill="${fill}"/><text x="0" y="18" font-family="Arial" font-size="16" font-weight="700" fill="${textColor}">${escapeHtml(view.title)}</text>${rows}`;
+  } else if (n.type === 'text') {
     const size = num(s.fontSize, 24, 1, 1000);
     const lineHeight = num(s.lineHeight, 1.2, 0.5, 4) * size;
     const align = s.textAlign === 'center' ? 'middle' : s.textAlign === 'right' ? 'end' : 'start';
