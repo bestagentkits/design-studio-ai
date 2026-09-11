@@ -1,3 +1,4 @@
+import { registerSceneCommands } from './scene-commands';
 import { Command, CommanderError } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -20,6 +21,7 @@ const program = new Command().name('dsa').description('Design Studio AI: structu
 program.configureOutput({ writeErr: () => {} });
 const client = () => new Client(program.opts());
 registerDesignSystemCommands(program, client);
+registerSceneCommands(program, client);
 registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;

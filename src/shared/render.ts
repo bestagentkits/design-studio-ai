@@ -16,7 +16,9 @@ export function resolveFont(value: unknown, theme: Theme): string {
   return String(raw ?? theme.fonts.body).replace(/[^a-zA-Z0-9 ,_-]/g, '') || 'Arial';
 }
 export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0): DesignNode {
-  const result = { ...node, style: { ...node.style }, ...(node.scene ? { scene: structuredClone(node.scene) } : {}) };
+  // Geometry is immutable during playback. Clone only animated state, not large mesh buffers.
+  const scene = node.scene ? (() => { const { mesh, ...state } = node.scene; return { ...structuredClone(state), ...(mesh ? {mesh} : {}) }; })() : undefined;
+  const result = { ...node, style: { ...node.style }, ...(scene ? {scene} : {}) };
   for (const track of doc.timeline?.tracks.filter(track => track.nodeId === node.id && !track.muted) ?? []) {
     const frames = [...track.keyframes].sort((a, b) => a.time - b.time);
     const keys = new Set(frames.flatMap(f => Object.keys(f.values)));
@@ -32,6 +34,8 @@ export function interpolateNode(node: DesignNode, doc: DesignDocument, time = 0)
       else if (['fill', 'fontSize', 'borderRadius', 'strokeWidth', 'stroke'].includes(key)) result.style[key] = value;
       else if (typeof value === 'number') {
         const transform = /^scene\.(position|rotation|scale)\.([xyz])$/.exec(key);
+        const morph = /^scene\.morphWeights\.([a-zA-Z0-9_-]+)$/.exec(key);
+        if (morph && result.scene?.mesh?.morphTargets?.some(t=>t.name===morph[1])) { result.scene.morphWeights ??= {}; result.scene.morphWeights[morph[1]]=Math.max(0,Math.min(1,value)); }
         const bone = /^scene\.bones\.(\d+)\.(position|rotation)\.([xyz])$/.exec(key);
         if (transform) {
           const field = transform[1] as 'position' | 'rotation' | 'scale';

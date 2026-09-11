@@ -30,19 +30,26 @@ export const meshSchema = z.object({
   positions: z.array(number.min(-100000).max(100000)).min(9).max(900000),
   indices: z.array(z.number().int().min(0).max(299999)).min(3).max(1800000),
   uv: z.array(number.min(-100).max(100)).max(600000).optional(),
+  colors: z.array(number.min(0).max(1)).max(900000).optional(),
+  morphTargets: z.array(z.object({ name: z.string().regex(/^[a-zA-Z0-9_-]+$/).max(60), positions: z.array(number.min(-100000).max(100000)).max(900000) })).max(16).optional(),
   skinIndices: z.array(z.number().int().min(0).max(255)).max(1200000).optional(),
   skinWeights: z.array(number.min(0).max(1)).max(1200000).optional(),
 }).superRefine((mesh, ctx) => {
   const count = mesh.positions.length / 3;
+  if (mesh.morphTargets && mesh.morphTargets.reduce((sum,t)=>sum+t.positions.length,0)>2000000) ctx.addIssue({code:'custom',message:'Morph targets exceed two million scalar values'});
   if (!Number.isInteger(count) || mesh.indices.length % 3 || mesh.indices.some(i => i >= count)) ctx.addIssue({ code: 'custom', message: 'Mesh triangles must reference existing vertices' });
+  if (mesh.colors && mesh.colors.length !== count * 3) ctx.addIssue({ code: 'custom', message: 'Vertex colors require RGB per vertex' });
+  if (mesh.morphTargets?.some(t => t.positions.length !== mesh.positions.length) || new Set(mesh.morphTargets?.map(t => t.name)).size !== (mesh.morphTargets?.length ?? 0)) ctx.addIssue({ code: 'custom', message: 'Morph targets need unique names and one delta per vertex' });
   if (mesh.uv && mesh.uv.length !== count * 2) ctx.addIssue({ code: 'custom', message: 'UV requires two coordinates per vertex' });
   if (!!mesh.skinIndices !== !!mesh.skinWeights || (mesh.skinIndices && (mesh.skinIndices.length !== count * 4 || mesh.skinWeights!.length !== count * 4))) ctx.addIssue({ code: 'custom', message: 'Skinning requires four indices and weights per vertex' });
 });
 export const sceneObjectSchema = z.object({
   position: vectorSchema.optional(), rotation: vectorSchema.optional(), scale: vectorSchema.optional(),
   mesh: meshSchema.optional(),
-  material: z.object({ color: z.string().max(80).optional(), metalness: number.min(0).max(1).optional(), roughness: number.min(0).max(1).optional(), wireframe: z.boolean().optional(), doubleSided: z.boolean().optional(), textureAssetId: z.string().max(120).optional() }).optional(),
-  bones: z.array(z.object({ name: z.string().max(120), parent: z.number().int().min(-1).max(255), position: vectorSchema, rotation: vectorSchema.optional() })).max(256).optional(),
+  clips: z.array(z.object({name:z.string().min(1).max(80),start:number.min(0).max(3600),end:number.min(0).max(3600)}).refine(c=>c.end>c.start,'Clip end must follow start')).max(64).optional(),
+  morphWeights: z.record(z.string().max(60), number.min(0).max(1)).optional(),
+  material: z.object({ paint: z.array(z.object({ uv: z.tuple([number.min(0).max(1), number.min(0).max(1)]), radius: number.min(.001).max(1), color: z.string().regex(/^#[0-9a-fA-F]{6}$/) })).max(256).optional(), color: z.string().max(80).optional(), metalness: number.min(0).max(1).optional(), roughness: number.min(0).max(1).optional(), wireframe: z.boolean().optional(), doubleSided: z.boolean().optional(), textureAssetId: z.string().max(120).optional() }).optional(),
+  bones: z.array(z.object({ name: z.string().max(120), parent: z.number().int().min(-1).max(255), position: vectorSchema, rotation: vectorSchema.optional(), bindRotation: vectorSchema.optional() })).max(256).optional(),
 });
 export const sceneSchema = z.object({ camera: z.object({ position: vectorSchema, target: vectorSchema, fov: number.min(10).max(120) }), ambient: number.min(0).max(10), light: z.object({ position: vectorSchema, intensity: number.min(0).max(20), color: z.string().max(80) }) });
 export type Layout = z.infer<typeof layoutSchema>;

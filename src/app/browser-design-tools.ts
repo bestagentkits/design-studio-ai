@@ -1,3 +1,6 @@
+import { sceneDocumentCommand } from './scene-document-command';
+import { sceneCommandSchema } from '../shared/scene-authoring-schema';
+import { inspectScene } from '../shared/scene-inspection';
 import {documentWriteSchema} from '../shared/document-write';
 import {motionProposalSchema} from '../shared/motion-proposal';
 import {exportOptionsSchema} from '../shared/export-contract';
@@ -16,6 +19,13 @@ interface Context { registerTool: (tool: Tool) => void; unregisterTool?: (name: 
 export function registerDesignTools(context: Context, get: () => DesignDocument, set: (doc: DesignDocument) => void) {
   const result = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
   const tools: Tool[] = [{
+    name:'studio_scene_command', description:'Preview or apply an atomic 3D command to the open document. Discover sceneCommands via studio_capabilities. Compact response contains diagnostics, not mesh buffers. Preview defaults true; apply is undoable and live mode autosaves.',
+    inputSchema:{type:'object',properties:{pageId:{type:'string'},command:{type:'object'},preview:{type:'boolean',default:true}},required:['pageId','command']},
+    execute:async args=>{const input=z.object({pageId:z.string(),command:sceneCommandSchema,preview:z.boolean().default(true)}).parse(args);const original=get();const next=await sceneDocumentCommand(original,input.pageId,input.command);if(get()!==original)throw new Error('Design changed while geometry was processing. Inspect and retry.');if(!input.preview)set(next);return result({preview:input.preview,...inspectScene(next,input.pageId)});}
+  },{
+    name:'studio_inspect_scene',description:'Read compact 3D topology, rig and sampled pose diagnostics for the current unsaved document.',inputSchema:{type:'object',properties:{pageId:{type:'string'},time:{type:'number',minimum:0,maximum:3600}}},annotations:{readOnlyHint:true},
+    execute:async args=>{const q=z.object({pageId:z.string().optional(),time:z.number().finite().min(0).max(3600).default(0)}).parse(args);return result(inspectScene(get(),q.pageId,q.time));}
+  },{
     name: 'studio_apply_operations', description: 'Atomically edit the open document using shared operations: add/update/delete/reparent nodes, page/layout, themes, tracks and keyframes. Changes appear immediately; live mode autosaves. Get the document and studio_capabilities operation schemas first.',
     // Registration stays shallow: expanded node/character unions exceed browser host limits.
     // Execution still uses the complete shared validator; discover nested fields with studio_capabilities.
@@ -23,7 +33,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     execute: async args => { const next = mutateDocument(get(), args.operations); set(next); return result({ document: next }); },
   }, {
     name: 'studio_capabilities', description: 'Discover canonical document/operation/component/layout/3D schemas and available API operations.', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true },
-    execute: async () => result({ providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
+    execute: async () => result({ sceneCommands:z.toJSONSchema(sceneCommandSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
   }];
   // Only first-party documented endpoints are callable; the browser supplies its own session.
   for (const endpoint of apiEndpoints.filter(e => !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {

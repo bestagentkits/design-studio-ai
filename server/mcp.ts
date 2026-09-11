@@ -1,3 +1,4 @@
+import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
 import { motionInspectionSchema } from '../src/shared/motion-inspection';
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
@@ -96,6 +97,8 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   };
   registerDesignSystemTools(server, callApi);
   registerObservabilityTools(server, callApi);
+  server.registerTool('inspect_scene',{description:'Inspect saved 3D mesh, skeleton and sampled pose.',inputSchema:{projectId:z.string(),pageId:z.string().optional(),time:z.number().min(0).max(3600).optional()},annotations:{readOnlyHint:true}},async ({projectId,pageId,time})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/scene?${new URLSearchParams({...pageId?{pageId}:{},...time!==undefined?{time:String(time)}:{}})}`));
+  server.registerTool('author_scene',{description:'Preview or apply a shared 3D command. Requires current revision; preview defaults to true.',inputSchema:{projectId:z.string(),...sceneRequestSchema.shape}},async ({projectId,...body})=>callApi('POST',`/api/projects/${encodeURIComponent(projectId)}/scene`,body));
   server.registerTool('inspect_motion',{description:'Read rig IDs, clips, skins, constraints and an optional sampled pose. No provider call.',inputSchema:{projectId:z.string(),...motionInspectionSchema.shape}},async ({projectId,...query})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/motion?${new URLSearchParams(Object.entries(query).filter(([,v])=>v!==undefined).map(([k,v])=>[k,String(v)]))}`));
   server.registerTool(
     'merge_design',

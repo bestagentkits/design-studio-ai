@@ -17,3 +17,5 @@ const devDependencies = Object.fromEntries(Object.entries(pkg.devDependencies).f
 await writeFile('public/studio-react-runtime.json', JSON.stringify({ files, dependencies, devDependencies }));
 
 await build({entryPoints:['scripts/character-worker.ts'],outfile:'public/studio-character-worker.js',bundle:true,minify:true,format:'iife',platform:'browser',target:'es2022'});
+
+await build({entryPoints:['scripts/scene-worker.ts'],outfile:'public/studio-scene-worker.js',bundle:true,minify:true,format:'iife',platform:'browser',target:'es2022'});

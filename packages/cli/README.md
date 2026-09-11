@@ -80,3 +80,7 @@ For concurrent editing, retain the exact document and revision you read. `projec
 `dsa motion PROJECT_ID --node NODE_ID --time 1` inspects an instance; omit the node to list reusable rigs/clips/skins. Use live `schema --operations` for named character, channel, key and bake edits. Character documents use schema v2; saving v1 over v2 is rejected.
 
 `generate --mode motion` returns a bounded operation proposal and base document/brief revisions. Review it before applying with `projects document put --revision N --brief-revision B`. Native `motion` export is a ZIP; `png-sequence` and `spritesheet` use `--start`, `--end`, `--fps`, with an exclusive end boundary. These are Studio formats, not Spine/game-engine interchange. See [motion guide](https://studio.agentkit.best/docs/motion) for import, constraints and current export limits.
+
+## 3D characters
+
+`dsa scene schema` discovers commands. `dsa scene inspect PROJECT --page PAGE --time 0.5` reads diagnostics. `dsa scene command PROJECT --page PAGE --revision N --file command.json` previews; add `--apply` to save through the server revision guard. See the repository [3D guide](../../docs/3d-characters.md).

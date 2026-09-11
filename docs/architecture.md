@@ -120,3 +120,7 @@ Release evidence and pending checks live in the [finalization report](../plans/2
 ## Native character motion
 
 [Character motion](character-motion.md) documents the v2 schema, shared operations, GPU/Canvas/SVG evaluators, proposal guards and portable/frame exports. The existing project kind and document revision remain independent from schema version.
+
+## 3D character authoring
+
+[Editable 3D characters](3d-characters.md) describes the shared bounded scene-command pipeline, worker execution, inspection and portable skin/morph/paint data. The schema and operation owners remain canonical across clients.

@@ -1,0 +1,40 @@
+import { motionFrames } from './scene-motion-presets';
+import * as T from 'three';
+import type { DesignDocument, DesignNode } from './schema';
+import { sceneCommandSchema, type SceneCommand } from './scene-authoring-schema';
+import { geometryFor, meshData } from './scene-runtime';
+import { loft, relax, remesh } from './scene-mesh-topology';
+import { bind, mirrorWeights, normalizeWeights, quadruped, smoothWeights, solveIK } from './scene-rigging';
+import { packUV } from './scene-uv';
+export function applySceneCommand(doc:DesignDocument,pageId:string,input:SceneCommand){
+  const command=sceneCommandSchema.parse(input),page=doc.pages.find(p=>p.id===pageId);if(!page)throw new Error('Unknown page');
+  const find=(id:string)=>{const n=page.nodes.find(n=>n.id===id);if(!n||n.type!=='model3d')throw new Error('Select an existing 3D object');return n;};
+  const add=(id:string,mesh:ReturnType<typeof loft>,color:string)=>{if(doc.pages.some(p=>p.nodes.some(n=>n.id===id)))throw new Error('Output ID already exists');const n:DesignNode={id,type:'model3d',name:id,x:0,y:0,width:400,height:400,scene:{mesh,position:[0,0,0],scale:[1,1,1],material:{color,roughness:.7,metalness:0}}};page.nodes.push(n);};
+  if(command.action==='remesh'){if(new Set(command.nodeIds).size!==command.nodeIds.length)throw new Error('Choose each remesh source once');const sources=command.nodeIds.map(find);if(sources.some(n=>n.scene?.bones?.length))throw new Error('Remesh unrigged sources only');const mesh=remesh(sources.map(n=>({...n,scene:{...n.scene,position:n.scene?.position??[(n.x+n.width/2-page.width/2)/240,(page.height/2-n.y-n.height/2)/240,Number(n.data?.z??0)],scale:n.scene?.scale??[n.width/400,n.height/400,Number(n.data?.depth??n.width)/400]}})),command.resolution,command.symmetry,command.blend);add(command.outputId,mesh,sources[0].scene?.material?.color??'#D89B55');sources.forEach(n=>n.visible=false);return;}
+  if(command.action==='loft'){add(command.outputId,loft(command.rings,command.segments),command.color);return;}
+  const node=find(command.nodeId);node.scene??={};const scene=node.scene;
+  if(command.action==='convert'){if(node.src)throw new Error('Imported assets retain their geometry; edit a document mesh');if(!scene.mesh){const g=geometryFor(node);try{scene.mesh=meshData(g);}finally{g.dispose();}}return;}
+  const mesh=scene.mesh;if(!mesh)throw new Error('Convert the primitive to mesh first');
+  if(command.action==='relax'){if(mesh.skinIndices||mesh.morphTargets?.length)throw new Error('Finish topology before binding or adding morph targets');relax(mesh,command.iterations,command.strength);}
+  if(command.action==='rig-quadruped'){if(mesh.skinIndices||scene.bones?.length)throw new Error('Unbind and remove the old rig before creating a replacement');scene.bones=quadruped(mesh,command.landmarks);}
+  if(command.action==='attach') {
+    const rig=find(command.rigNodeId);if(rig===node||!rig.scene?.bones?.length||node.parentId||rig.parentId)throw new Error('Attach separate unparented meshes to an existing rig');
+    if(mesh.skinIndices||mesh.morphTargets?.length)throw new Error('Attach before binding or authoring expressions');
+    const matrix=(n:DesignNode)=>new T.Matrix4().compose(new T.Vector3(...(n.scene?.position??[(n.x+n.width/2-page.width/2)/240,(page.height/2-n.y-n.height/2)/240,Number(n.data?.z??0)])),new T.Quaternion().setFromEuler(new T.Euler(...(n.scene?.rotation??[0,0,0]).map(v=>v*Math.PI/180) as [number,number,number])),new T.Vector3(...(n.scene?.scale??[n.width/400,n.height/400,Number(n.data?.depth??n.width)/400])));
+    const rigMatrix=matrix(rig);if(Math.abs(rigMatrix.determinant())<1e-12)throw new Error('Rig transform is singular');const transform=rigMatrix.clone().invert().multiply(matrix(node));
+    for(let i=0;i<mesh.positions.length;i+=3){const p=new T.Vector3().fromArray(mesh.positions,i).applyMatrix4(transform);mesh.positions.splice(i,3,...p.toArray());}
+    const p=new T.Vector3(),q=new T.Quaternion(),scale=new T.Vector3();matrix(rig).decompose(p,q,scale);const e=new T.Euler().setFromQuaternion(q);scene.position=p.toArray();scene.rotation=[e.x,e.y,e.z].map(v=>v*180/Math.PI) as [number,number,number];scene.scale=scale.toArray();scene.bones=structuredClone(rig.scene.bones);bind(mesh,scene.bones,0,command.bone);node.data={...node.data,rigSourceId:rig.id};for(const track of doc.timeline?.tracks.filter(t=>t.nodeId===rig.id)??[])doc.timeline!.tracks.push({...structuredClone(track),id:`${node.id}-${track.id}`,nodeId:node.id});
+  }
+  if(command.action==='bind')bind(mesh,scene.bones??[],command.smooth,command.rigidBone);
+  if(command.action==='weights'){if(command.mode==='normalize')normalizeWeights(mesh);if(command.mode==='smooth')smoothWeights(mesh,command.iterations);if(command.mode==='mirror')mirrorWeights(mesh,scene.bones??[]);}
+  if(command.action==='pose'){const bone=scene.bones?.find(b=>b.name===command.bone);if(!bone)throw new Error('Unknown bone');bone.rotation=command.rotation;}
+  if(command.action==='ik')solveIK(scene.bones??[],command.endBone,command.target,command.chainLength,command.maxAngle);
+  if(command.action==='pose'||command.action==='ik')for(const child of page.nodes.filter(n=>n.data?.rigSourceId===node.id))child.scene!.bones=structuredClone(scene.bones);
+  if(command.action==='clip'){
+    if(!scene.bones?.length)throw new Error('Create a rig before adding a clip');const keyframes=motionFrames(node,command.preset,command.start,command.duration,command.strength);
+    doc.timeline??={duration:command.start+command.duration,fps:30,tracks:[]};doc.timeline.duration=Math.max(doc.timeline.duration,command.start+command.duration);const id=`${node.id}-${command.preset}-${command.start}`;if(doc.timeline.tracks.some(t=>t.id===id))throw new Error('Clip already exists at this start time');scene.clips??=[];scene.clips.push({name:`${command.preset}-${command.start}`,start:command.start,end:command.start+command.duration});doc.timeline.tracks.push({id,nodeId:node.id,keyframes});for(const attached of page.nodes.filter(n=>n.data?.rigSourceId===node.id))doc.timeline.tracks.push({id:`${attached.id}-${command.preset}-${command.start}`,nodeId:attached.id,keyframes:structuredClone(keyframes)});
+  }
+  if(command.action==='morph'){if(command.vertices.some(i=>i>=mesh.positions.length/3))throw new Error('Unknown morph vertex');const positions=Array(mesh.positions.length).fill(0);for(const i of command.vertices)for(let a=0;a<3;a++)positions[i*3+a]=command.delta[a];mesh.morphTargets??=[];const old=mesh.morphTargets.findIndex(t=>t.name===command.name);if(old<0)mesh.morphTargets.push({name:command.name,positions});else mesh.morphTargets[old]={name:command.name,positions};scene.morphWeights={...scene.morphWeights,[command.name]:command.weight};}
+  if(command.action==='uv-pack'){if(scene.material?.paint?.length)throw new Error('Clear texture paint before changing UV layout');scene.mesh=packUV(mesh,command.seams);}
+  if(command.action==='paint'){if(!mesh.uv)throw new Error('Unwrap UVs before painting');scene.material??={};scene.material.paint??=[];if(scene.material.paint.length>=256)throw new Error('Paint stroke budget reached');scene.material.paint.push({uv:command.uv,radius:command.radius,color:command.color});}
+}

@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
+  { method: 'GET', path: '/api/projects/{id}/scene', summary: 'Inspect 3D mesh topology, skin weights, skeleton and sampled pose; optional pageId and time query', body: undefined },
+  { method: 'POST', path: '/api/projects/{id}/scene', summary: 'Preview or apply a bounded 3D authoring command with revision checking; discover sceneCommands in schema', body: { pageId: 'page-id', expectedRevision: 1, preview: true, command: { action: 'convert', nodeId: 'model-id' } } },
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },
   { method: 'GET', path: '/api/schema', summary: 'Document and operation schemas', body: undefined },
   { method: 'GET', path: '/api/catalog', summary: 'Templates, themes and blocks', body: undefined },

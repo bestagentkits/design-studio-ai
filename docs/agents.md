@@ -114,3 +114,7 @@ Use the shared [provider guide](providers.md#official-and-custom-connections) fo
 ## Character motion
 
 See [character motion](character-motion.md) and discover current operation schemas. `dsa motion PROJECT_ID --node NODE_ID --time 1` / MCP `inspect_motion` reads poses. Motion generation returns baseRevision/baseBriefRevision; carry both into the explicit document write (`expectedRevision`, `expectedBriefRevision`). Frame exports accept `--start`, `--end`, `--fps`; `motion`, `png-sequence`, and `spritesheet` return ZIPs. Native motion is not a Spine interchange format.
+
+## 3D authoring
+
+Use `dsa scene schema`, `scene inspect`, and revision-checked `scene command` (preview by default, `--apply` to save). WebMCP provides `studio_scene_command` and `studio_inspect_scene`; network MCP provides `author_scene` and `inspect_scene`. See [3D characters](3d-characters.md) for coordinates, operation boundaries, rigging and export review.
