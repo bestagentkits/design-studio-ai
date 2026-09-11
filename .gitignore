@@ -20,3 +20,5 @@ public/studio-geometry-worker.js
 public/studio-react-runtime.json
 
 public/studio-character-worker.js
+
+public/studio-scene-worker.js

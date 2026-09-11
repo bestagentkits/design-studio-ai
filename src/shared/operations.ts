@@ -1,3 +1,5 @@
+import { sceneCommandSchema } from './scene-authoring-schema';
+import { applySceneCommand } from './scene-authoring';
 import { paintingLayerOperationSchemas, isPaintingLayerOperation, applyPaintingLayerOperation } from './painting-layer-operations';
 import { diagramOperationSchemas, isDiagramOperation, applyDiagramOperation } from './diagram-operations';
 import { boardEditingSchemas, isBoardEditingOperation, applyBoardEditingOperation } from './board-editing';
@@ -19,6 +21,7 @@ export const operationSchema = z.discriminatedUnion('op', [
   ...diagramOperationSchemas,
   ...boardEditingSchemas,
   ...characterOperationSchemas,
+  z.object({ op: z.literal('scene-command'), pageId: z.string(), command: sceneCommandSchema }),
   z.object({ op: z.literal('add-node'), pageId: z.string(), node: nodeSchema }),
   z.object({ op: z.literal('update-node'), nodeId: z.string(), changes: nodeSchema.partial().omit({ id: true }) }),
   z.object({ op: z.literal('remove-node'), nodeId: z.string() }),
@@ -68,6 +71,7 @@ export function mutateDocument(document: DesignDocument, input: unknown): Design
     else if (isBoardEditingOperation(action)) doc = applyBoardEditingOperation(doc, action);
     else if (isCreativeOperation(action)) doc = applyCreativeOperation(doc, action);
     else if (action.op === 'bake-character' || action.op === 'upsert-character' || action.op === 'remove-character' || action.op === 'upsert-bone' || action.op === 'upsert-slot' || action.op === 'upsert-attachment' || action.op === 'upsert-skin' || action.op === 'upsert-clip' || action.op === 'upsert-constraint' || action.op === 'remove-character-item' || action.op === 'upsert-channel' || action.op === 'remove-channel' || action.op === 'upsert-motion-key' || action.op === 'remove-motion-key') { applyCharacterOperation(doc,characterOperationSchema.parse(action)); }
+    else if (action.op === 'scene-command') applySceneCommand(doc, action.pageId, action.command);
     else if (action.op === 'rename') doc.name = action.name;
     else if (action.op === 'set-theme') doc.theme = action.theme;
     else if (action.op === 'apply-theme') { const theme = themes.find(t => t.id === action.themeId); if (!theme) throw new Error('Unknown theme'); doc.theme = structuredClone(theme); }

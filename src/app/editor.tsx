@@ -2143,6 +2143,7 @@ export function Editor({
             {displayed.kind === "3d" ? (
               <Suspense fallback={<Busy label="Opening 3D viewport…" />}>
                 <SceneView
+                  onDocument={preview ? undefined : next => change(d => Object.assign(d, next))}
                   page={page}
                   theme={displayed.theme}
                   selected={selected}

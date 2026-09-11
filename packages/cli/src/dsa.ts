@@ -1,3 +1,4 @@
+import { registerSceneCommands } from './scene-commands';
 import { paintingCommandSchema } from '../../../src/shared/painting-command';
 import { publicCreativeProjection } from '../../../src/shared/public-creative-projection';
 import { Command, CommanderError } from 'commander';
@@ -22,6 +23,7 @@ const program = new Command().name('dsa').description('Design Studio AI: structu
 program.configureOutput({ writeErr: () => {} });
 const client = () => new Client(program.opts());
 registerDesignSystemCommands(program, client);
+registerSceneCommands(program, client);
 registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;

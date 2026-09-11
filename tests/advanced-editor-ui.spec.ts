@@ -14,7 +14,8 @@ async function setup(page: Page, baseURL: string, document: DesignDocument) {
   return project;
 }
 async function panel(page: Page, info: TestInfo, name: 'Canvas' | 'Design' | 'Chat & layers') {
-  if (info.project.name === 'mobile') await page.locator('.mobile-editor-nav').getByRole('button', { name, exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Back to workspace' })).toBeVisible();
+  if (await page.locator('.mobile-editor-nav').isVisible()) await page.locator('.mobile-editor-nav').getByRole('button', { name, exact: true }).click();
 }
 async function layer(page: Page, info: TestInfo, name: string) {
   await panel(page, info, 'Chat & layers');

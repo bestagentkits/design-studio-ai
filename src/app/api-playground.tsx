@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { apiEndpoints } from '../shared/api-reference';
 import { download } from './api';
 export function ApiPlayground() {
-  const [key, setKey] = useState(''), [endpoint, setEndpoint] = useState(0), [projectId, setProjectId] = useState(''), [body, setBody] = useState(''), [output, setOutput] = useState(''), [running, setRunning] = useState(false), [binary, setBinary] = useState<Blob | null>(null), [status, setStatus] = useState('');
+  const [key, setKey] = useState(''), [endpoint, setEndpoint] = useState(() => Math.max(0, apiEndpoints.findIndex(item => item.method === 'GET' && item.path === '/api/health'))), [projectId, setProjectId] = useState(''), [body, setBody] = useState(''), [output, setOutput] = useState(''), [running, setRunning] = useState(false), [binary, setBinary] = useState<Blob | null>(null), [status, setStatus] = useState('');
   const selected = apiEndpoints[endpoint];
   const [query, setQuery] = useState(''), [file, setFile] = useState<File | null>(null);
   const upload = selected.method === 'POST' && selected.path.endsWith('/assets');

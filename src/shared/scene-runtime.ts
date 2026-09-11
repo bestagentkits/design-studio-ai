@@ -9,6 +9,8 @@ export function geometryFor(node: DesignNode): THREE.BufferGeometry {
   if (node.scene?.mesh) {
     const data = node.scene.mesh, geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(data.positions, 3)); geometry.setIndex(data.indices);
+    if (data.colors) geometry.setAttribute('color', new THREE.Float32BufferAttribute(data.colors, 3));
+    if (data.morphTargets?.length) { geometry.morphTargetsRelative = true; geometry.morphAttributes.position = data.morphTargets.map(t => { const a = new THREE.Float32BufferAttribute(t.positions, 3); a.name = t.name; return a; }); }
     if (data.uv) geometry.setAttribute('uv', new THREE.Float32BufferAttribute(data.uv, 2));
     if (data.skinIndices && data.skinWeights) { geometry.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(data.skinIndices, 4)); geometry.setAttribute('skinWeight', new THREE.Float32BufferAttribute(data.skinWeights, 4)); }
     geometry.computeVertexNormals(); geometry.computeBoundingSphere(); return geometry;
@@ -63,17 +65,24 @@ export async function buildScene(doc: DesignDocument, pageIndex = 0, time = 0) {
       }
     }
     else {
-      const material = new THREE.MeshStandardMaterial({ color: resolveColor(materialConfig?.color ?? n.style?.fill ?? n.data?.color ?? '$accent', doc.theme), metalness: materialConfig?.metalness ?? Number(n.data?.metalness ?? .15), roughness: materialConfig?.roughness ?? Number(n.data?.roughness ?? .35), wireframe: materialConfig?.wireframe, side: materialConfig?.doubleSided ? THREE.DoubleSide : THREE.FrontSide, opacity: n.opacity ?? 1, transparent: (n.opacity ?? 1) < 1 });
+      const material = new THREE.MeshStandardMaterial({ vertexColors: !!n.scene?.mesh?.colors, color: resolveColor(materialConfig?.color ?? n.style?.fill ?? n.data?.color ?? '$accent', doc.theme), metalness: materialConfig?.metalness ?? Number(n.data?.metalness ?? .15), roughness: materialConfig?.roughness ?? Number(n.data?.roughness ?? .35), wireframe: materialConfig?.wireframe ?? false, side: materialConfig?.doubleSided ? THREE.DoubleSide : THREE.FrontSide, opacity: n.opacity ?? 1, transparent: (n.opacity ?? 1) < 1 });
       pendingMaterial = material;
       const texture = doc.assets.find(a => a.id === materialConfig?.textureAssetId); if (texture) { material.map = await new THREE.TextureLoader().loadAsync(texture.url); material.map.colorSpace = THREE.SRGBColorSpace; }
+      if (materialConfig?.paint?.length) {
+        const canvas = document.createElement('canvas'); canvas.width = canvas.height = 512;
+        const ctx = canvas.getContext('2d')!; ctx.fillStyle = resolveColor(materialConfig.color ?? '#ffffff', doc.theme); ctx.fillRect(0,0,512,512);
+        for (const stroke of materialConfig.paint) { ctx.fillStyle=stroke.color; ctx.beginPath(); ctx.arc(stroke.uv[0]*512,(1-stroke.uv[1])*512,stroke.radius*512,0,Math.PI*2); ctx.fill(); }
+        material.map?.dispose(); material.map=new THREE.CanvasTexture(canvas); material.map.colorSpace=THREE.SRGBColorSpace; material.color.set('#ffffff');
+      }
       const geometry = geometryFor(n); pendingGeometry = geometry;
       if (n.scene?.bones?.length && n.scene.mesh?.skinIndices) {
         const mesh = new THREE.SkinnedMesh(geometry, material);
-        const bones = n.scene.bones.map((b, i) => { const bone = new THREE.Bone(); bone.name = `${n.id}_bone_${i}`; bone.position.fromArray(raw.scene!.bones![i].position); return bone; });
+        const bones = n.scene.bones.map((b, i) => { const bone = new THREE.Bone(); bone.name = `${n.id}_bone_${i}`; bone.position.fromArray(raw.scene!.bones![i].position); bone.rotation.set(...(raw.scene!.bones![i].bindRotation ?? [0,0,0]).map(v=>v*Math.PI/180) as [number,number,number]); return bone; });
         n.scene.bones.forEach((b, i) => (b.parent < 0 ? mesh : bones[b.parent]).add(bones[i]));
         mesh.bind(new THREE.Skeleton(bones)); n.scene.bones.forEach((b, i) => { bones[i].position.fromArray(b.position); if (b.rotation) bones[i].rotation.fromArray([...b.rotation.map(v => v * Math.PI / 180), 'XYZ'] as [number, number, number, 'XYZ']); }); object = mesh;
       } else object = new THREE.Mesh(geometry, material);
     }
+    if (object instanceof THREE.Mesh && object.morphTargetDictionary && object.morphTargetInfluences) for (const [name, index] of Object.entries(object.morphTargetDictionary)) object.morphTargetInfluences[index] = n.scene?.morphWeights?.[name] ?? 0;
     object.name = n.id; object.visible = n.visible !== false;
     object.position.fromArray(n.scene?.position ?? [(n.x + n.width / 2 - page.width / 2) / 240, (page.height / 2 - n.y - n.height / 2) / 240, Number(n.data?.z ?? 0)]);
     const rotation = n.scene?.rotation ?? [Number(n.data?.rotationX ?? 0), Number(n.data?.rotationY ?? 0), n.rotation ?? 0]; object.rotation.set(...rotation.map(v => v * Math.PI / 180) as [number, number, number]);
@@ -101,6 +110,7 @@ export function animateScene(scene: THREE.Scene, doc: DesignDocument, pageIndex:
       target.position.fromArray(bone.position);
       target.rotation.set(...(bone.rotation ?? [0, 0, 0]).map(v => v * Math.PI / 180) as [number, number, number]);
     });
+    if (object instanceof THREE.Mesh && object.morphTargetDictionary && object.morphTargetInfluences) for (const [name,index] of Object.entries(object.morphTargetDictionary)) object.morphTargetInfluences[index]=n.scene?.morphWeights?.[name]??0;
     if (object instanceof THREE.Mesh) for (const material of Array.isArray(object.material) ? object.material : [object.material]) { material.opacity = n.opacity ?? 1; material.transparent = material.opacity < 1; }
   }
 }
@@ -112,15 +122,19 @@ export async function exportScene(doc: DesignDocument, pageIndex = 0, binary = t
   try {
     const tracks: THREE.KeyframeTrack[] = [], fps = doc.timeline?.fps ?? 30, duration = doc.timeline?.duration ?? 0, page = doc.pages[pageIndex];
     const animated = page.nodes.filter(n => (n.type === 'model3d' || n.type === 'group') && doc.timeline?.tracks.some(t => t.nodeId === n.id && !t.muted && t.keyframes.length));
-    const sampleValues = animated.reduce((sum, node) => sum + 10 + (node.scene?.bones?.length ?? 0) * 7, 0) * (Math.ceil(duration * fps) + 1);
+    const sampleValues = animated.reduce((sum, node) => sum + 10 + (node.scene?.mesh?.morphTargets?.length ?? 0) + (node.scene?.bones?.length ?? 0) * 7, 0) * (Math.ceil(duration * fps) + 1);
     if (sampleValues > 2000000) throw new Error('Scene animation export exceeds two million sampled values. Reduce duration, frame rate, or animated joints.');
     // Bake easing to samples because glTF interpolation cannot encode spring/bounce curves.
     if (duration) for (const node of animated) {
       const times: number[] = [], positions: number[] = [], rotations: number[] = [], scales: number[] = [];
       for (let frame = 0; frame <= Math.ceil(duration * fps); frame++) { const time = Math.min(duration, frame / fps), n = interpolateNode(node, doc, time); times.push(time); positions.push(...(n.scene?.position ?? [(n.x + n.width / 2 - page.width / 2) / 240, (page.height / 2 - n.y - n.height / 2) / 240, Number(n.data?.z ?? 0)])); scales.push(...(n.scene?.scale ?? [n.width / 400, n.height / 400, Number(n.data?.depth ?? n.width) / 400])); const rotation = n.scene?.rotation ?? [Number(n.data?.rotationX ?? 0), Number(n.data?.rotationY ?? 0), n.rotation ?? 0]; rotations.push(...new THREE.Quaternion().setFromEuler(new THREE.Euler(...rotation.map(v => v * Math.PI / 180) as [number, number, number])).toArray()); }
       tracks.push(new THREE.VectorKeyframeTrack(`${node.id}.position`, times, positions), new THREE.QuaternionKeyframeTrack(`${node.id}.quaternion`, times, rotations), new THREE.VectorKeyframeTrack(`${node.id}.scale`, times, scales));
+      if (node.scene?.mesh?.morphTargets?.length) tracks.push(new THREE.NumberKeyframeTrack(`${node.id}.morphTargetInfluences`, times, times.flatMap(time => node.scene!.mesh!.morphTargets!.map(t => interpolateNode(node,doc,time).scene?.morphWeights?.[t.name]??0))));
       node.scene?.bones?.forEach((_, i) => { const values = times.flatMap(time => { const bone = interpolateNode(node, doc, time).scene?.bones?.[i]; return new THREE.Quaternion().setFromEuler(new THREE.Euler(...(bone?.rotation ?? [0, 0, 0]).map(v => v * Math.PI / 180) as [number, number, number])).toArray(); }); tracks.push(new THREE.QuaternionKeyframeTrack(`${node.id}_bone_${i}.quaternion`, times, values), new THREE.VectorKeyframeTrack(`${node.id}_bone_${i}.position`, times, times.flatMap(time => interpolateNode(node, doc, time).scene!.bones![i].position))); });
     }
-    return await new GLTFExporter().parseAsync(scene, { binary, animations: tracks.length ? [new THREE.AnimationClip(doc.name, duration, tracks)] : [], onlyVisible: true });
+    const animations = tracks.length ? [new THREE.AnimationClip(doc.name, duration, tracks)] : [];
+    const ranges = new Map(page.nodes.flatMap(n=>(n.scene?.clips??[]).map(c=>[`${c.name}:${c.start}:${c.end}`,c] as const)));
+    if(animations.length)for(const range of ranges.values())animations.push(THREE.AnimationUtils.subclip(animations[0],range.name,range.start*fps,range.end*fps+1,fps));
+    return await new GLTFExporter().parseAsync(scene, { binary, animations, onlyVisible: true });
   } finally { disposeScene(scene); }
 }
