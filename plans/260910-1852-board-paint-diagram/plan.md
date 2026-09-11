@@ -57,7 +57,7 @@ Shared files make phases 04–06 logically independent after 03 but not safe for
 
 ## Current local evidence
 
-[Checklist reconciliation](reports/implementation-checklist-reconciliation.md) records the desktop Board/Paint run (5/5), the earlier 294-test local Node suite and the production CreativeWorkspace probe. At 500/2000 elements, Chromium frame-interval p95 was 17.3/17.5 ms; this measures a standalone scripted pan workload, not physical-device or input-to-pixel latency. The full suite after the latest fixes, exact-head CI, release and deployment remain separate pending gates.
+[Checklist reconciliation](reports/implementation-checklist-reconciliation.md) records the desktop Board/Paint run (5/5), the earlier 294-test local Node suite and the production CreativeWorkspace probe. At 500/2000 elements, Chromium frame-interval p95 was 17.3/17.5 ms; this measures a standalone scripted pan workload, not physical-device or input-to-pixel latency. The post-merge full Node suite passed 298 tests; post-merge Creative acceptance passed 18 Chromium desktop/mobile executions, 7 Firefox and 7 WebKit executions. See [release verification](reports/release-verification.md). Exact-head CI, release and deployment remain separate pending gates.
 
 ## Open evidence
 

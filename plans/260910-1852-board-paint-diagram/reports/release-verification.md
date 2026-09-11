@@ -8,15 +8,15 @@ User explicitly authorized completion and deployment on 2026-09-11. This record 
 - Migration order: upstream `0010-project-thumbnails.sql`, additive `0011-creative-asset-lifecycle.sql`. Existing encryption secrets remain unchanged; deployment uses the repository's `--keep-vars` workflow.
 - Local post-merge CLI build, typecheck, all 298 Node tests, application/public docs build, skill archive and CLI package passed.
 - Post-merge Firefox: all seven Creative browser scenarios passed. WebKit mobile viewport: all seven passed. These cover Board draft recovery, owned GIF frames/posters, all diagram templates, Paint selections/masks/groups, upload recovery/account isolation, and concurrent remote edits.
-- Chromium desktop/mobile thumbnail + Creative integration rerun is in progress. The earlier complete Chromium run found three failures; all were fixed and its 24 targeted reruns passed. A fresh full CI suite remains required.
-- Independent Creative review found no remaining verified blocker. Thumbnail-merge review is in progress.
+- Post-merge Chromium desktop/mobile thumbnail + Creative integration: all 18 scenario/browser executions passed. The earlier complete Chromium run found three failures; all were fixed and its 24 targeted reruns passed. A fresh full CI suite remains required.
+- Independent Creative review found no remaining verified blocker. Independent thumbnail-merge review also found no verified blocker; see `merged-release-review.md`.
 
 ## Delivery gates
 
 - [x] User authorized release and production deployment.
 - [x] Compile, unit/integration, build and package local candidate.
 - [x] Focused Firefox and WebKit browser checks.
-- [ ] Post-merge Chromium desktop/mobile integration checks.
+- [x] Post-merge Chromium desktop/mobile integration checks.
 - [ ] Exact PR head CI and merge.
 - [ ] Main-head CI deployment and production endpoint/thumbnail checks.
 - [ ] Versioned release artifacts and downloaded checksums.
