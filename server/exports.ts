@@ -2,7 +2,7 @@ import {exportOptionsSchema as optionsSchema} from '../src/shared/export-contrac
 import { createMotionArchive } from '../src/shared/motion-export';
 import { updateEvent } from './observability-store';
 import { withSpan } from './observability';
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import puppeteer from '@cloudflare/puppeteer';
 import { documentSchema, type DesignDocument } from '../src/shared/schema';
@@ -61,11 +61,14 @@ export async function embeddedDocumentFonts(doc: DesignDocument) {
   } catch { fail(502, 'font_load_failed', 'The selected Google Fonts could not be loaded. Choose a local font or retry the export.'); }
 }
 
-exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action: 'export.render' }, async span => {
+exportRoutes.post('/:id/export', async c => renderProjectExport(c, c.req.param('id'), await c.req.json()));
+
+export async function renderProjectExport(c: Context<Env>, projectId: string, input: unknown, thumbnail = false) {
+return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'export.render' }, async span => {
   const { env: bindings } = c;
-  const row = await projectRow(c, c.req.param('id')), options = optionsSchema.parse(await c.req.json());
+  const row = await projectRow(c, projectId), options = optionsSchema.parse(input);
   if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
-  span.event.projectId = row.id; span.event.action = `export.${options.format}`;
+  span.event.projectId = row.id; span.event.action = thumbnail ? 'thumbnail.render' : `export.${options.format}`;
   await updateEvent(c.env, span.event);
   const doc = documentSchema.parse(JSON.parse(row.document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
@@ -110,7 +113,7 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
     const output=await createMotionArchive(doc,await runtime.text());span.set({outputBytes:output.byteLength});return new Response(new Uint8Array(output).buffer,{headers});
   }
   if (options.format === 'react') {
-    await rateLimit(c, `export:${owner(c)}`, 20);
+    await rateLimit(c, `${thumbnail ? 'thumbnail' : 'export'}:${owner(c)}`, thumbnail ? 60 : 20);
     const runtime = await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-react-runtime.json`));
     if (!runtime?.ok) fail(503, 'renderer_not_built', 'Build the React runtime manifest before exporting.');
     const output = await createReactArchive(doc, await runtime.json() as ReactRuntimeManifest);
@@ -119,7 +122,7 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
   }
   if (!bindings.BROWSER && !bindings.EXPORT_BROWSER) fail(503, 'renderer_not_configured', 'Enable the Cloudflare Browser Rendering binding or install Chromium for self-hosting.');
   if (doc.pages.some(p => p.width * p.height > 16777216)) fail(413, 'canvas_too_large', 'Render exports support up to 16 megapixels per page.');
-  await rateLimit(c, `export:${owner(c)}`, 20);
+  await rateLimit(c, `${thumbnail ? 'thumbnail' : 'export'}:${owner(c)}`, thumbnail ? 60 : 20);
   const fonts = ['png', 'pdf', 'pptx', 'webm', 'mp4','png-sequence','spritesheet'].includes(options.format) ? await embeddedDocumentFonts(doc) : null;
   let browser: ExportBrowser | undefined;
   try {
@@ -144,7 +147,16 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
     if (!bundle?.ok) fail(503, 'renderer_not_built', 'Build the renderer bundle before exporting.');
     await page.addScriptTag({ content: await bundle.text() });
     let output: Uint8Array;
-    if(['png-sequence','spritesheet'].includes(options.format)){
+    if (thumbnail) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const encoded = await Promise.race([
+          page.evaluate((doc: DesignDocument) => (globalThis as any).studioRenderer.thumbnail(doc), doc),
+          new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Thumbnail render timed out')), 45000); }),
+        ]);
+        output = Buffer.from(encoded, 'base64');
+      } finally { if (timeout) clearTimeout(timeout); }
+    } else if(['png-sequence','spritesheet'].includes(options.format)){
       const end=options.end??doc.timeline?.duration??2;const count=Math.ceil((end-options.start)*options.fps);
       if(count<1||count>300||current.width*current.height*count>67108864)fail(413,'render_budget_exceeded','Use 1–300 frames and at most 64 megapixels in total.');
       const encoded=await page.evaluate(({doc,index,format,start,end,fps}:any)=>(globalThis as any).studioRenderer.motionFrames(doc,index,format,start,end,fps),{doc,index:options.pageIndex,format:options.format,start:options.start,end,fps:options.fps});output=Buffer.from(encoded,'base64');
@@ -166,4 +178,5 @@ exportRoutes.post('/:id/export', async c => withSpan(c, { kind: 'export', action
     // Browser errors can include URLs. Avoid leaking provider/asset credentials.
     fail(502, 'render_failed', 'Cloud rendering failed. Check that media files decode and external assets permit cross-origin access; try PNG or WebM.');
   } finally { await browser?.close(); }
-}));
+});
+}

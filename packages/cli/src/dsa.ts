@@ -14,7 +14,7 @@ import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.3.2').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.3.3').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
@@ -122,6 +122,12 @@ projects.command('import').description('Create a new project from canonical JSON
   return client().json('/api/projects', 'POST', { name: options.name ?? document.name, kind: document.kind, document });
 }));
 
+projects.command('thumbnail <id>').description('Download a persistent saved-revision cover').requiredOption('--output <file>', 'PNG destination').option('--revision <number>', 'Saved cover revision').action(async (id, options) => {
+  if (options.output === '-') throw new CliError('file_required', 'Thumbnail download requires --output FILE.');
+  const response = await client().request(`${projectPath(id)}/thumbnail${options.revision ? `?revision=${revision(options.revision)}` : ''}`);
+  if (response.status === 202) { output({ ...(await response.json() as object), retryAfterSeconds: 2 }); return; }
+  await outputFile(options.output, new Uint8Array(await response.arrayBuffer()), { format: 'png' });
+});
 projects.command('export <id>').description('Export through the authenticated server renderer').requiredOption('--format <format>', 'json, html, svg, png, pdf, pptx, webm, mp4, react (ZIP), glb, gltf, motion (ZIP), png-sequence (ZIP), spritesheet (ZIP)').option('-o, --output <file>', 'Output filename; required for binary formats').option('--out <file>', 'Alias for --output').option('--start <seconds>', 'Frame export start time').option('--end <seconds>', 'Frame export end time').option('--fps <number>', 'Frame export FPS').option('--page <index>', 'Zero-based page for single-page exports', '0').option('--revision <number>', 'Require the saved revision to match').action(async (id, options) => {
   if (!['json', 'html', 'svg', 'png', 'pdf', 'pptx', 'webm', 'mp4', 'react', 'glb', 'gltf', 'motion', 'png-sequence', 'spritesheet'].includes(options.format)) throw new CliError('unsupported_format', 'Formats: json, html, svg, png, pdf, pptx, webm, mp4, react, glb, gltf, motion, png-sequence, spritesheet. Use google-slides for Google Slides.');
   const destination = options.output ?? options.out;

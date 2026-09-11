@@ -41,3 +41,5 @@ Acceptance: supported operations produce real geometry and skinning; invalid/sta
 - Corrected mobile overlay placement using the actual wrapped toolbar height; four browser/device configurations passed.
 
 Local verification: 189 unit/integration/export tests passed; earlier implementation typecheck/build/skill packaging passed. The final new documentation route required a SectionId update; rerunning final gates before merge. Focused browser acceptance: Chromium desktop/mobile, Firefox desktop, WebKit mobile, all passed.
+
+Merged main thumbnail persistence changes; post-merge typecheck, CLI build, full tests and production build passed. PR #23 awaits exact-head CI.
