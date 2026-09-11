@@ -1091,7 +1091,7 @@ export function Editor({
     }
   }
   async function exportFile(format: string, local = false) {
-    local ||= ['react', 'glb', 'gltf'].includes(format);
+    local ||= ['json', 'react', 'glb', 'gltf'].includes(format);
     setBusy(`Exporting ${format.toUpperCase()}`);
     setError("");
     setFailedExport("");
