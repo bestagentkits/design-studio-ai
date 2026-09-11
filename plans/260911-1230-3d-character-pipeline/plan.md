@@ -40,4 +40,4 @@ Acceptance: supported operations produce real geometry and skinning; invalid/sta
 - Existing topology tools reject data they cannot preserve. UV remapping copies skinning and morph deltas.
 - Corrected mobile overlay placement using the actual wrapped toolbar height; four browser/device configurations passed.
 
-Latest local gate: 189 unit/integration/export tests passed, typecheck/build/skill packaging passed. Focused browser acceptance: Chromium desktop/mobile, Firefox desktop, WebKit mobile, all passed.
+Local verification: 189 unit/integration/export tests passed; earlier implementation typecheck/build/skill packaging passed. The final new documentation route required a SectionId update; rerunning final gates before merge. Focused browser acceptance: Chromium desktop/mobile, Firefox desktop, WebKit mobile, all passed.
