@@ -56,7 +56,7 @@ Estimates are planning ranges, not commitments; protocol/egress probes can chang
 - [ ] Shared REST/CLI/MCP/WebMCP behavior, mobile/desktop UX, Node/Cloudflare paths and generated docs pass the gates in phase 9.
 - [ ] Live credential-dependent evidence is recorded separately from deterministic tests, CI, merge and deployment.
 
-Current code: `e020dee` on `dev`; modal polish and Picker dialog recovery are deployed to isolated beta, where connectors are enabled for authorized live acceptance. Exact-code CI and beta deploy passed; [full plan verification](reports/verification-260911-1539-plan-completion.md) records remaining acceptance gaps. Evidence: [progress](reports/implementation-progress-2026-09-11.md), [verification](reports/verification.md), [surface parity](reports/surface-parity.md), [live acceptance and remaining gaps](reports/live-acceptance.md).
+Current code: `2aa3345` on `dev`; modal/Picker recovery and native Slides response, page-count and layout fixes are deployed to isolated beta, where connectors are enabled for authorized live acceptance. Exact-code CI `34588960778` passed verify and deploy; active beta version `4063ec41-d1c5-485e-9ed9-e1b2283baff9` and health are verified; [full plan verification](reports/verification-260911-1539-plan-completion.md) records remaining acceptance gaps. Evidence: [progress](reports/implementation-progress-2026-09-11.md), [verification](reports/verification.md), [surface parity](reports/surface-parity.md), [live acceptance and remaining gaps](reports/live-acceptance.md).
 
 ## Ownership and tracking
 
