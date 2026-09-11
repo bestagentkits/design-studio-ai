@@ -59,7 +59,7 @@
 .connector-note { display: flex; align-items: start; gap: var(--s2); padding-block: var(--s3); }
 .connector-note svg { flex-shrink: 0; margin-top: var(--s1); }
 .connector-technical { margin-block: var(--s4); }
-.connector-review-actions { position: sticky; bottom: calc(-1 * var(--s6)); z-index: 1; background: var(--paper); padding-block: var(--s4); border-top: 1px solid var(--line); }
+.connector-review-actions { position: sticky; bottom: 0; z-index: 1; background: var(--paper); padding-block: var(--s4); border-top: 1px solid var(--line); }
 @media (max-width: 600px) {
   .modal:has(> .connector-panel) { width: calc(100vw - var(--s4)); }
   .modal > .connector-panel { padding: var(--s4); }
@@ -70,7 +70,6 @@
   .connector-file-heading { display: block; }
   .connector-file-list li { grid-template-columns: 16px minmax(0,1fr); gap: var(--s1) var(--s2); }
   .connector-file-list small { grid-column: 2; }
-  .connector-review-actions { bottom: calc(-1 * var(--s4)); }
 }
 @media (prefers-reduced-motion: reduce) { .connector-panel .button { transition: none; transform: none; } }
 
