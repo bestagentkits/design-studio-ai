@@ -15,6 +15,7 @@ function loadPicker(){
 export function GoogleDrivePicker({connectionId,folders=false,onSelect}:{connectionId:string;folders?:boolean;onSelect:(ids:string[])=>Promise<void>}){
   const [busy,setBusy]=useState(false),[error,setError]=useState('');
   const generation=useRef(0),active=useRef(true),cleanup=useRef<()=>void>(()=>{});
+  const opener=useRef<HTMLButtonElement>(null);
   useEffect(()=>{active.current=true;generation.current++;setBusy(false);setError('');return()=>{active.current=false;generation.current++;cleanup.current();};},[connectionId]);
   async function open(){
     const openedGeneration=generation.current;
@@ -28,7 +29,15 @@ export function GoogleDrivePicker({connectionId,folders=false,onSelect}:{connect
       const view=new pickerApi.DocsView(pickerApi.ViewId.DOCS).setIncludeFolders(folders).setSelectFolderEnabled(folders);
       view.setMimeTypes(folders?'application/vnd.google-apps.folder':'application/vnd.google-apps.document,text/plain,text/markdown,application/json,application/pdf,image/png,image/jpeg,image/webp,image/gif');
       let picker:any,timer:ReturnType<typeof setTimeout>;
-      const close=()=>{clearTimeout(timer);picker?.dispose();picker=null;access.accessToken='';if(current())setBusy(false);};cleanup.current=close;
+      const parentDialog=opener.current?.closest('dialog');
+      let restoreDialog=false;
+      const close=()=>{
+        clearTimeout(timer);picker?.dispose();picker=null;access.accessToken='';
+        if(current()){
+          if(restoreDialog&&parentDialog?.isConnected&&!parentDialog.open){parentDialog.showModal();opener.current?.focus();}
+          restoreDialog=false;setBusy(false);
+        }
+      };cleanup.current=close;
       const builder=new pickerApi.PickerBuilder().addView(view).setOAuthToken(access.accessToken).setDeveloperKey(access.apiKey).setAppId(access.appId).setOrigin(location.origin).setCallback(async(data:any)=>{
         if(data.action===pickerApi.Action.CANCEL){close();return;}
         if(data.action!==pickerApi.Action.PICKED)return;
@@ -38,8 +47,12 @@ export function GoogleDrivePicker({connectionId,folders=false,onSelect}:{connect
         try{if(!ids.length||ids.length>100||ids.some((id:unknown)=>typeof id!=='string'||!/^[a-zA-Z0-9_-]{1,128}$/.test(id)))throw new Error('Google returned an invalid file selection.');await onSelect(ids);}catch(e){if(current())setError(message(e));}finally{if(current())setBusy(false);}
       });
       if(!folders)builder.enableFeature(pickerApi.Feature.MULTISELECT_ENABLED);
-      picker=builder.build();timer=setTimeout(close,Math.max(1,Math.min(access.expiresAt-Date.now(),600000)));picker.setVisible(true);
+      picker=builder.build();
+      // Google's body-level picker cannot receive input behind a native modal's top layer.
+      // Keep the React dialog mounted so selection state survives while Picker owns focus.
+      if(parentDialog?.open){restoreDialog=true;parentDialog.close();}
+      timer=setTimeout(close,Math.max(1,Math.min(access.expiresAt-Date.now(),600000)));picker.setVisible(true);
     }catch(e){if(current())cleanup.current();if(current()){setError(message(e));setBusy(false);}}
   }
-  return <div className="connector-panel"><button type="button" className="button" disabled={busy} onClick={()=>void open()}>{busy?'Opening selected Google account…':folders?'Choose a Drive folder':'Choose Drive source files'}</button>{error&&<p role="alert" className="inline-error">{error}</p>}<small>Only files selected for this account are available. Choosing a folder does not grant access to its existing contents.</small></div>;
+  return <div className="connector-panel"><button ref={opener} type="button" className="button" disabled={busy} onClick={()=>void open()}>{busy?'Opening selected Google account…':folders?'Choose a Drive folder':'Choose Drive source files'}</button>{error&&<p role="alert" className="inline-error">{error}</p>}<small>Only files selected for this account are available. Choosing a folder does not grant access to its existing contents.</small></div>;
 }

@@ -1,5 +1,11 @@
 # Live acceptance — 2026-09-11
 
+## Google registration checkpoint — 2026-09-11 09:30 UTC
+
+Created `design-studio-ai-beta` (project number `75025282031`) in `wearetopgroup.com`, using the user's explicitly selected Company Billing Account. Google Drive, Slides and Picker APIs are enabled. Created the `Design Studio AI Beta Connector` web OAuth client with origin `https://beta.studio.agentkit.best` and exact callback `https://beta.studio.agentkit.best/api/connectors/google-drive/callback`. Consent is External / Testing; the currently signed-in owner account is listed as a test user. Configured only openid, email and drive.file scopes.
+
+Created `Design Studio AI Beta Picker` API key restricted to Google Picker API and website `https://beta.studio.agentkit.best/*`. Credential values are excluded from this report. The OAuth download button did not produce a matching JSON file in Downloads, and the browser tabs were subsequently closed. Both credential values were still available in the active browser-tool session and were transferred through an isolated loopback form to a mode-0600 temporary file without printing their values. The loopback server was stopped after transfer. Wrangler confirmed all four GOOGLE_CONNECTOR / GOOGLE_PICKER configuration secrets were uploaded successfully to the isolated beta Worker. The deployed Google OAuth flow then completed with the configured test account and drive.file consent; Studio reports the Google Drive connection as connected. Actual Picker/source/export acceptance remains pending. No production configuration changed.
+
 ## Passed
 
 Public server: `https://docs.mcp.cloudflare.com/mcp`, anonymous. Current application Node DNS-pinned transport negotiated `2026-07-28`; server identified itself as `docs-ai-search` 0.4.13. Discovery returned `search_cloudflare_documentation` and `migrate_pages_to_workers_guide`. A documentation query about public Workers fetch returned real textual results.
