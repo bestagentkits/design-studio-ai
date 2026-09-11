@@ -22,6 +22,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `schema [--operations]` | JSON Schema from the shared validators; semantic checks still run on writes |
 | `catalog`, `themes list/get`, `templates list/get/instantiate`, `blocks list/get` | Bundled design resources; instantiated IDs are unique |
 | `projects list/get/create/rename/delete/clone` | Persisted project management; clone copies owned asset bytes |
+| `projects paint ID --file command.json` | Server-rendered stroke/fill using observed revision, painting generation and exact retry ID |
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
 | `projects document merge/changes` | Three-way merge using the exact earlier base, and revision polling |
 | `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
@@ -98,6 +99,10 @@ The CLI is the scoped agentization deliverable in [release phase](../plans/2026-
 CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build prerequisites in [repository verification guidance](../AGENTS.md#run-the-appropriate-checks). They build and execute the distributable in real subprocesses, inspect schema/template output, and exercise authenticated project editing against the SQLite-backed handler. Renderer/server tests cover actual binary export. External provider and Google success require separate credential-dependent checks. Release evidence belongs in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
 Build the complete installable skill archive with `npm run pack:skill`. The [packaging script](../scripts/package-skill.mjs) includes the entrypoint and all design-kind references in `dist/design-studio-ai-skill.zip`.
+
+## Creative documents
+
+Clients must read both v1 and v2 and preserve typed boards, paintings, semantic diagram metadata and immutable assets. Discover shared board transforms, paste, diagram and generation-checked layer/group operations through the live operation schema. Use `POST /api/projects/{id}/paint`, MCP `paint_document`, or `dsa projects paint PROJECT_ID --file command.json` for server-rendered strokes/fills; `paintingCommand` in `/api/schema` owns the request shape, and generated WebMCP exposes the same endpoint. Carry the observed document revision, painting generation and operation ID. Retry the identical command under that ID after uncertain delivery; never fabricate pixel hashes or retry with a guessed revision. See [creative tools](creative-tools.md) for recovery, Elements/GIF timing, publication privacy and device limits. A v1-only client cannot save an upgraded v2 project.
 
 ## Catalog and editor parity
 

@@ -1,3 +1,5 @@
+import { boardSvg } from './board-render';
+
 import { characterSvg } from './character-svg';
 import { resolveLayout } from './layout';
 import { ease } from './easing';
@@ -85,7 +87,16 @@ function nodeSvg(n: DesignNode, doc: DesignDocument, time = 0): string {
   const sw = num(s.strokeWidth, 0, 0, 100);
   const radius = num(s.borderRadius, n.type === 'frame' ? theme.radius : 0, 0, 10000);
   let markup = '';
-  if (n.type === 'text') {
+  if (n.type === 'board' && doc.schemaVersion === 2 && n.crop) {
+    const board = doc.boards.find(b => b.id === n.boardId);
+    if (!board) throw new Error('Board is unavailable');
+    markup = boardSvg(board, doc, n.crop, n.width, n.height);
+  } else if (n.type === 'artwork' && doc.schemaVersion === 2) {
+    const painting = doc.paintings.find(p => p.id === n.paintingId);
+    const asset = doc.assets.find(a => a.id === painting?.composite?.assetId);
+    if (!asset && painting?.layers.some(l => l.tiles.length)) throw new Error('Painting needs a current composite before rendering');
+    markup = asset ? `<image href="${escapeHtml(asset.url)}" width="${n.width}" height="${n.height}" preserveAspectRatio="none"/>` : '';
+  } else if (n.type === 'text') {
     const size = num(s.fontSize, 24, 1, 1000);
     const lineHeight = num(s.lineHeight, 1.2, 0.5, 4) * size;
     const align = s.textAlign === 'center' ? 'middle' : s.textAlign === 'right' ? 'end' : 'start';

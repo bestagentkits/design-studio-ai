@@ -117,6 +117,14 @@ Publish when already authorized by the user's request, using `publish PROJECT_ID
 
 Report the project/artifact URL or output path, what was changed, verification performed, and any actual remaining configuration or format limitation. Do not claim provider generation, deployment, export fidelity, or publication without observed success.
 
+## Boards and paint
+
+Read the live v1/v2 document and operation schemas. Preserve board/painting roots, semantic diagram metadata, emoji identity and immutable asset references. Use shared transforms, paste and diagram operations for board edits; generation-checked layer/group operations for paint structure. For real raster strokes/fills, use MCP `paint_document`, CLI `projects paint PROJECT_ID --file command.json`, or the generated WebMCP API action for `POST /api/projects/{id}/paint`. Discover `paintingCommand` through `/api/schema` before constructing requests.
+
+Carry the observed project revision, painting generation and a unique operation ID. Repeat the identical command under that ID only when its outcome is uncertain; same-painting pixel/settings changes conflict. Never fabricate pixel hashes or derived composites. Direct source replacement needs uploaded real RGBA8 PNG tiles. Keep scope approval and its revision separate from document changes.
+
+Elements artwork records provenance; imported SVG is safely flattened to PNG and loses vector editing. GIF sources retain original owned bytes plus an explicit poster and millisecond playback fields. Static output uses the saved poster; inspect timed exports for actual motion and z-order. Public projections omit private painting source and hidden board elements; JSON remains private editable source. Use authenticated export when media is not embedded locally. Physical iPad/Pencil performance remains unmeasured; report only devices and artifacts actually checked.
+
 ## Native 2D character motion
 
 Discover live v2 document and operation schemas. Use `dsa motion PROJECT_ID` or MCP `inspect_motion` to inspect IDs, then named character operations for focused edits. Keep setup poses separate from clip keys. Attachments reference asset IDs; import remote artwork before portable export. Skins reuse rig/clips; placements and controls belong to each node instance.

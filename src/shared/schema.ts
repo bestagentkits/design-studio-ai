@@ -1,4 +1,7 @@
 import { z } from 'zod';
+import { boardSchema, boardBoundsSchema, creativeId } from './board-schema';
+import { paintingSchema } from './painting-schema';
+import { validateCreativeDocument } from './creative-validation';
 import { characterSchema, characterInstanceSchema } from './character-schema';
 import { characterErrors, instanceErrors } from './character-validation';
 import { layoutSchema, sizingSchema, componentSchema, interactionSchema, timelineSchema, sceneObjectSchema, sceneSchema } from './design-capabilities';
@@ -22,27 +25,31 @@ export const themeSchema = z.object({
   spacing: z.array(finite.min(0).max(1000)).max(32), radius: finite.min(0).max(1000)
 });
 export const nodeSchema = z.object({
-  id, type: z.enum(['frame', 'group', 'component', 'text', 'image', 'shape', 'icon', 'chart', 'model3d', 'video', 'audio', 'character']),
+  id, type: z.enum(['frame', 'group', 'component', 'text', 'image', 'shape', 'icon', 'chart', 'model3d', 'video', 'audio', 'board', 'artwork', 'character']),
   name: z.string().max(200), x: coordinate, y: coordinate, width: dimension, height: dimension,
   rotation: finite.min(-36000).max(36000).optional(), opacity: finite.min(0).max(1).optional(),
   layout: layoutSchema.optional(), sizing: sizingSchema.optional(), position: z.enum(['flow', 'absolute']).optional(),
   pivot: z.tuple([finite.min(0).max(1), finite.min(0).max(1)]).optional(),
   component: componentSchema.optional(), interactions: z.array(interactionSchema).max(20).optional(),
   scene: sceneObjectSchema.optional(), character: characterInstanceSchema.optional(),
+  boardId: creativeId.optional(), paintingId: creativeId.optional(), crop: boardBoundsSchema.optional(),
   parentId: id.optional(), locked: z.boolean().optional(), visible: z.boolean().optional(),
   text: z.string().max(50000).optional(), src: z.string().max(2000000).refine(isSafeUrl, 'Only HTTPS, owned assets, or raster image data URLs are allowed').optional(),
   style: primitiveStyle.optional(), data: z.record(z.string().max(80), z.unknown()).optional()
 });
 export const pageSchema = z.object({ id, name: z.string().max(200), width: dimension.min(1), height: dimension.min(1), background: z.string().max(80), layout: layoutSchema.optional(), notes: z.string().max(20000).optional(), scene: sceneSchema.optional(), nodes: z.array(nodeSchema).max(2000) });
-export const documentSchema = z.object({
-  schemaVersion: z.union([z.literal(1), z.literal(2)]), characters: z.array(characterSchema).max(32).optional(), id, name: z.string().min(1).max(200), kind: z.enum(kinds), theme: themeSchema,
+const documentBaseSchema = z.object({
+  schemaVersion: z.literal(1), characters: z.array(characterSchema).max(32).optional(), id, name: z.string().min(1).max(200), kind: z.enum(kinds), theme: themeSchema,
   pages: z.array(pageSchema).min(1).max(200),
   assets: z.array(z.object({ id, name: z.string().max(300), type: z.string().max(80), mimeType: z.string().max(100), url: z.string().max(2000000).refine(isSafeUrl), size: finite.min(0).optional() })).max(2000),
   designSystem: z.object({ id, version: z.number().int().positive(), name: z.string().max(200) }).optional(),
   presentation: z.object({ interval: finite.min(1).max(600), loop: z.boolean() }).optional(),
   timeline: timelineSchema.optional(),
   metadata: z.object({ createdAt: z.iso.datetime(), updatedAt: z.iso.datetime() })
-}).superRefine((doc, ctx) => {
+});
+const legacyDocumentSchema = documentBaseSchema.strict();
+const creativeDocumentSchema = documentBaseSchema.extend({ schemaVersion: z.literal(2), boards: z.array(boardSchema).max(100).default([]), paintings: z.array(paintingSchema).max(100).default([]) }).strict();
+export const documentSchema = z.discriminatedUnion('schemaVersion', [legacyDocumentSchema, creativeDocumentSchema]).superRefine((doc, ctx) => {
   const allIds = new Set<string>();
   const nodeIds = new Set<string>();
   let total = 0;
@@ -85,6 +92,8 @@ export const documentSchema = z.object({
   }
   if (total > 5000) ctx.addIssue({ code: 'custom', message: 'Maximum 5000 nodes per document' });
   for (const asset of doc.assets) unique(asset.id);
+  if (doc.schemaVersion === 2) validateCreativeDocument(doc, ctx, unique);
+  else if (doc.pages.some(p => p.nodes.some(n => ['board', 'artwork'].includes(n.type) || n.boardId || n.paintingId || n.crop))) ctx.addIssue({ code: 'custom', message: 'Board and artwork require schemaVersion 2; upgrade this document first' });
   for (const track of doc.timeline?.tracks ?? []) {
     unique(track.id);
     if (!nodeIds.has(track.nodeId)) ctx.addIssue({ code: 'custom', message: 'Timeline references an unknown node' });

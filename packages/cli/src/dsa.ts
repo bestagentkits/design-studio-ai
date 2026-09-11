@@ -1,3 +1,5 @@
+import { paintingCommandSchema } from '../../../src/shared/painting-command';
+import { publicCreativeProjection } from '../../../src/shared/public-creative-projection';
 import { Command, CommanderError } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -13,7 +15,7 @@ import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.3.3').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.4.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
@@ -68,6 +70,7 @@ blockGroup.command('list').action(wrap(() => ({ blocks: blocks.map(({ nodes, ...
 blockGroup.command('get <id>').option('--offset <pixels>', 'Vertical offset', '0').action(wrap((id, options) => { selection(blocks, id); return { nodes: createBlock(id, nonnegativeNumber(options.offset)) }; }));
 
 const projects = program.command('projects').description('Manage persisted projects');
+projects.command('paint <id>').description('Execute a revision-guarded raster stroke/fill from JSON; operationId enables exact retries').requiredOption('--file <path>', 'Painting command JSON or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/paint`, 'POST', paintingCommandSchema.parse(await inputJson(options.file)))));
 const briefs = program.command('brief').description('Persist an interview and explicitly approve its design scope');
 briefs.command('get <id>').action(wrap(id => client().json(`${projectPath(id)}/brief`)));
 briefs.command('put <id>').description('Create/update from JSON: request, interview, answers, scope; every write invalidates approval').requiredOption('--revision <number>', 'Expected brief revision; 0 creates').requiredOption('--file <path>', 'Brief update JSON or - for stdin').action(wrap(async (id, options) => {
@@ -139,7 +142,10 @@ projects.command('export <id>').description('Export through the authenticated se
 });
 program.command('render').description('Render a local JSON document offline using shared static HTML/SVG rendering').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--format <format>', 'json, html, or svg').option('--output <file>', 'Output filename; omitted writes content to stdout').option('--page <index>', 'Zero-based SVG page', '0').option('--time <seconds>', 'SVG timeline position', '0').action(async options => {
   if (!['json', 'html', 'svg'].includes(options.format)) throw new CliError('unsupported_format', 'Offline rendering supports json, html, or svg. Use projects export for cloud-rendered binary formats.');
-  const document = await documentInput(options.file); const page = nonnegativeNumber(options.page);
+  const input = await documentInput(options.file);
+  const document = options.format === 'json' ? input : publicCreativeProjection(input);
+  if (options.format !== 'json' && input.schemaVersion === 2 && document.assets.some(a => !a.url.startsWith('data:'))) throw new CliError('offline_asset_unavailable', 'Creative media is not embedded locally. Use authenticated projects export to resolve owned assets.');
+  const page = nonnegativeNumber(options.page);
   if (!Number.isInteger(page)) throw new CliError('invalid_page', 'Page must be a zero-based integer.');
   const content = options.format === 'json' ? JSON.stringify(document, null, 2) : options.format === 'html' ? renderHtml(document) : renderSvg(document, page, nonnegativeNumber(options.time));
   await outputFile(options.output, content, { format: options.format });

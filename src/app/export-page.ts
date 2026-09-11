@@ -1,3 +1,4 @@
+import { sampleCreativeGifs } from './creative-elements-export';
 import { mountSceneComposition } from '../shared/scene-composition';
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -11,7 +12,8 @@ import { DocumentView, usesDom } from './document-view';
 import { loadDocumentFonts } from '../shared/font-loading';
 
 /** Render trusted components with browser layout before capture. Call dispose after capture. */
-export async function mountExportPage(doc: DesignDocument, index = 0, time = 0, offscreen = false) {
+export async function mountExportPage(doc: DesignDocument, index = 0, time: number | undefined = undefined, offscreen = false) {
+  doc = await sampleCreativeGifs(doc, time); time ??= 0;
   const page = doc.pages[index], host = document.createElement('section');
   host.style.cssText = `position:relative;width:${page.width}px;height:${page.height}px;overflow:hidden;flex:none;break-after:page`;
   // Offset an outer stage, never the captured root: html-to-image copies root
@@ -61,7 +63,7 @@ export async function rasterizeExportPage(host: HTMLElement, width: number, heig
   }
   return canvas;
 }
-export async function captureExportPage(doc: DesignDocument, index = 0, time = 0) {
+export async function captureExportPage(doc: DesignDocument, index = 0, time: number | undefined = undefined) {
   const mounted = await mountExportPage(doc, index, time);
   try { return await rasterizeExportPage(mounted.host, doc.pages[index].width, doc.pages[index].height); }
   finally { mounted.dispose(); }

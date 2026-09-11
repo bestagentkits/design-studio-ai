@@ -1,3 +1,8 @@
+import { PaintingWorkspace } from './painting-workspace';
+import { paintingSchema } from '../shared/painting-schema';
+import { CreativeWorkspace } from './creative-workspace';
+import { restoreDocumentSnapshot } from '../shared/document-upgrade';
+
 import { CharacterEditor } from './character-editor';
 import { componentIcons } from './component-icons';
 import { screenParam, useScreenState, writeScreen } from './screen-state';
@@ -126,6 +131,7 @@ type ToolContext = {
 };
 
 export function Editor({
+  accountId,
   initial,
   initialBriefRequest = "",
   onBack,
@@ -134,6 +140,7 @@ export function Editor({
   notify,
 }: {
   initial: Project;
+  accountId?: string;
   initialBriefRequest?: string;
   onBack: () => void;
   onSettings: () => void;
@@ -318,7 +325,6 @@ export function Editor({
     [fitted, setFitted] = useState(0.55),
     [directText, setDirectText] = useState<string | null>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
-  syncBlocked.current = !!busy || !!proposal || !!directText;
   const [historyCount, setHistoryCount] = useState(0),
     [redoCount, setRedoCount] = useState(0),
     [time, setTime] = useState(0),
@@ -395,6 +401,14 @@ export function Editor({
     setHistoryCount(history.current.length);
     setRedoCount(0);
   }
+  const [creativePaintingId, setCreativePaintingId] = useState<string | null>(null);
+  const [creativeBoardId, setCreativeBoardId] = useState<string | null>(() => initial.document.pages.length === 1 && initial.document.pages[0].name === 'Board' ? initial.document.pages[0].nodes.find(n => n.type === 'board')?.boardId ?? null : null);
+  const creativeOpen = useRef(false);
+  // Deleted paintings can reappear through redo; keep a high-water mark across removals.
+  const paintGeneration = useRef(0);
+  if (doc.schemaVersion === 2) for (const painting of doc.paintings) paintGeneration.current = Math.max(paintGeneration.current, painting.generation);
+  creativeOpen.current = !!creativeBoardId || !!creativePaintingId;
+  syncBlocked.current = !!busy || !!proposal || !!directText || creativeOpen.current;
   const change = useCallback((recipe: (doc: DesignDocument) => void) => {
     try {
       const next = clone(docRef.current);
@@ -446,7 +460,8 @@ export function Editor({
     const last = history.current.pop();
     if (!last) return;
     future.current.push(clone(docRef.current));
-    docRef.current = last; setDoc(last);
+    const restored = restoreDocumentSnapshot(docRef.current, last, paintGeneration.current);
+    docRef.current = restored; setDoc(restored);
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
     setProposal(null);
@@ -455,12 +470,15 @@ export function Editor({
     const next = future.current.pop();
     if (!next) return;
     history.current.push(clone(docRef.current));
-    docRef.current = next; setDoc(next);
+    const restored = restoreDocumentSnapshot(docRef.current, next, paintGeneration.current);
+    docRef.current = restored; setDoc(restored);
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
   }
+  const manualSaving = useRef(false);
   async function save() {
     if (busy) return;
+    manualSaving.current = true;
     setBusy("Saving");
     setError("");
     try {
@@ -487,7 +505,7 @@ export function Editor({
     } catch (e) {
       setError(message(e));
     } finally {
-      syncing.current = false;
+      syncing.current = false; manualSaving.current = false;
       setBusy("");
     }
   }
@@ -504,6 +522,9 @@ export function Editor({
         const result = changed
           ? await post<{ project?: Project }>(`/api/projects/${project.id}/merge`, { base, document: sending, baseRevision: projectRef.current.revision })
           : await api<{ project?: Project }>(`/api/projects/${project.id}/changes?since=${projectRef.current.revision}`);
+        // A request started before the modal opened may finish during a stroke.
+        // Retain its result until the modal closes, then reconcile against local work.
+        while (!stopped && creativeOpen.current && !manualSaving.current) await new Promise(resolve => setTimeout(resolve, 100));
         if (stopped || !result.project) return;
         const remote = result.project;
         // Edits typed during the request are reconciled, never replaced by its response.
@@ -1259,6 +1280,7 @@ export function Editor({
         },
         execute: async (args) => {
           const next = documentSchema.parse(args.document);
+          if (docRef.current.schemaVersion === 2 && next.schemaVersion !== 2) throw new Error("This project uses document v2. Preserve its boards and paintings when editing.");
           if (
             next.id !== projectRef.current.id ||
             next.kind !== projectRef.current.kind
@@ -1908,9 +1930,32 @@ export function Editor({
             </div>
           )}
         </aside>
+        {creativePaintingId && <PaintingWorkspace accountId={accountId} doc={doc} paintingId={creativePaintingId} onClose={() => setCreativePaintingId(null)} onUndo={undo} onRedo={redo} onCommit={(base, next) => { const merged = mergeDocuments(base, next, docRef.current); change(current => Object.assign(current, merged)); }}/>}
+        {creativeBoardId && <CreativeWorkspace accountId={accountId} savedDocument={project.document} saveStatus={busy || error || (dirty ? 'Unsaved changes' : 'Saved')} onSave={save} projectId={project.id} doc={doc} boardId={creativeBoardId} onClose={() => setCreativeBoardId(null)} onUndo={undo} onRedo={redo} onCommit={(base, next) => { const merged = mergeDocuments(base, next, docRef.current); change(current => Object.assign(current, merged)); }}/>}
         <section className="canvas-region">
           <div className="canvas-toolbar">
             <div className="insert-tools">
+              <button className="icon-button" aria-label="Open painting studio" title="Paint with layered brushes" onClick={() => {
+                const existing = doc.pages[pageIndex].nodes.find(n => n.id === selected && n.type === 'artwork') ?? doc.pages[pageIndex].nodes.find(n => n.type === 'artwork');
+                if (existing?.paintingId) { setCreativePaintingId(existing.paintingId); return; }
+                const paintingId = uid(), nodeId = uid();
+                const painting = paintingSchema.parse({ id: paintingId, name: 'Painting', width: 512, height: 512, generation: 0, colorSpace: 'srgb', algorithm: 'cpu-srgb-grain-v1', tileSize: 512, layers: [{ id: uid(), name: 'Layer 1', visible: true, locked: false, opacity: 1, blend: 'normal', tiles: [] }] });
+                change(current => Object.assign(current, mutateDocument(current, [
+                  { op: 'add-painting', painting },
+                  { op: 'add-node', pageId: current.pages[pageIndex].id, node: { id: nodeId, type: 'artwork', name: 'Painting', x: 32, y: 32, width: 512, height: 512, paintingId } },
+                ])));
+                setCreativePaintingId(paintingId); setSelected(nodeId);
+              }}><span aria-hidden="true">◒</span></button>
+              <button className="icon-button" aria-label="Open creative board" title="Draw on a creative board" onClick={() => {
+                const existing = doc.pages[pageIndex].nodes.find(n => n.id === selected && n.type === 'board') ?? doc.pages[pageIndex].nodes.find(n => n.type === 'board');
+                if (existing?.boardId) { setCreativeBoardId(existing.boardId); return; }
+                const boardId = uid(), nodeId = uid();
+                change(current => Object.assign(current, mutateDocument(current, [
+                  { op: 'add-board', board: { id: boardId, name: 'Creative board', elements: [], background: '#ffffff' } },
+                  { op: 'add-node', pageId: current.pages[pageIndex].id, node: { id: nodeId, type: 'board', name: 'Creative board', x: 24, y: 24, width: 640, height: 426.6667, boardId, crop: { x: 0, y: 0, width: 960, height: 640 } } },
+                ])));
+                setCreativeBoardId(boardId); setSelected(nodeId);
+              }}><Pencil size={18}/></button>
               <button
                 className="icon-button selected"
                 title="Select (V)"
