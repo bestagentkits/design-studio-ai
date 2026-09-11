@@ -4,7 +4,7 @@ import { projectRow } from "./projects";
 import { fail } from "./security";
 import { limitedBytes, upstream } from "./providers";
 import { documentSchema } from "../src/shared/schema";
-import { googleSlidesRequests } from './google-slides-content';
+import { googleSlidesRequests,createdGooglePresentation } from './google-slides-content';
 import type { Env } from "./types";
 export const googleRoutes = new Hono<Env>();
 googleRoutes.post("/:id/google-slides", async (c) => {
@@ -19,20 +19,17 @@ googleRoutes.post("/:id/google-slides", async (c) => {
     Authorization: `Bearer ${body.accessToken}`,
   };
   const create = await upstream(
-    "https://slides.googleapis.com/v1/presentations?fields=presentationId",
+    "https://slides.googleapis.com/v1/presentations?fields=presentationId,slides(objectId)",
     { method: "POST", headers, body: JSON.stringify({ title: doc.name }) },
   );
   const presentation = JSON.parse(
     new TextDecoder().decode(await limitedBytes(create, 1024 * 1024)),
   );
-  const presentationId = z
-    .string()
-    .regex(/^[\w-]+$/)
-    .parse(presentation.presentationId);
+  const {presentationId,cleanupRequests}=createdGooglePresentation(presentation);
   try {
     await upstream(
       `https://slides.googleapis.com/v1/presentations/${presentationId}:batchUpdate`,
-      { method: "POST", headers, body: JSON.stringify({ requests }) },
+      { method: "POST", headers, body: JSON.stringify({ requests:[...cleanupRequests,...requests] }) },
     );
   } catch {
     fail(

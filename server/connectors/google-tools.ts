@@ -10,7 +10,7 @@ import { connectorFingerprint } from '../connector-fingerprints';
 import { prepareConnectorOperation,claimConnectorOperation,finishConnectorOperation,markConnectorOperationUncertain } from '../connector-operations';
 import { ownedOperation,inspectOperationVersions,operationClockSql } from '../connector-operation-versions';
 import { googleBindingAuthority,googleFileMetadata } from './google-drive';
-import { googleSlidesRequests } from '../google-slides-content';
+import { googleSlidesRequests,createdGooglePresentation } from '../google-slides-content';
 import { documentSchema } from '../../src/shared/schema';
 import { nativeJson } from './native-transport';
 import { ApiError, fail } from '../security';
@@ -80,15 +80,16 @@ export async function executeGoogleOperation(env:Bindings,principal:ConnectorPri
       return await finishConnectorOperation(env,principal,row.id,revision,lease,{status:'succeeded',remoteIds:[presentationId],result:{fileId:presentationId,filename:args.filename,folderId:args.folderId,format:args.format,bytes:prepared.artifact.bytes,sha256:prepared.artifact.content_hash}});
     }
     dispatched=true;
-    const created=await nativeJson(env,'https://slides.googleapis.com/v1/presentations?fields=presentationId',{method:'POST',headers,body:JSON.stringify({title:'title' in args?args.title:''})});
-    presentationId=z.object({presentationId:z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/)}).parse(created).presentationId;
+    const created=await nativeJson(env,'https://slides.googleapis.com/v1/presentations?fields=presentationId,slides(objectId)',{method:'POST',headers,body:JSON.stringify({title:'title' in args?args.title:''})});
+    const presentation=createdGooglePresentation(created);
+    presentationId=presentation.presentationId;
     // Record the returned remote identity even if cancellation raced with the response.
     await env.DB.prepare("UPDATE connector_operations SET remote_ids_json=? WHERE id=? AND user_id=? AND remote_ids_json='[]'")
       .bind(JSON.stringify([presentationId]),row.id,principal.userId).run();
     await guard();
     await nativeJson(env,`https://www.googleapis.com/drive/v3/files/${presentationId}?addParents=${encodeURIComponent(value.folderId)}&fields=id&supportsAllDrives=true`,{method:'PATCH',headers,body:'{}'});
     await guard();
-    await nativeJson(env,`https://slides.googleapis.com/v1/presentations/${presentationId}:batchUpdate`,{method:'POST',headers,body:JSON.stringify({requests})});
+    await nativeJson(env,`https://slides.googleapis.com/v1/presentations/${presentationId}:batchUpdate`,{method:'POST',headers,body:JSON.stringify({requests:[...presentation.cleanupRequests,...requests]})});
     return await finishConnectorOperation(env,principal,row.id,revision,lease,{status:'succeeded',remoteIds:[presentationId],result:{presentationId,url:`https://docs.google.com/presentation/d/${presentationId}/edit`,folderId:value.folderId}});
   }catch(error){
     console.warn(JSON.stringify({event:'google_connector_operation_failed',action:row.action,remoteIdentityRecorded:!!presentationId,reason:error instanceof ApiError?error.code:error instanceof z.ZodError?'invalid_provider_identity':'transport_or_runtime_error'}));

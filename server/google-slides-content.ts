@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { fail } from "./security";
 import type { DesignDocument } from "../src/shared/schema";
 import { resolveColor, resolveFont } from '../src/shared/render';
@@ -145,4 +146,10 @@ export function googleSlidesRequests(doc:DesignDocument){
     }
   }
   return requests;
+}
+
+/** Remove only default slides returned by the just-created presentation. */
+export function createdGooglePresentation(value:unknown){
+  const created=z.object({presentationId:z.string().regex(/^[a-zA-Z0-9_-]{1,128}$/),slides:z.array(z.object({objectId:z.string().regex(/^[a-zA-Z0-9_:-]{1,128}$/)})).max(100).default([])}).parse(value);
+  return {presentationId:created.presentationId,cleanupRequests:created.slides.map(slide=>({deleteObject:{objectId:slide.objectId}}))};
 }

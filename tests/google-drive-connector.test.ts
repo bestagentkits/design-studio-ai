@@ -34,9 +34,11 @@ async function googleFixture(t:TestContext){
     if(req.url?.startsWith('/v1/presentations')&&!req.url.includes(':batchUpdate')){
       const fields=new URL(req.url,'http://localhost').searchParams.get('fields');
       // Unfiltered Google creation responses include large layout/master metadata.
-      res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({presentationId:'created-presentation',...(fields==='presentationId'?{}:{layouts:[{metadata:'x'.repeat(300000)}]})}));return;
+      res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({presentationId:'created-presentation',slides:[{objectId:'default-slide'}],...(fields==='presentationId,slides(objectId)'?{}:{layouts:[{metadata:'x'.repeat(300000)}]})}));return;
     }
-    if(req.url?.includes(':batchUpdate')){if(state.failPopulation){res.writeHead(500).end();return;}res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
+    if(req.url?.includes(':batchUpdate')){
+      const payload=JSON.parse(Buffer.concat(chunks).toString());assert.deepEqual(payload.requests[0],{deleteObject:{objectId:'default-slide'}});
+      if(state.failPopulation){res.writeHead(500).end();return;}res.writeHead(200,{'Content-Type':'application/json'}).end('{}');return;}
     if(req.url?.includes('/drive/v3/files/chosen-folder')){res.writeHead(200,{'Content-Type':'application/json'}).end(JSON.stringify({id:'chosen-folder',name:'Exports',mimeType:'application/vnd.google-apps.folder',version:'1',capabilities:{canAddChildren:true}}));return;}
     if(state.deny){res.writeHead(401).end();return;}
     if(req.url?.includes('alt=media')){if(state.mutate)state.fileVersion++;res.writeHead(200,{'Content-Type':'text/plain'}).end('Selected source text');return;}
