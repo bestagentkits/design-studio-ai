@@ -61,7 +61,7 @@ Deliver the first usable milestone: add remote MCP, authenticate, choose tools f
 - [x] Implement per-project tools/sources and provenance views.
 - [x] Implement run activity, resume/cancel and exact action approval.
 - [ ] Preserve unsaved edits and proposal/save behavior.
-- [ ] Verify desktop, mobile, Firefox and WebKit interactions.
+- [x] Verify desktop, mobile, Firefox and WebKit interactions. See [current verification](reports/verification-260911-1539-plan-completion.md) for tested scenarios and limits.
 
 ## Validation and success
 

@@ -1,5 +1,7 @@
 # Connector interoperability matrix — 2026-09-11
 
+Current checkpoint: [full plan verification](verification-260911-1539-plan-completion.md) supersedes historical configuration/deployment statements below. GitHub is configured and partly verified; beta connectors are enabled for authorized acceptance. Overall plan remains incomplete.
+
 | Surface / runtime | Evidence | Limit |
 | --- | --- | --- |
 | MCP 2025-11-25 / 2026-07-28 JSON and SSE | Existing Node/local workerd contract-peer probe matrix in runtime-probes.md | Controlled protocol peers, not real account acceptance |

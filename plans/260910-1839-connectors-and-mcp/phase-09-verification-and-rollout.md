@@ -49,7 +49,7 @@ Produce evidence for the actual requested workflows, runtime/security boundaries
 ## Todo
 
 - [x] Pass focused suites and full current release gates.
-- [ ] Verify Chromium desktop/mobile, Firefox and WebKit.
+- [x] Verify Chromium desktop/mobile, Firefox and WebKit. See [current verification](reports/verification-260911-1539-plan-completion.md) for tested scenarios and limits.
 - [ ] Verify Cloudflare + Node auth, transport, persistence and cleanup.
 - [ ] Complete isolated real MCP/model/GitHub/Google acceptance evidence.
 - [x] Review final code and reconcile known risks.

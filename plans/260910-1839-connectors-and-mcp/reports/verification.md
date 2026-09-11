@@ -1,5 +1,7 @@
 # Verification — 2026-09-11
 
+Current checkpoint: [full plan verification](verification-260911-1539-plan-completion.md) supersedes historical configuration/deployment statements below. GitHub is configured and partly verified; beta connectors are enabled for authorized acceptance. Overall plan remains incomplete.
+
 Current implementation is based on `f114988`; this report records observed checks, not a production release.
 
 | Check | Observed result |

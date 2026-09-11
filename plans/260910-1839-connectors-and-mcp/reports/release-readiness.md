@@ -1,5 +1,7 @@
 # Connector release readiness — 2026-09-11
 
+Current checkpoint: [full plan verification](verification-260911-1539-plan-completion.md) supersedes historical configuration/deployment statements below. GitHub is configured and partly verified; beta connectors are enabled for authorized acceptance. Overall plan remains incomplete.
+
 Target authorized: isolated `dev` → `beta.studio.agentkit.best`. Production/main is outside this delivery authorization. The existing beta workflow verifies source, applies forward migrations and deploys that same dev revision; deployment evidence must include its exact SHA and terminal CI result.
 
 ## Configuration and acceptance
