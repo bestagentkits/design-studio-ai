@@ -1,3 +1,4 @@
+import { thumbnailRoutes } from './thumbnails';
 import {documentWriteSchema} from '../src/shared/document-write';
 import {motionProposalSchema} from '../src/shared/motion-proposal';
 import {exportOptionsSchema} from '../src/shared/export-contract';
@@ -243,6 +244,7 @@ app.route("/api/projects", collaborationRoutes);
 app.route("/api/projects", generationRoutes);
 app.route("/api/projects", googleRoutes);
 app.route('/api/projects', exportRoutes);
+app.route('/api/projects', thumbnailRoutes);
 app.route('/api/projects', conversationRoutes);
 app.route('/api/projects', briefRoutes);
 app.get('/api/projects/:id/checks', async c => {
