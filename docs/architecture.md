@@ -2,6 +2,8 @@
 
 Design Studio AI uses a validated document as the boundary between people, agents, providers, and renderers. The [product brief](product-brief.md) records the requested outcome; executable schemas/routes own the current implementation.
 
+Desktop sidebar visibility is URL-backed through [screen-state.ts](../src/app/screen-state.ts). Preview starts with both sidebars closed and allows each to be expanded independently; `previewLeft`/`previewRight` preserve preview choices separately from Edit’s `left`/`right`. Reload and browser history restore those choices. Mobile Preview remains canvas-only; Edit uses the mobile panel navigation.
+
 ## Runtime boundaries
 
 The [React application](../src/app/app.tsx) provides the library. Its [editor](../src/app/editor.tsx) coordinates direct editing, proposals, local undo/redo, assets, timeline playback, exports, and feature-detected WebMCP. The [Hono handler](../server/index.ts) owns authentication, persistence, provider requests, publishing, OAuth, and network MCP.

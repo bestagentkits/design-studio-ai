@@ -59,8 +59,8 @@
  .public-header { flex-wrap:wrap;height:auto;gap:6px;padding:8px 16px; }.public-header nav { order:3;flex-basis:100%;gap:18px; }.public-header .header-end { margin-left:auto; }.public-header .brand { font-size:14px; }
  .pane-controls { display:none; }.editor-shell.left-closed .editor-workspace,.editor-shell.right-closed .editor-workspace { display:flex; }
  .editor-shell.mobile-chat .left-panel,.editor-shell.mobile-inspector .inspector { display:flex; }
+ .editor-shell.preview-mode .left-panel,.editor-shell.preview-mode .inspector { display:none; }
  .motion-editor { height:230px;max-height:45dvh; }.motion-toolbar { flex-wrap:nowrap;overflow-x:auto; }.motion-toolbar>* { flex-shrink:0; }.motion-toolbar button { min-height:40px; }.canvas-bottom { padding:8px; }.zoom-controls { width:100%;justify-content:center; }.zoom-controls button { min-height:40px; }
 }
 @media(prefers-reduced-motion:reduce) { .home-atmosphere i { animation:none; } }
-.editor-shell.preview-mode .editor-workspace { grid-template-columns:minmax(0,1fr); }
 .preview-mode .scene-toolbar { display:none; }
