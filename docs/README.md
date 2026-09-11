@@ -6,6 +6,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 | --- | --- |
 | Understand product intent, constraints, and requested outcomes | [Product brief](product-brief.md) |
 | Locate shared contracts, runtime boundaries, and their executable owners | [Architecture](architecture.md) |
+| Maintain creative boards, paint persistence and public-source boundaries | [Creative tools](creative-tools.md) |
 | Configure hosting, secrets, storage, backups, or rollback | [Deployment](deployment.md) |
 | Connect an external agent through the product's API, MCP, WebMCP, or CLI | [Agent access](agents.md) |
 | Understand provider setup and source-media constraints | [Providers](providers.md) |

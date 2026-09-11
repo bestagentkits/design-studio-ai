@@ -26,6 +26,7 @@ export function DesignSystemLibrary({ doc, page, node, change }: { doc: DesignDo
   function insert(itemId: string) { if (!selected) return; change(d => Object.assign(d, insertSystemItem(d, selected, page.id, itemId))); setOpen(false); }
   function capturePage() {
     if (!draft) return;
+    if (page.nodes.some(n => n.type === 'board' || n.type === 'artwork')) { setError('Board and painting source cannot be packaged in reusable libraries yet. Use an editable embed or clone the project.'); return; }
     const copy = structuredClone(page), originalId = copy.id; copy.id = uid(); copy.name += ' composition';
     for (const n of copy.nodes) n.interactions = n.interactions?.map(action => action.action === 'navigate' && action.target === originalId ? { ...action, target: copy.id } : action);
     edit({ compositions: [...draft.compositions, copy] });

@@ -74,3 +74,7 @@ All fal modes return queued jobs. Poll to a completed asset before reporting suc
 For concurrent editing, retain the exact document and revision you read. `projects document changes` observes saved updates; `projects document merge` accepts your edited document with that original base. Resolve reported overlapping changes explicitly; never change the base or invent its revision to force a write. See the [revision workflow](../../docs/agents.md#revision-workflow).
 
 `api METHOD /api/path --file request.json` provides an explicit REST escape hatch constrained to the configured server. It neither bypasses server auth nor evaluates local code. Requests reject redirects to keep tokens bound to the configured origin.
+
+## Creative documents
+
+The bundled schema reads v1/v2 and exposes board/painting operations through `schema --operations`. Preserve v2 roots when applying edits; painting replacement requires its observed generation and owned PNG tiles. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. See [creative tools](../../docs/creative-tools.md) for persistence, public projections and current integration limits.

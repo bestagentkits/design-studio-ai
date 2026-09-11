@@ -11,12 +11,12 @@ interface Context { registerTool: (tool: Tool) => void; unregisterTool?: (name: 
 export function registerDesignTools(context: Context, get: () => DesignDocument, set: (doc: DesignDocument) => void) {
   const result = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
   const tools: Tool[] = [{
-    name: 'studio_apply_operations', description: 'Atomically edit the open document using shared operations: add/update/delete/reparent nodes, page/layout, themes, tracks and keyframes. Changes appear immediately; live mode autosaves. Get the document first.',
+    name: 'studio_apply_operations', description: 'Atomically edit the open document using shared operations: add/update/delete/reparent nodes, page/layout, themes, tracks, keyframes, boards, elements and painting manifests. Changes appear immediately; live mode autosaves. Get the document first.',
     inputSchema: z.toJSONSchema(z.object({ operations: operationsSchema })),
     execute: async args => { const next = mutateDocument(get(), args.operations); set(next); return result({ document: next }); },
   }, {
     name: 'studio_capabilities', description: 'Discover canonical document/operation/component/layout/3D schemas and available API operations.', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true },
-    execute: async () => result({ componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
+    execute: async () => result({ supportedDocumentVersions: [1, 2], componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
   }];
   // Only first-party documented endpoints are callable; the browser supplies its own session.
   for (const endpoint of apiEndpoints.filter(e => !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {

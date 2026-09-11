@@ -1,3 +1,4 @@
+import { documentSaveSchema } from '../src/shared/document-save-contract';
 import { AsyncLocalStorage } from "node:async_hooks";
 import {
   McpServer,
@@ -176,11 +177,10 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     "update_document",
     {
       description:
-        "Persist a complete validated document. expectedRevision is required; stale revisions fail with conflict.",
+        "Persist a complete v1/v2 document. Preserve boards and paintings. expectedRevision is required. For painting saves, operationId allows retrying the exact payload; a changed payload conflicts.",
       inputSchema: {
         projectId: z.string(),
-        document: documentSchema,
-        expectedRevision: z.number().int().positive(),
+        ...documentSaveSchema.shape,
       },
     },
     async ({ projectId, ...body }) =>

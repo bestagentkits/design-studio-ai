@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 export const apiEndpoints = [
   { method: 'GET', path: '/api/health', summary: 'Health', body: undefined },
-  { method: 'GET', path: '/api/schema', summary: 'Document and operation schemas', body: undefined },
+  { method: 'GET', path: '/api/schema', summary: 'Document v1/v2 and shared operation schemas', body: undefined },
   { method: 'GET', path: '/api/catalog', summary: 'Templates, themes and blocks', body: undefined },
   { method: 'GET', path: '/api/fonts', summary: 'Search Google Fonts catalog', body: undefined },
   { method: 'GET', path: '/api/providers/{provider}/models', summary: 'Discover provider models', body: undefined },
@@ -17,7 +17,7 @@ export const apiEndpoints = [
   { method: 'GET', path: '/api/projects', summary: 'List your projects', body: undefined },
   { method: 'POST', path: '/api/projects', summary: 'Create a project', body: { name: 'My design', kind: 'web' } },
   { method: 'GET', path: '/api/projects/{id}', summary: 'Read a project', body: undefined },
-  { method: 'PUT', path: '/api/projects/{id}/document', summary: 'Save a validated document at the observed revision', body: { expectedRevision: 1, document: {} } },
+  { method: 'PUT', path: '/api/projects/{id}/document', summary: 'Save v1/v2 at the observed revision; painting saves support idempotent operationId', body: { expectedRevision: 1, document: {} } },
   { method: 'POST', path: '/api/projects/{id}/merge', summary: 'Merge nonconflicting human and agent edits', body: { baseRevision: 1, base: {}, document: {} } },
   { method: 'GET', path: '/api/projects/{id}/changes', summary: 'Read current revision and changes', body: undefined },
   { method: 'GET', path: '/api/projects/{id}/checks', summary: 'Inspect design', body: undefined },

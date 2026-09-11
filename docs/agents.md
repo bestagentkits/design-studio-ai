@@ -98,3 +98,7 @@ CLI tests live in [tests/cli.test.ts](../tests/cli.test.ts); follow the build pr
 The [v0.2.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.2.0) provides the CLI tarball and agent-skill ZIP. GitHub release distribution is separate from npm registry publication.
 
 Build the complete installable skill archive with `npm run pack:skill`. The [packaging script](../scripts/package-skill.mjs) includes the entrypoint and all design-kind references in `dist/design-studio-ai-skill.zip`.
+
+## Creative documents
+
+Clients must read both v1 and v2 and preserve typed boards and paintings. Shared operations cover board elements and generation-checked painting manifests; actual paint requires owned PNG pixels, never fabricated hashes. See [creative tools](creative-tools.md) for idempotent painting-save retries, publication privacy and current UI limits. Discover live schemas before editing; a v1-only client cannot save an upgraded v2 project.

@@ -18,7 +18,7 @@ Cloudflare runs that handler with D1, R2, static assets, and Browser Rendering. 
 
 | Contract | Machine-owned authority |
 | --- | --- |
-| Document v1, projects, themes, nodes, pages, assets, timelines, semantic validation | [schema.ts](../src/shared/schema.ts); `dsa schema` |
+| Document v1/v2, projects, themes, nodes, pages, assets, timelines, semantic validation | [schema.ts](../src/shared/schema.ts); `dsa schema` |
 | Targeted edits and timeline interpolation | [operations.ts](../src/shared/operations.ts); `dsa schema --operations` |
 | Explicitly selected starter templates, themes, and blocks | [catalog.ts](../src/shared/catalog.ts) |
 | Safe HTML/SVG and presentation interpretation | [render.ts](../src/shared/render.ts) |
@@ -108,3 +108,5 @@ Sanitized client events use a strict allowlist and remain distinguishable from s
 [Deployment](deployment.md) covers secrets, migrations, storage, browsers, backups, and rollback. [Tests](../tests) cover schema/operations, content safety, tenant isolation, revisions, OAuth, publication, CLI subprocesses, provider requests, and exports. Browser checks exercise desktop/touch workflows. External credential-dependent success is separate from local contract validation.
 
 Release evidence and pending checks live in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md). A build, filename, or configured key does not establish deployment, format validity, or provider success.
+
+Creative document versioning, immutable tiles, safe composites and current integration limits are described in [Creative tools](creative-tools.md).

@@ -12,6 +12,14 @@ export function mergeDocuments(base: DesignDocument, local: DesignDocument, remo
     if (path === 'metadata.updatedAt') return r;
     if (same(l, b) || same(l, r)) return structuredClone(r);
     if (same(r, b)) return structuredClone(l);
+    // A server-verified composite refresh does not edit the painting source.
+    if (/^paintings\[[^\]]+\]$/.test(path) && record(b) && record(l) && record(r)) {
+      const source = ({ composite: _preview, ...rest }: Record<string, unknown>) => rest;
+      if (same(source(l), source(b)) || same(source(l), source(r))) return structuredClone(r);
+      if (same(source(r), source(b))) return structuredClone(l);
+    }
+    // Pixels/settings and connector endpoints are coupled records, not independent fields.
+    if (/^paintings\[[^\]]+\]$/.test(path) || (record(l) && l.type === 'connector' && /^boards\[[^\]]+\]\.elements\[[^\]]+\]$/.test(path))) { conflicts.push(path); return r; }
     if (record(b) && record(l) && record(r)) {
       const result: Record<string, unknown> = {};
       for (const key of new Set([...Object.keys(b), ...Object.keys(l), ...Object.keys(r)])) {

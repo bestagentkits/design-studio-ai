@@ -1,3 +1,4 @@
+import { publicCreativeProjection } from '../shared/public-creative-projection';
 import type { DesignDocument, DesignNode } from "../shared/schema";
 import { renderHtml, renderSvg } from "../shared/render";
 import { createDocument } from "../shared/catalog";
@@ -85,7 +86,7 @@ export async function exportDesign(
     );
     return;
   }
-  const doc = await portableDocument(input, ['react', 'glb', 'gltf', 'html'].includes(format)),
+  const doc = await portableDocument(publicCreativeProjection(input), ['react', 'glb', 'gltf', 'html'].includes(format)),
     page = doc.pages[pageIndex]!;
   if (format === 'react') {
     const [{ createReactArchive }, response] = await Promise.all([import('../shared/react-export'), fetch('/studio-react-runtime.json')]);
@@ -248,13 +249,13 @@ export async function importDesign(
   if (/\.json$/i.test(file.name)) {
     const doc = JSON.parse(text) as DesignDocument;
     if (
-      doc.schemaVersion !== 1 ||
+      ![1, 2].includes(doc.schemaVersion) ||
       !Array.isArray(doc.pages) ||
       !doc.pages.length ||
       !doc.theme
     )
       throw new Error(
-        "Use a Design Studio document JSON with schemaVersion 1 and at least one page.",
+        "Use a Design Studio document JSON with schemaVersion 1 or 2 and at least one page.",
       );
     return {
       document: doc,
