@@ -1,3 +1,4 @@
+import { connectorControls } from './diagram-curve';
 import type { Board, BoardElement } from './board-schema';
 import { transformedAnchor, type BoardPoint } from './board-geometry';
 import type { SemanticElement } from './diagram-presets';
@@ -13,7 +14,12 @@ export function diagramEndpoint(board: Board, endpoint: Connector['start']): Boa
   return transformedAnchor(target, port || endpoint.binding.anchor);
 }
 /** Bind pointer-created edges to the nearest transformed side or declared semantic port. */
-export function nearestDiagramBinding(element: BoardElement, point: BoardPoint): NonNullable<Connector['start']['binding']> {
+export function nearestDiagramBinding(element: BoardElement, point: BoardPoint, source?: BoardPoint): NonNullable<Connector['start']['binding']> {
+  // Interior drops choose the side facing the other endpoint; near-edge drops remain precise.
+  if(source){const angle=-element.rotation*Math.PI/180,dx=point.x-element.x-element.width/2,dy=point.y-element.y-element.height/2;
+    const x=(dx*Math.cos(angle)-dy*Math.sin(angle))/(element.width/2),y=(dx*Math.sin(angle)+dy*Math.cos(angle))/(element.height/2);
+    if(Math.abs(x)<.7 && Math.abs(y)<.7) point=source;
+  }
   const ports = element.diagram?.ports.length ? element.diagram.ports : [{ x: .5, y: 0 }, { x: 1, y: .5 }, { x: .5, y: 1 }, { x: 0, y: .5 }];
   const port = ports.reduce((best, next) => { const a=transformedAnchor(element,best),b=transformedAnchor(element,next);return Math.hypot(b.x-point.x,b.y-point.y)<Math.hypot(a.x-point.x,a.y-point.y)?next:best; });
   return { elementId: element.id, anchor: { x: port.x, y: port.y }, ...('id' in port ? { port: port.id } : {}) };
@@ -67,19 +73,32 @@ export function orthogonalRoute(a: BoardPoint, b: BoardPoint, boxes: Box[]): Boa
 }
 export function diagramConnectorPoints(board: Board, edge: Connector): BoardPoint[] {
   const a = diagramEndpoint(board, edge.start), b = diagramEndpoint(board, edge.end);
+  if(edge.routing==='curve' && edge.bends.length===1){const c=edge.bends[0];return Array.from({length:33},(_,i)=>{const t=i/32,u=1-t;return {x:u*u*a.x+2*u*t*c.x+t*t*b.x,y:u*u*a.y+2*u*t*c.y+t*t*b.y};});}
   if (edge.bends.length) return [a, ...edge.bends, b];
   if (edge.start.binding && edge.start.binding.elementId === edge.end.binding?.elementId) {
     const node = board.elements.find(e => e.id === edge.start.binding!.elementId)!;
     return [a, { x: node.x + node.width + 40, y: a.y }, { x: node.x + node.width + 40, y: node.y - 40 }, { x: node.x - 40, y: node.y - 40 }, { x: node.x - 40, y: b.y }, b];
   }
+  if(edge.routing==='curve') {const [c,d]=connectorControls(board,edge,a,b);return Array.from({length:33},(_,i)=>{const t=i/32,u=1-t;return {x:u*u*u*a.x+3*u*u*t*c.x+3*u*t*t*d.x+t*t*t*b.x,y:u*u*u*a.y+3*u*u*t*c.y+3*u*t*t*d.y+t*t*t*b.y};});}
   if (edge.routing !== 'elbow') return [a, b];
-  const bound = new Set([edge.start.binding?.elementId, edge.end.binding?.elementId]);
-  const boxes = board.elements.filter(e => e.visible && !bound.has(e.id) && !['connector', 'group', 'frame'].includes(e.type)).map(e => {
+  const extend = (endpoint: Connector['start'], p: BoardPoint) => {
+    const node = board.elements.find(e=>e.id===endpoint.binding?.elementId);
+    if(!node) return p;
+    const dx=p.x-node.x-node.width/2,dy=p.y-node.y-node.height/2;
+    const corners=[{x:0,y:0},{x:1,y:0},{x:0,y:1},{x:1,y:1}].map(anchor=>transformedAnchor(node,anchor));
+    // Rotated ports can sit well inside the bounding box used by the router.
+    return Math.abs(dx/node.width)>=Math.abs(dy/node.height)
+      ? {x:dx>=0?Math.max(...corners.map(c=>c.x))+24:Math.min(...corners.map(c=>c.x))-24,y:p.y}
+      : {x:p.x,y:dy>=0?Math.max(...corners.map(c=>c.y))+24:Math.min(...corners.map(c=>c.y))-24};
+  };
+  const exit=extend(edge.start,a), entry=extend(edge.end,b);
+  const boxes = board.elements.filter(e => e.visible && !['connector', 'group', 'frame'].includes(e.type)).map(e => {
     const corners = [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 1 }].map(p => transformedAnchor(e, p));
     const x = Math.min(...corners.map(p => p.x)) - 12, y = Math.min(...corners.map(p => p.y)) - 12;
     return { x, y, width: Math.max(...corners.map(p => p.x)) + 12 - x, height: Math.max(...corners.map(p => p.y)) + 12 - y };
   });
-  return orthogonalRoute(a, b, boxes);
+  const route=orthogonalRoute(exit, entry, boxes);
+  return [a,...route,b].filter((p,i,all)=>!i || p.x!==all[i-1].x || p.y!==all[i-1].y);
 }
 export function diagramLabelPoint(points: BoardPoint[], fraction = .5): BoardPoint {
   const lengths = points.slice(1).map((p, i) => Math.hypot(p.x - points[i].x, p.y - points[i].y));

@@ -1,8 +1,11 @@
+import { patchShape } from './schema-patch';
+import { applyDiagramStyle, boardDiagramStyle } from './diagram-style';
+import { sizeDiagramNode } from './diagram-text';
 import { diagramValidationErrors } from './diagram-validation';
 export { diagramValidationErrors } from './diagram-validation';
 import { boardElementLocked } from './board-editing';
 import { z } from 'zod';
-import { boardEndpointSchema, boardPointSchema, creativeId, type Board } from './board-schema';
+import { boardEndpointSchema, boardPointSchema, diagramStyleSchema, creativeColor, creativeId, type Board } from './board-schema';
 import { diagramFamilySchema, diagramNodeSchema, diagramRoleSchema } from './diagram-schema';
 import { diagramEdge, diagramNode, diagramTemplate, diagramRoles, type SemanticElement } from './diagram-presets';
 import { diagramEndpoint } from './diagram-routing';
@@ -10,13 +13,14 @@ import { layoutDiagram } from './diagram-layout';
 import type { DesignDocument } from './schema';
 import { upgradeDocument } from './document-upgrade';
 export const diagramOperationSchemas = [
+  z.object({ op: z.literal('diagram-style'), boardId: creativeId, style: z.object(patchShape(diagramStyleSchema.shape)).partial(), elementIds: z.array(creativeId).max(1000).optional(), setDefault: z.boolean().default(false), savePreset: z.string().min(1).max(80).optional() }),
   z.object({ op: z.literal('diagram-template'), boardId: creativeId, family: diagramFamilySchema, prefix: creativeId }),
   z.object({ op: z.literal('diagram-node'), boardId: creativeId, id: creativeId, family: diagramFamilySchema, role: diagramRoleSchema, label: z.string().max(2000), x: boardPointSchema.shape.x.default(0), y: boardPointSchema.shape.y.default(0) }),
-  z.object({ op: z.literal('diagram-update'), boardId: creativeId, elementId: creativeId, changes: diagramNodeSchema.partial() }),
+  z.object({ op: z.literal('diagram-update'), boardId: creativeId, elementId: creativeId, changes: z.object(patchShape(diagramNodeSchema.shape)).partial() }),
   z.object({ op: z.literal('diagram-connect'), boardId: creativeId, id: creativeId, sourceId: creativeId, targetId: creativeId, label: z.string().max(2000).default('') }),
   z.object({ op: z.literal('diagram-reconnect'), boardId: creativeId, edgeId: creativeId, endpoint: z.enum(['start', 'end']), value: boardEndpointSchema }),
   z.object({ op: z.literal('diagram-detach'), boardId: creativeId, edgeId: creativeId, endpoint: z.enum(['start', 'end']) }),
-  z.object({ op: z.literal('diagram-edge'), boardId: creativeId, edgeId: creativeId, label: z.string().max(2000).optional(), routing: z.enum(['straight', 'elbow', 'curve']).optional(), bends: z.array(boardPointSchema).max(128).optional(), startArrow: z.enum(['none', 'arrow', 'dot']).optional(), endArrow: z.enum(['none', 'arrow', 'dot']).optional(), labelFontFamily: z.string().max(200).optional(), labelFontSize: z.number().min(8).max(128).optional(), labelPosition: z.number().min(0).max(1).optional() }),
+  z.object({ op: z.literal('diagram-edge'), boardId: creativeId, edgeId: creativeId, label: z.string().max(2000).optional(), routing: z.enum(['straight', 'elbow', 'curve']).optional(), bends: z.array(boardPointSchema).max(128).optional(), startArrow: z.enum(['none', 'arrow', 'dot']).optional(), endArrow: z.enum(['none', 'arrow', 'dot']).optional(), labelFontFamily: z.string().max(200).optional(), labelFontSize: z.number().min(8).max(128).optional(), labelPosition: z.number().min(0).max(1).optional(), labelColor: creativeColor.optional() }),
   z.object({ op: z.literal('diagram-layout'), boardId: creativeId, mode: z.enum(['layered', 'tree', 'radial']), selectedIds: z.array(creativeId).max(1000).optional() }),
   z.object({ op: z.literal('mind-map-insert'), boardId: creativeId, relativeId: creativeId, relation: z.enum(['child', 'sibling']), id: creativeId, label: z.string().max(2000) }),
   z.object({ op: z.literal('mind-map-state'), boardId: creativeId, elementId: creativeId, parentId: creativeId.nullable().optional(), collapsed: z.boolean().optional(), pinned: z.boolean().optional() }),
@@ -29,22 +33,33 @@ export function applyDiagramOperation(document: DesignDocument, input: DiagramOp
   if (!board) throw new Error('Unknown board');
   const editable = (id: string) => { const node = board.elements.find(e => e.id === id); if (!node) throw new Error('Unknown diagram element'); if (boardElementLocked(board, node)) throw new Error('Unlock the element before editing'); return node; };
   const add = (elements: Board['elements']) => { if (elements.some(e => board.elements.some(n => n.id === e.id))) throw new Error('Diagram identifier already exists'); board.elements.push(...elements); };
-  if (action.op === 'diagram-template') { const template = diagramTemplate(action.family, action.prefix);
+  if (action.op === 'diagram-style') {
+    const style = diagramStyleSchema.parse({ ...boardDiagramStyle(board), ...action.style });
+    const ids=action.elementIds ?? board.elements.filter(e=>e.diagram || e.type==='connector').map(e=>e.id);
+    for (const id of ids) { const node=editable(id); const merged=diagramStyleSchema.parse({ ...style, ...('stroke' in node ? node : {}), ...(node.diagram ?? {}), ...(node.type==='connector'?{fontFamily:node.labelFontFamily,fontSize:node.labelFontSize,textColor:node.labelColor??node.stroke}:{}), ...action.style }); board.elements[board.elements.indexOf(node)]=applyDiagramStyle(node,merged); }
+    if(action.setDefault) board.diagramDefaults=style;
+    if(action.savePreset) { board.diagramPresets=(board.diagramPresets ?? []).filter(p=>p.name!==action.savePreset); if(board.diagramPresets.length>=24) throw new Error('Keep up to 24 diagram presets'); board.diagramPresets.push({name:action.savePreset,style}); }
+  } else if (action.op === 'diagram-template') { const template = diagramTemplate(action.family, action.prefix);
+    template.elements=template.elements.map(e=>applyDiagramStyle(e,boardDiagramStyle(board)));
+    const arranged=layoutDiagram({...board,elements:template.elements,mindMap:template.mindMap},action.family==='mind-map'?'tree':'layered');
+    template.elements=arranged.elements;
+    if(!board.diagramDefaults) for(const [i,node] of template.elements.filter(e=>e.diagram).entries()) if('fill' in node){node.fill=['#e6efe9','#e9eef8','#f7ebdb','#f2e8f4'][i%4];node.stroke='#344a41';}
+    if(action.family==='mind-map' && !board.diagramDefaults){const root=template.elements.find(e=>e.id===`${action.prefix}_n0`)!;if(root.diagram){root.diagram.fontSize=32;sizeDiagramNode(root);}}
     // Place a new diagram below existing artwork so its ports are never buried under earlier nodes.
     const bottom = Math.max(0, ...board.elements.filter(e => e.type !== 'connector').map(e => e.y + e.height));
     if (board.elements.length) for (const element of template.elements) { element.y += bottom + 80; if (element.type === 'connector') { element.start.point.y += bottom + 80; element.end.point.y += bottom + 80; element.bends.forEach(p => { p.y += bottom + 80; }); } }
     add(template.elements); if (template.mindMap) board.mindMap = [...board.mindMap ?? [], ...template.mindMap]; }
-  else if (action.op === 'diagram-node') { add([diagramNode(action.id, action.family, action.role, action.label, action.x, action.y)]); if (action.family === 'mind-map') board.mindMap = [...board.mindMap ?? [], { elementId: action.id, collapsed: false, pinned: false }]; }
-  else if (action.op === 'diagram-connect') { editable(action.sourceId); editable(action.targetId); add([diagramEdge(action.id, action.sourceId, action.targetId, action.label)]); }
+  else if (action.op === 'diagram-node') { add([applyDiagramStyle(diagramNode(action.id, action.family, action.role, action.label, action.x, action.y),boardDiagramStyle(board))]); if (action.family === 'mind-map') board.mindMap = [...board.mindMap ?? [], { elementId: action.id, collapsed: false, pinned: false }]; }
+  else if (action.op === 'diagram-connect') { editable(action.sourceId); editable(action.targetId); add([applyDiagramStyle(diagramEdge(action.id, action.sourceId, action.targetId, action.label),boardDiagramStyle(board))]); }
   else if (action.op === 'diagram-layout') { const result = layoutDiagram(board, action.mode, action.selectedIds); board.elements = result.elements; }
-  else if (action.op === 'diagram-update') { const node = editable(action.elementId) as SemanticElement; if (!node.diagram) throw new Error('Select a semantic diagram node'); node.diagram = diagramNodeSchema.parse({ ...node.diagram, ...action.changes }); if (action.changes.label !== undefined) node.name = action.changes.label.slice(0, 200); }
+  else if (action.op === 'diagram-update') { const node = editable(action.elementId) as SemanticElement; if (!node.diagram) throw new Error('Select a semantic diagram node'); node.diagram = diagramNodeSchema.parse({ ...node.diagram, ...action.changes }); sizeDiagramNode(node); if (action.changes.label !== undefined) node.name = action.changes.label.slice(0, 200); }
   else if (action.op === 'mind-map-insert') {
     const relative = editable(action.relativeId), semantic = board.mindMap?.find(n => n.elementId === relative.id);
     if (!semantic) throw new Error('Select a mind-map topic');
     const parentId = action.relation === 'child' ? relative.id : semantic.parentId;
-    add([diagramNode(action.id, 'mind-map', 'topic', action.label, relative.x + (action.relation === 'child' ? 260 : 0), relative.y + 140)]);
+    add([applyDiagramStyle(diagramNode(action.id, 'mind-map', 'topic', action.label, relative.x + (action.relation === 'child' ? 300 : 0), relative.y + 140),boardDiagramStyle(board))]);
     board.mindMap!.push({ elementId: action.id, parentId, collapsed: false, pinned: false });
-    if (parentId) { editable(parentId); add([diagramEdge(`${action.id}_edge`, parentId, action.id)]); const parent = board.mindMap!.find(n => n.elementId === parentId)!; parent.collapsed = false; }
+    if (parentId) { editable(parentId); const edge=diagramEdge(`${action.id}_edge`, parentId, action.id);edge.routing='curve';edge.endArrow='none';add([applyDiagramStyle(edge,boardDiagramStyle(board))]); const parent = board.mindMap!.find(n => n.elementId === parentId)!; parent.collapsed = false; }
   } else if (action.op === 'mind-map-state') {
     editable(action.elementId); const node = board.mindMap?.find(n => n.elementId === action.elementId); if (!node) throw new Error('Select a mind-map topic');
     if (action.parentId !== undefined) {
@@ -53,7 +68,7 @@ export function applyDiagramOperation(document: DesignDocument, input: DiagramOp
       if (edge) editable(edge.id);
       board.elements = board.elements.filter(e => e !== edge);
       node.parentId = action.parentId ?? undefined;
-      if (node.parentId) add([diagramEdge(edge?.id ?? `${node.elementId}_parent`, node.parentId, node.elementId)]);
+      if (node.parentId) {const connection=diagramEdge(edge?.id ?? `${node.elementId}_parent`, node.parentId, node.elementId);connection.routing='curve';connection.endArrow='none';add([applyDiagramStyle(connection,boardDiagramStyle(board))]);}
     }
     if (action.collapsed !== undefined) node.collapsed = action.collapsed;
     if (action.pinned !== undefined) node.pinned = action.pinned;
