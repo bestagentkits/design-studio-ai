@@ -27,7 +27,7 @@ export async function api<T>(
     if (!path.startsWith('/api/observability/')) trackClientFailure(undefined, true);
     throw error;
   });
-  const data = (await response.json().catch(() => null)) as {
+  const data = (await response.json().catch(error => { if (options.signal?.aborted) throw error; return null; })) as {
     error?: { message?: string; code?: string };
   } | null;
   if (!response.ok) {
