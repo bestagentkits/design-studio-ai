@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { projectConnectionRoutes } from './project-connection-routes';
 import type { Env } from './types';
 import { connectionRoutes } from './connections';
 import { mcpAuthRoutes } from './connectors/mcp-auth-routes';
@@ -7,7 +8,7 @@ import { cleanupConnectorObjects } from './connector-object-cleanup';
 import { fail, owner } from './security';
 
 export const connectorRoutes = new Hono<Env>();
-for (const path of ['/connections', '/connections/*', '/connectors/*']) {
+for (const path of ['/connections', '/connections/*', '/connectors/*', '/projects/:id/connections', '/projects/:id/connections/*']) {
   connectorRoutes.use(path, async (c, next) => {
     const { env: bindings } = c;
     if (bindings.CONNECTORS_ENABLED !== 'true') fail(503, 'connector_unconfigured', 'Connector setup is not enabled on this server.');
@@ -20,4 +21,5 @@ for (const path of ['/connections', '/connections/*', '/connectors/*']) {
   });
 }
 connectorRoutes.route('/connections', connectionRoutes);
+connectorRoutes.route('/projects', projectConnectionRoutes);
 connectorRoutes.route('/connectors/mcp', mcpAuthRoutes);

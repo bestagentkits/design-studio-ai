@@ -116,3 +116,7 @@ Discover current `projects export --help` before choosing a format; older instal
 Publish when already authorized by the user's request, using `publish PROJECT_ID`. CLI `preview` and `share` (MCP `preview_project` and `share_project`) also create public frozen snapshots, including referenced assets; they are not private editor previews. Use local inspection when public exposure is outside the requested scope. `unpublish`, `unpreview`, and `unshare` each remove all public snapshots for that project. Public publishing permission does not imply permission to publish unrelated projects or reveal secrets.
 
 Report the project/artifact URL or output path, what was changed, verification performed, and any actual remaining configuration or format limitation. Do not claim provider generation, deployment, export fidelity, or publication without observed success.
+
+## External connector boundary
+
+When enabled by the operator, REST connection metadata and project bindings require explicit discovery grants for agents. Discover the exact endpoints and request schemas from `/api/openapi`; existing Studio access grants no connector authority. Credential setup, binding changes and grant management require the human session and are excluded from browser agent tools. Dedicated connector CLI/network MCP commands and chat tool execution are not yet available.

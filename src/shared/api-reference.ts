@@ -1,9 +1,14 @@
 import { connectionCreateSchema } from './connectors';
-import { mcpConnectionSetupSchema, mcpAuthorizationStartSchema } from './connector-management';
+import { mcpConnectionSetupSchema, mcpAuthorizationStartSchema, connectionBindingCreateSchema, connectionGrantCreateSchema, connectionBindingRemoveSchema } from './connector-management';
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 interface ApiEndpoint { method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'; path: string; summary: string; body: unknown; agentExposure: 'allowed' | 'human-only' | 'none' }
 export const apiEndpoints = [
+  { agentExposure: 'allowed', method: 'GET', path: '/api/projects/{id}/connections', summary: 'List project bindings; agents see only explicitly granted discovery selections', body: undefined },
+  { agentExposure: 'human-only', method: 'POST', path: '/api/projects/{id}/connections', summary: 'Bind a connected account and explicit selection to an owned project', body: { connectionId: '', role: 'tool', selection: { adapter: 'mcp', tools: [], resources: [] } } },
+  { agentExposure: 'human-only', method: 'DELETE', path: '/api/projects/{id}/connections/{bindingId}', summary: 'Remove a project binding, revoke grants and invalidate dependent work', body: { expectedPolicyRevision: 1 } },
+  { agentExposure: 'human-only', method: 'POST', path: '/api/projects/{id}/connections/{bindingId}/grants', summary: 'Grant an active agent explicit capabilities and selection with expiry', body: { recipient: { kind: 'webmcp' }, expectedPolicyRevision: 1, capabilities: ['discover'], selection: { adapter: 'mcp', tools: [], resources: [] }, expiresAt: '<ISO timestamp within 90 days>' } },
+  { agentExposure: 'human-only', method: 'DELETE', path: '/api/projects/{id}/connections/{bindingId}/grants/{grantId}', summary: 'Revoke an owned active project connection grant', body: undefined },
   { agentExposure: 'allowed', method: 'GET', path: '/api/connections', summary: 'List connection metadata; agents require projectId and explicit discovery grants; requires connectors enabled', body: undefined },
   { agentExposure: 'allowed', method: 'GET', path: '/api/connections/{connectionId}', summary: 'Read owned connection metadata; agents require projectId and explicit discovery grants', body: undefined },
   { agentExposure: 'human-only', method: 'POST', path: '/api/connections', summary: 'Create pending connection metadata using a signed-in session', body: { displayName: 'My MCP server', config: { adapter: 'mcp', endpoint: 'https://mcp.example.com/mcp', authMode: 'oauth' } } },
@@ -62,7 +67,7 @@ export const apiEndpoints = [
   { agentExposure: 'none', method: 'POST', path: '/api/observability/client-events', summary: 'Submit an allowlisted browser event without private content', body: { event: 'page_view', page: 'templates' } },
 ] as const satisfies readonly ApiEndpoint[];
 export function openApiDocument(schemas: Record<string, unknown>) {
-  schemas = { 'POST /api/connections': z.toJSONSchema(connectionCreateSchema), 'POST /api/connectors/mcp/connect': z.toJSONSchema(mcpConnectionSetupSchema), 'POST /api/connectors/mcp/authorize': z.toJSONSchema(mcpAuthorizationStartSchema), ...schemas };
+  schemas = { 'POST /api/projects/{id}/connections': z.toJSONSchema(connectionBindingCreateSchema), 'DELETE /api/projects/{id}/connections/{bindingId}': z.toJSONSchema(connectionBindingRemoveSchema), 'POST /api/projects/{id}/connections/{bindingId}/grants': z.toJSONSchema(connectionGrantCreateSchema), 'POST /api/connections': z.toJSONSchema(connectionCreateSchema), 'POST /api/connectors/mcp/connect': z.toJSONSchema(mcpConnectionSetupSchema), 'POST /api/connectors/mcp/authorize': z.toJSONSchema(mcpAuthorizationStartSchema), ...schemas };
   const paths: Record<string, Record<string, unknown>> = {};
   for (const endpoint of apiEndpoints) {
     const { method, path, summary, body } = endpoint;

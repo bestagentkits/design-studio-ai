@@ -21,3 +21,5 @@ export const mcpAuthorizationOptionsSchema = z.strictObject({ profile:z.enum(['m
 
 export const mcpConnectionSetupSchema = z.strictObject({ connectionId: connectorIdSchema, expectedRevision: connectorRevisionSchema, accessToken: z.string().min(1).max(16384).optional() });
 export const mcpAuthorizationStartSchema = z.strictObject({ connectionId: connectorIdSchema, expectedRevision: connectorRevisionSchema, options: mcpAuthorizationOptionsSchema });
+
+export const connectionBindingRemoveSchema = z.strictObject({ expectedPolicyRevision: connectorRevisionSchema });

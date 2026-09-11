@@ -113,3 +113,20 @@ test('concurrent disconnect has one winner and stale retries do not repeat polic
   await failure(await request('/alice-connection?projectId=alice-project','alice-api'),403,'missing_grant');
   const metadata=await (await request('/alice-connection')).json() as {connection:{status:string;revision:number}}; assert.equal(metadata.connection.status,'disconnected'); assert.equal(metadata.connection.revision,2);
 });
+
+
+test('project binding routes enforce project scope and human-only grant changes',async t=>{
+ const {env,grant}=await setup(t);
+ const request=(path:string,method='GET',body?:unknown,credential='alice-session')=>app.request(origin+'/api/projects/'+path,{method,headers:{Origin:origin,'Content-Type':'application/json',...(credential.endsWith('-session')?{Cookie:`studio_session=${credential}`}:{Authorization:`Bearer ${credential}`})},...(body===undefined?{}:{body:JSON.stringify(body)})},env);
+ assert.deepEqual(await(await request('alice-project/connections','GET',undefined,'alice-api')).json(),{connections:[]});
+ await grant('api');assert.equal((await(await request('alice-project/connections','GET',undefined,'alice-api')).json() as any).connections.length,1);
+ const body={connectionId:'alice-connection',role:'tool',selection:{adapter:'mcp',tools:['read'],resources:[]}};
+ await failure(await request('alice-project/connections','POST',body,'alice-api'),403,'human_action_required');
+ assert.equal((await request('alice-project/connections','POST',body)).status,201);
+ await failure(await request('bob-project/connections/alice-binding','DELETE',{expectedPolicyRevision:1}),404,'binding_not_found');
+ await failure(await request('alice-project/connections/alice-binding/grants','POST',{},'alice-api'),403,'human_action_required');
+ const assigned=await request('alice-project/connections/alice-binding/grants','POST',{recipient:{kind:'webmcp'},expectedPolicyRevision:1,capabilities:['discover'],selection:body.selection,expiresAt:new Date(Date.now()+3600000).toISOString()});
+ assert.equal(assigned.status,201);const access=await assigned.json() as any;
+ assert.equal((await request(`alice-project/connections/alice-binding/grants/${access.grant.id}`,'DELETE')).status,200);
+ assert.equal((await request('alice-project/connections/alice-binding','DELETE',{expectedPolicyRevision:1})).status,200);
+});
