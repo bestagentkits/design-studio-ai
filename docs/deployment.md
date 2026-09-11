@@ -100,7 +100,7 @@ Operator reference: [GitHub's web application OAuth flow](https://docs.github.co
 
 [Providers](providers.md) require per-user BYOK keys and model access. Custom compatible origins require the operator's `PROVIDER_ALLOWED_ORIGINS` HTTPS allowlist. There is no general-purpose URL-fetch proxy. Connector transport primitives use DNS-pinned public HTTPS on Node and native public-only fetch on Cloudflare; keep `global_fetch_strictly_public` enabled in the Workers configuration. Do not replace that transport with a service or private-network binding. Connector management and execution are still under implementation.
 
-Google browser authorization needs `GOOGLE_CLIENT_ID`, a Google OAuth web client with the application origin authorized, and the Slides API enabled. The user grants the presentations scope; access tokens are transient. API/CLI clients may supply an independently obtained short-lived token. Native Slides export currently rejects unsupported complex nodes and private image URLs.
+Google browser authorization needs `GOOGLE_CLIENT_ID`, a Google OAuth web client with the application origin authorized, and the Slides API enabled. The user grants the presentations scope; access tokens are transient. API/CLI clients may supply an independently obtained short-lived token. Native Slides export currently rejects unsupported complex nodes (including web UI components) and private image URLs.
 
 ### Google Fonts catalog
 

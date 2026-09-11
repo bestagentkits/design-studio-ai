@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { resolveLayout } from '../src/shared/layout';
 import { fail } from "./security";
 import type { DesignDocument } from "../src/shared/schema";
 import { resolveColor, resolveFont } from '../src/shared/render';
@@ -16,7 +17,7 @@ function color(value: unknown) {
 
 /** Validate representability before creating any remote presentation. */
 export function googleSlidesRequests(doc:DesignDocument){
-  for (const page of doc.pages)
+  for (const page of doc.pages.map(resolveLayout))
     for (const node of page.nodes) {
       if (node.visible === false) continue;
       if (node.type === "image" && node.src && !node.src.startsWith("https://"))
@@ -25,7 +26,7 @@ export function googleSlidesRequests(doc:DesignDocument){
           "private_google_image",
           "Google Slides needs publicly reachable HTTPS image URLs. Choose PDF or PPTX to keep private images private.",
         );
-      if (["chart", "model3d", "video", "audio", "icon"].includes(node.type))
+      if (["chart", "model3d", "video", "audio", "icon", "component"].includes(node.type))
         fail(
           400,
           "unsupported_google_node",
@@ -34,7 +35,7 @@ export function googleSlidesRequests(doc:DesignDocument){
     }
   const requests: unknown[] = [];
   for (let p = 0; p < doc.pages.length; p++) {
-    const page = doc.pages[p];
+    const page = resolveLayout(doc.pages[p]);
     const slideId = `studio_page_${p}`;
     requests.push({
       createSlide: {

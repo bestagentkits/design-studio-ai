@@ -1,5 +1,13 @@
 # Live acceptance — 2026-09-11
 
+## Native Slides and Docs follow-up — 2026-09-11
+
+Native export is now verified for a supported three-page slide design: project `56532c84-060d-44f2-918d-e82688eda4f8`, operation `6395f55b-55bc-41d5-887e-112b518fe9c2`, presentation `1hDUuRo2h7zOvX8pU5OMSOMZQz6nnO6q0U0D-80Vt0jo`. Actual Google Slides editor shows exactly three populated slides with the expected template headings, text and shapes. This followed two additional live findings: Google adds a default slide on creation, and the converter previously ignored layout and silently represented web components as empty shapes. Creation now requests only `presentationId,slides(objectId)` and removes those just-created default slides in the population batch. Conversion resolves the shared layout on a clone and rejects unsupported web components before any remote creation. Legacy and connection-backed export share these behaviors. Existing web acceptance files created before this repair are diagnostic artifacts, not export-fidelity evidence.
+
+Google Docs source `11P8TeO0_5Q6ILlhUkiqYcT5sIafNlRU3XFd0vAdDsNU` was explicitly selected through Picker and imported as snapshot `6e0ef600-08c5-47ae-b47b-8ed2dee6dccc`. Its actual stored 178 bytes match SHA-256 `5984aa24c4f8362201f54940e998fce84bc3b4ed6c7b143499675f62882c1324`; the authored Vietnamese sentence survives UTF-8 extraction. A new empty document was initially opened by Google's default personal account before the intended work account was explicitly selected; that empty document is `1qRL1aABboAIje01vJdVfnrbK4Vg1Hv64hszMsURFaII`. It is not source evidence and no content was entered there.
+
+All 369 unit/integration tests pass after the layout/component repair; typecheck and application/docs build pass. Additional focused tests cover layout coordinates without mutating the saved design, oversized creation metadata, default-slide deletion, and rejection of unsupported components. Original uncertain operations remain unchanged; no blind replay or manual success marking was used. Remaining live gates still include provider/model and external OAuth/write MCP credentials, second Google account isolation, disconnect/revoke, image/text source coverage and independent remote-download byte comparison.
+
 ## Slides response diagnosis — 2026-09-11 10:15 UTC
 
 A separately named diagnostic presentation reproduced the failure with sanitized server diagnostics: `native_connector_response_rejected`, origin slides.googleapis.com, reason `provider_response_too_large`; the operation then reported `invalid_provider_response` without a recorded ID. The initial execute telemetry took 2,955 ms wall / 57 ms CPU, so the earlier timeout hypothesis was not supported.
