@@ -71,6 +71,8 @@ For simultaneous human/agent edits, retain the document and revision you actuall
 
 The shared operation schema includes grouping/reparenting, structured page/node layout, track replacement/removal and keyframe upsert/removal. Component props, mesh/UV data, material settings, bones and weights use the same document validator as the browser. Discover exact fields from `/api/schema` or `dsa schema`; do not invent a separate scene format.
 
+Browser registration uses compact input envelopes for operation batches and full-document writes so expanded nested schemas do not exhaust host registration limits. Call `studio_capabilities` before composing those payloads; it returns the canonical schemas. Local operations and server writes still run the complete shared validators. Tool names, revision checks, and credential boundaries are unchanged.
+
 WebMCP adds `studio_capabilities` and `studio_apply_operations` for the open document, plus documented project API operations registered by [browser-design-tools.ts](../src/app/browser-design-tools.ts). API tools accept query parameters; the asset-upload tool converts `{name,mimeType,base64}` into the same multipart file route used by the browser. Credential-management operations remain outside browser tools. Local operations appear immediately and autosave when Live is enabled. Server API tools operate on saved state. Browser support remains feature-detected. The REST documentation includes a real request playground and `/api/openapi`; keys are held only in page memory, and executing a mutation affects the actual selected project.
 
 ## Reusable design systems
