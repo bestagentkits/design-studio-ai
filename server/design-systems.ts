@@ -1,8 +1,9 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import { applyDesignSystem, designSystemSchema, insertSystemItem, systemApplySchema, systemUpdateSchema, type DesignSystem } from '../src/shared/design-systems';
+import { compileFolderPackage, folderImportSchema } from '../src/shared/design-system-folder';
 import { projectRow, saveDocument } from './projects';
-import { fail, id, now, owner } from './security';
+import { ApiError, fail, id, now, owner } from './security';
 import type { Env } from './types';
 const database = (context: Context<Env>) => { const { env: bindings } = context; return bindings.DB; };
 export const designSystemRoutes = new Hono<Env>();
@@ -22,6 +23,25 @@ designSystemRoutes.post('/', async c => {
     database(c).prepare('INSERT INTO design_system_versions(system_id,version,definition,created_at) VALUES(?,1,?,?)').bind(systemId, JSON.stringify(definition), createdAt),
   ]);
   return c.json({ system: { id: systemId, version: 1, definition, createdAt } }, 201);
+});
+designSystemRoutes.post('/import', async c => {
+  const body = folderImportSchema.parse(await c.req.json());
+  let definition; let warnings: string[] = [];
+  try {
+    const result = compileFolderPackage({ manifest: body.manifest, designMd: body.designMd, tokensCss: body.tokensCss });
+    const errors = result.findings.filter(f => f.level === 'error');
+    if (errors.length) fail(422, 'invalid_folder', errors.map(e => e.message).join(' '));
+    definition = result.definition; warnings = result.warnings;
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    fail(422, 'invalid_folder', error instanceof Error ? error.message : 'Folder did not compile.');
+  }
+  const systemId = id(), createdAt = now();
+  await database(c).batch([
+    database(c).prepare('INSERT INTO design_systems(id,user_id,created_at) VALUES(?,?,?)').bind(systemId, owner(c), createdAt),
+    database(c).prepare('INSERT INTO design_system_versions(system_id,version,definition,created_at) VALUES(?,1,?,?)').bind(systemId, JSON.stringify(definition), createdAt),
+  ]);
+  return c.json({ system: { id: systemId, version: 1, definition, createdAt }, warnings }, 201);
 });
 designSystemRoutes.get('/:id/versions', async c => {
   await readDesignSystem(c, c.req.param('id'));

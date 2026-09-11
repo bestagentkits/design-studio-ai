@@ -19,6 +19,7 @@ import { collaborationRoutes } from './collaboration';
 import { designSystemRoutes } from './design-systems';
 import { discoveryRoutes } from './discovery';
 import { designSystemSchema, systemApplySchema, systemUpdateSchema } from '../src/shared/design-systems';
+import { folderImportSchema } from '../src/shared/design-system-folder';
 import { Hono } from "hono";
 import { getCookie, deleteCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
@@ -51,6 +52,7 @@ import { githubRoutes, githubEnabled } from './github-login';
 import { documentSchema } from '../src/shared/schema';
 import { operationsSchema } from '../src/shared/operations';
 import { themes, templates, blocks } from '../src/shared/catalog';
+import { promptTemplates } from '../src/shared/prompt-templates';
 import { briefRoutes } from './briefs';
 import { interviewSchema, scopeSchema } from '../src/shared/brief';
 import { inspectDesign } from '../src/shared/design-checks';
@@ -154,12 +156,12 @@ app.onError((error, c) => {
     500,
   );
 });
-app.get('/api/openapi', c => c.json(openApiDocument({'POST /api/projects/{id}/operations':z.toJSONSchema(operationJobSchema),'POST /api/projects/{id}/scene':z.toJSONSchema(sceneRequestSchema),'POST /api/projects/{id}/paint':z.toJSONSchema(paintingCommandSchema),'PUT /api/projects/{id}/document':z.toJSONSchema(documentWriteSchema),'POST /api/projects/{id}/export':z.toJSONSchema(exportOptionsSchema), 'PUT /api/providers/{provider}': z.toJSONSchema(providerSettingsSchema), 'POST /api/projects/{id}/media': z.toJSONSchema(mediaInputSchema), 'POST /api/projects/{id}/generate': z.toJSONSchema(generationInputSchema), 'POST /api/projects/{id}/brief/interview': z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
+app.get('/api/openapi', c => c.json(openApiDocument({'POST /api/projects/{id}/operations':z.toJSONSchema(operationJobSchema),'POST /api/projects/{id}/scene':z.toJSONSchema(sceneRequestSchema),'POST /api/projects/{id}/paint':z.toJSONSchema(paintingCommandSchema),'PUT /api/projects/{id}/document':z.toJSONSchema(documentWriteSchema),'POST /api/projects/{id}/export':z.toJSONSchema(exportOptionsSchema), 'PUT /api/providers/{provider}': z.toJSONSchema(providerSettingsSchema), 'POST /api/projects/{id}/media': z.toJSONSchema(mediaInputSchema), 'POST /api/projects/{id}/generate': z.toJSONSchema(generationInputSchema), 'POST /api/projects/{id}/brief/interview': z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'POST /api/design-systems/import': z.toJSONSchema(folderImportSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "design-studio-ai" }),
 );
 app.get('/api/schema', c => c.json({ operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], paintingCommand:z.toJSONSchema(paintingCommandSchema), documentSave:z.toJSONSchema(documentWriteSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
-app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
+app.get('/api/catalog', c => c.json({ themes, templates, blocks, prompts: promptTemplates }));
 app.get("/api/config", (c) =>
   c.json({
     googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,

@@ -2,12 +2,14 @@ import { providerIdSchema } from '../src/shared/providers';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { designSystemSchema, systemApplySchema, systemUpdateSchema } from '../src/shared/design-systems';
+import { folderManifestSchema } from '../src/shared/design-system-folder';
 export function registerDesignSystemTools(server: McpServer, call: (method: string, path: string, body?: unknown) => Promise<any>) {
   const path = (id: string) => `/api/design-systems/${encodeURIComponent(id)}`;
   server.registerTool('list_design_systems', { description: 'List owner-scoped reusable design systems.', inputSchema: {}, annotations: { readOnlyHint: true } }, () => call('GET', '/api/design-systems'));
   server.registerTool('get_design_system', { description: 'Read the latest or a pinned immutable version.', inputSchema: { id: z.string(), version: z.number().int().positive().optional() }, annotations: { readOnlyHint: true } }, ({ id, version }) => call('GET', path(id) + (version ? `?version=${version}` : '')));
   server.registerTool('list_design_system_versions', { description: 'Discover immutable versions before editing or applying.', inputSchema: { id: z.string() }, annotations: { readOnlyHint: true } }, ({ id }) => call('GET', path(id) + '/versions'));
   server.registerTool('create_design_system', { description: 'Create tokens, component variants and reusable compositions using the shared schema.', inputSchema: { definition: designSystemSchema } }, ({ definition }) => call('POST', '/api/design-systems', definition));
+  server.registerTool('import_design_system_folder', { description: 'Compile a portable DESIGN.md + tokens.css + manifest folder into a new immutable design system version. Missing required tokens or prose/token mismatches fail with actionable errors.', inputSchema: { manifest: folderManifestSchema, designMd: z.string(), tokensCss: z.string() } }, body => call('POST', '/api/design-systems/import', body));
   server.registerTool('update_design_system', { description: 'Append a version; expectedVersion must be the latest version actually read. Conflicts require reconciliation.', inputSchema: { id: z.string(), ...systemUpdateSchema.shape } }, ({ id, ...body }) => call('PUT', path(id), body));
   server.registerTool('apply_design_system', { description: 'Apply a saved system version to an owned project at its observed revision. Existing content overrides are retained.', inputSchema: { id: z.string(), ...systemApplySchema.shape } }, ({ id, ...body }) => call('POST', path(id) + '/apply', body));
   server.registerTool('insert_design_system_item', { description: 'Insert a library component or composition, preserving hierarchy and remapping IDs.', inputSchema: { id: z.string(), ...systemApplySchema.shape, pageId: z.string(), itemId: z.string() } }, ({ id, ...body }) => call('POST', path(id) + '/insert', body));

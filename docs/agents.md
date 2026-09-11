@@ -12,6 +12,8 @@ Set `DESIGN_STUDIO_URL=https://studio.agentkit.best` and inject `DESIGN_STUDIO_A
 
 Install the [companion skill](../skills/design-studio-ai/SKILL.md) by copying its directory into the installed skills directory of your agent runtime. The repository layout is also suitable for a skill installer that accepts a repository and skill path. Copy the complete directory, including `references/`. The skill routes each design kind to composition and review guidance, alongside brief capture, catalog discovery, targeted edits, and authorized exports/publishing. Start with its [shared layout and quality reference](../skills/design-studio-ai/references/layout-and-quality.md); the [skill index](../skills/design-studio-ai/SKILL.md#choose-the-design-kind-guidance) links the kind-specific references.
 
+Connect a coding agent directly to the network MCP server with `dsa mcp install <agent>`; it prints the server config snippet by default and only touches the agent's config file when `--write` is passed (with a `.bak` backup and no-clobber merge).
+
 ## CLI command surface
 
 This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and [library commands](../packages/cli/src/design-system-commands.ts). The linked release can lag these capabilities; inspect installed command help and build from source when a needed command is absent.
@@ -32,9 +34,11 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `assets list/upload/download` | Authenticated asset storage; node placement is a separate document edit |
 | `generate` | Real provider document proposal; no implicit save |
 | `fonts --query`, `providers models PROVIDER --query` | Search catalog metadata with explicit live/cache/fallback provenance |
-| `design-systems schema/list/get/versions/create/update/apply/insert/remove` | Shared reusable libraries, immutable versions and conflict-checked project writes |
+| `design-systems schema/list/get/versions/create/update/apply/insert/remove/import/export` | Shared reusable libraries, immutable versions and conflict-checked project writes; `import`/`export` round-trip portable `DESIGN.md` + `tokens.css` + `manifest.json` folders |
 | `providers list/set/remove` | Masked configuration; provider secret from environment/stdin |
 | `tokens list/create/revoke` | Token metadata and lifecycle; new token returned once |
+| `mcp install AGENT` | Generate the network MCP server config for `claude`/`codex`/`cursor`/`opencode`. Prints by default; `--write` persists into the agent config with a `.bak` backup and a merge that never clobbers an existing entry |
+| `motion-template list/instantiate` | Compile a validated motion primitive (`reveal`/`stagger`/`kinetic-type`/`chart-race`) into timeline keyframes and a video document |
 | `publish`, `unpublish`, `preview`, `unpreview`, `share`, `unshare` | Public immutable snapshot creation and removal; preview/share are naming-specific aliases for the same public snapshot contract, and each removal alias removes all public snapshots |
 | `media generate/status` | OpenAI image/edit/speech; fal image, video/edit, music/effects, and source-audio jobs |
 | `google-slides` | Server export using a short-lived Google OAuth token |
@@ -81,6 +85,8 @@ WebMCP adds `studio_capabilities` and `studio_apply_operations` for the open doc
 Discover definitions with `dsa design-systems schema`. Create/update accepts `--file`; update requires `--system-version` with the version actually read. Pinned get/apply/insert also accept `--system-version`. Apply/insert require `--revision` for the target project; insert additionally needs `--page` and `--item`. A stale library or project returns a conflict. Do not replace the observed version with a later one without reconciling the user's changes.
 
 Network MCP exposes the same library operations through [design-system-tools.ts](../server/design-system-tools.ts). Projects embed applied tokens/components and pin the saved version. Library definitions support reusable page compositions with remapped IDs. Private project assets must be embedded or replaced with portable references before library capture. Deleting a library leaves embedded project designs intact.
+
+A design system can also be authored as a portable folder — `manifest.json` (id/name/description/system/source), `DESIGN.md` (agent-facing prose) and `tokens.css` (compiled custom properties) — and imported with `dsa design-systems import --folder <dir>` or MCP `import_design_system_folder`. `dsa design-systems export <id> --folder <dir>` reverses it. The compiler maps `--bg/--fg/--accent/--surface/--border/--muted` and `--font-display/--font-body/--space-N/--radius` into the versioned theme, and a guard rejects missing required tokens or prose/token mismatches. The folder is an ingest surface; the versioned JSON remains the runtime authority.
 
 ## Capability boundaries
 

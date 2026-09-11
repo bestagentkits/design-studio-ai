@@ -17,7 +17,7 @@ Persist answers rather than guessing them. Propose a scope with objective, audie
 
 ## Connect and inspect
 
-Use `dsa --help` and `dsa health`. Authentication comes from `DESIGN_STUDIO_API_KEY`; server selection comes from `DESIGN_STUDIO_URL`. The CLI persists neither secret. If unavailable, install the source package's generated tarball using the repository's package instructions; do not assume an unpublished npm version exists. An authenticated MCP connection at `/mcp` can perform the same project workflows; discover its actual tool schemas first.
+Use `dsa --help` and `dsa health`. Authentication comes from `DESIGN_STUDIO_API_KEY`; server selection comes from `DESIGN_STUDIO_URL`. The CLI persists neither secret. If unavailable, install the source package's generated tarball using the repository's package instructions; do not assume an unpublished npm version exists. An authenticated MCP connection at `/mcp` can perform the same project workflows; discover its actual tool schemas first. To wire a coding agent in one step, use `dsa mcp install <agent>` (claude/codex/cursor/opencode): it prints the server config snippet by default, and `--write` persists it into the agent config with a `.bak` backup and a merge that never clobbers an existing entry.
 
 Run `dsa catalog`, or narrower `themes list`, `templates list --kind slides`, and `blocks list`. Inspect relevant entries before choosing them. Use `dsa schema` for the document and `dsa schema --operations` for targeted edits. Schemas are generated from the actual shared validators; the server additionally checks IDs, parent relationships, timeline references, and ownership.
 
@@ -64,6 +64,8 @@ dsa projects document patch PROJECT_ID --revision OBSERVED_REVISION --file opera
 
 `update-node` merges style properties. Supported operations also add/remove nodes/pages, insert catalog blocks, rename a document, set a full theme, and set timeline data. Removing a parent removes descendants; removal also cleans affected timeline tracks. The operation schema is the authority for payload shapes.
 
+Live-artifact nodes carry a `data.live` manifest (`renderer` + scalar `params`); they re-render in place, their params edit through `update-node`, and the write-time validator rejects a malformed `data.live`. The `live-kpi` block is a discoverable starting point.
+
 A 409 conflict means someone changed the project. Read the new revision, compare the intended edits, and reapply only what still makes sense. Do not blindly raise `--revision`, repeatedly overwrite the whole document, or hide the conflict.
 
 For concurrent human/agent work, retain the exact document and revision you read as the merge base. Use `projects document changes` / MCP `get_design_changes` to observe saved updates. `projects document merge` / MCP `merge_design` reconciles your edited document with that original base; inspect live help/schema for its payload. Resolve reported overlapping changes explicitly. Never modify the base or invent its revision to force a merge.
@@ -79,7 +81,9 @@ Inspect the proposal before the second command. Preserve useful work unless the 
 
 ## Reuse libraries and discover resources
 
-Inspect `design-systems list`, the selected library, and `design-systems schema` before applying or inserting reusable tokens, components, or page compositions. Read the immutable library version and target project revision; use those observed values for updates and project writes. Reconcile a stale library or project instead of substituting newer version numbers. Capture only portable media in a library; private project asset references cannot be reused across projects. Discover equivalent network tools through `tools/list`.
+Inspect `design-systems list`, the selected library, and `design-systems schema` before applying or inserting reusable tokens, components, or page compositions. Read the immutable library version and target project revision; use those observed values for updates and project writes. Reconcile a stale library or project instead of substituting newer version numbers. Capture only portable media in a library; private project asset references cannot be reused across projects. A library can also be authored as a portable `DESIGN.md` + `tokens.css` + `manifest.json` folder and compiled with `dsa design-systems import --folder DIR` or MCP `import_design_system_folder` (`dsa design-systems export` reverses it); the compiled versioned JSON remains the runtime authority. Discover equivalent network tools through `tools/list`.
+
+Reuse `dsa prompts list` (or MCP `list_prompt_templates` / `get_prompt_template`) to find ready generation prompts with a target provider, model, and aspect ratio; selecting one fills the media composer. Prompt entries are data, not code, and attribution must be preserved when cited.
 
 Use `fonts --query` and `providers models PROVIDER --query` to discover names and model IDs. Respect live/cache/fallback provenance: a suggestion does not prove model capability, credentials, quota, or successful generation. Model discovery needs account/API-key access rather than MCP OAuth. Choose actual schema-defined layout, component, mesh and timeline fields; do not invent a second design format.
 
@@ -130,6 +134,8 @@ Elements artwork records provenance; imported SVG is safely flattened to PNG and
 ## Native 2D character motion
 
 Discover live v2 document and operation schemas. Use `dsa motion PROJECT_ID` or MCP `inspect_motion` to inspect IDs, then named character operations for focused edits. Keep setup poses separate from clip keys. Attachments reference asset IDs; import remote artwork before portable export. Skins reuse rig/clips; placements and controls belong to each node instance.
+
+For simple timeline motion, `dsa motion-template list` and `dsa motion-template instantiate reveal|stagger|kinetic-type|chart-race` compile validated primitives into timeline keyframes and a video document; export with `projects export --format mp4`.
 
 `generate --mode motion` returns validated operations, a preview document and baseRevision/baseBriefRevision. Apply only after explicit review, preserving both revisions via document PUT expectedRevision/expectedBriefRevision. On conflict, re-read and reconcile; never retry with a guessed revision. `motion`, `png-sequence` and `spritesheet` exports are ZIPs; frame ranges use --start/--end/--fps and exclude the end frame. Native Studio packages do not imply Spine or game-engine format support. See the live /docs/motion guide.
 

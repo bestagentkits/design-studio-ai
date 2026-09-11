@@ -93,6 +93,7 @@ import {
   type Project,
 } from "../shared/schema";
 import { blocks, createBlock } from "../shared/catalog";
+import { promptTemplates } from "../shared/prompt-templates";
 import { interpolateNode, renderSvg } from "../shared/render";
 import {
   api,
@@ -1931,6 +1932,30 @@ export function Editor({
                   </select>
                 </Field>
                 {mediaSettings()}
+                <Field label="Reuse a prompt">
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const prompt = promptTemplates.find((p) => p.id === e.target.value);
+                      if (!prompt) return;
+                      const kind = prompt.kind === "motion" ? "video" : "image";
+                      setMediaKind(kind);
+                      setMediaDuration(5);
+                      setMediaProvider(prompt.kind === "motion" ? "fal" : prompt.provider);
+                      setMediaModel(prompt.model);
+                      setSourceAsset("");
+                      setMediaPrompt(`${prompt.prompt}\n\nAspect ratio: ${prompt.aspectRatio}`);
+                      e.target.value = "";
+                    }}
+                  >
+                    <option value="">Choose a template…</option>
+                    {promptTemplates.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.kind === "motion" ? "Motion" : "Image"} · {p.title}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
                 <Field
                   label={
                     mediaKind === "audio" && mediaProvider === "openai"

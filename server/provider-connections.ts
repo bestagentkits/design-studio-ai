@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import type { Env } from './types';
 import { decrypt, encrypt, fail, owner } from './security';
+import { isBlockedHostname } from './ssrf';
 import { authHeaderSchema, authMethodSchema, isCustomProvider, protocolSchema, providerDefaults, providerIdSchema, providerSettingsSchema, type AuthMethod, type ProviderProtocol } from '../src/shared/providers';
 
 interface ProviderRow {
@@ -20,6 +21,7 @@ export function allowedProviderBase(provider: string, base: string, allowlist = 
   if (!defaults && !isCustomProvider(provider)) fail(400, 'unsupported_provider', 'Unknown provider.');
   let url: URL;
   try { url = new URL(base); } catch { fail(400, 'invalid_provider_url', 'Enter a valid HTTPS base URL.'); }
+  if (isBlockedHostname(url.hostname)) fail(400, 'invalid_provider_url', 'Provider URL must not point at a loopback, private, link-local, CGNAT or reserved address.');
   const allowed = [defaults ? new URL(defaults.baseUrl).origin : '', ...allowlist.split(',').map(value => value.trim()).filter(Boolean)];
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || !allowed.includes(url.origin)) {
     fail(400, 'invalid_provider_url', 'Provider base URL must use an operator-allowlisted HTTPS origin. Ask the administrator to add its origin to PROVIDER_ALLOWED_ORIGINS.');

@@ -1,4 +1,5 @@
 import { isTextProvider } from '../shared/providers';
+import { promptTemplates } from '../shared/prompt-templates';
 import { useEffect, useRef, useState } from "react";
 import { ModelPicker } from './model-picker';
 import {
@@ -451,6 +452,24 @@ export function DesignBriefWorkspace({
               <summary>
                 Edit original request <ChevronDown size={14} />
               </summary>
+              <Field label="Reuse a prompt">
+                <select
+                  defaultValue=""
+                  disabled={!!busy}
+                  onChange={(e) => {
+                    const prompt = promptTemplates.find((p) => p.id === e.target.value);
+                    if (prompt) setRequest(prompt.prompt);
+                    e.target.value = "";
+                  }}
+                >
+                  <option value="">Reuse a prompt template…</option>
+                  {promptTemplates.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.kind === "motion" ? "Motion" : "Image"} · {p.title}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Original request">
                 <textarea
                   value={request}

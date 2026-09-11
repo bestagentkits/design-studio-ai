@@ -14,6 +14,7 @@ import type { Context, Hono } from "hono";
 import type { Env } from "./types";
 import { documentSchema, kinds } from "../src/shared/schema";
 import { themes, templates, blocks } from "../src/shared/catalog";
+import { promptTemplates } from "../src/shared/prompt-templates";
 import { mutateDocument, operationsSchema } from "../src/shared/operations";
 import { renderHtml, renderSvg } from "../src/shared/render";
 import { fail, origin, owner, unb64 } from "./security";
@@ -277,6 +278,28 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       annotations: { readOnlyHint: true },
     },
     async () => result({ components: blocks }),
+  );
+  server.registerTool(
+    "list_prompt_templates",
+    {
+      description: "List reusable generation prompts (image and motion) with provider, model, aspect ratio and attribution.",
+      inputSchema: { kind: z.enum(['image', 'motion']).optional() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ kind }) => result({ prompts: kind ? promptTemplates.filter(p => p.kind === kind) : promptTemplates }),
+  );
+  server.registerTool(
+    "get_prompt_template",
+    {
+      description: "Read one reusable generation prompt by id.",
+      inputSchema: { id: z.string() },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ id }) => {
+      const prompt = promptTemplates.find(p => p.id === id);
+      if (!prompt) return { isError: true, ...result({ error: { message: "Unknown prompt template" } }) };
+      return result({ prompt });
+    },
   );
   server.registerTool(
     "apply_theme",
