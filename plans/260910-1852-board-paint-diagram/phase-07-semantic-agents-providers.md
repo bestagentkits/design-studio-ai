@@ -1,8 +1,10 @@
 # Phase 07 — Semantic agent workflows and provider preservation
 
-Status: pending. Priority: P1. Provisional effort: 4–6 engineering days.
+Status: in progress. Priority: P1. Provisional effort: 4–6 engineering days.
 Dependencies: Phases 04–06 already deliver minimum shared operation/API/MCP/CLI/WebMCP parity.
 Context: [architecture](architecture.md), [acceptance](acceptance-matrix.md), [source map](reports/intake-and-source-map.md), [plan](plan.md). Architecture and acceptance override research alternatives.
+
+Current delivery update: Shared board/diagram/layer operations and the real raster paintingCommand endpoint are wired through REST, MCP paint_document, CLI projects paint and generated WebMCP. See [current agent contract](../../../docs/agents.md); broad parity tests and provider-preservation acceptance remain in progress.
 
 ## Requirements and design
 
@@ -44,14 +46,16 @@ No deletions planned. Shared owners are serial integration points; another phase
 
 ## Implementation TODO
 
-- [ ] Build bounded structured inspection of elements, bindings, paintings/layers, generation and budgets; return IDs and source revision without dumping all pixel bytes.
-- [ ] Add thin semantic helpers for insert/bind/layout/layer/stroke/fill/inspect using previously delivered validators/services, with identical typed errors and recovery steps across REST/MCP/CLI/WebMCP.
-- [ ] Advertise document versions, supported operations, editable/raster/rejected format behavior and feature-dependent capabilities from executable owners; update CLI schema/help and MCP resources without duplicating schemas.
+Reconciled 2026-09-11 against [current source and local evidence](reports/implementation-checklist-reconciliation.md). Checked rows record implemented behavior, not full device, cross-surface, format or release acceptance. Unchecked compound rows retain their unverified requirements.
+
+- [x] Build bounded structured inspection of elements, bindings, paintings/layers, generation and budgets; return IDs and source revision without dumping all pixel bytes.
+- [x] Add thin semantic helpers for insert/bind/layout/layer/stroke/fill/inspect using previously delivered validators/services, with identical typed errors and recovery steps across REST/MCP/CLI/WebMCP.
+- [x] Advertise document versions, supported operations, editable/raster/rejected format behavior and feature-dependent capabilities from executable owners; update CLI schema/help and MCP resources without duplicating schemas.
 - [ ] Update hardcoded v1 provider vocabulary and prompts; supplied context/proposals must preserve boards, paint manifests, unsupported unrelated nodes, IDs and owned assets. Reject malformed/oversized/downgrade proposals rather than stripping fields.
 - [ ] Preserve separate approved brief revision across provider calls; late response cannot overwrite newer scope/document. Applying a proposal checks current project revision and locks through normal writes.
 - [ ] Exercise a real local account/project via each surface: agent lays out four families, inserts owned GIF/emoji/sticker, performs real paint mixing/layer edits and sees equivalent persisted state in UI.
-- [ ] Explain local WebMCP draft operations versus saved-state REST tools, feature detection/cleanup and ordinary-browser fallback. Conflict recovery rereads/inspects and requires intentional replay, never guesses higher revisions.
-- [ ] Add discoverable agent skill workflows and provider limits. Record credential-dependent live generation separately; missing-config/error checks do not establish provider success.
+- [x] Explain local WebMCP draft operations versus saved-state REST tools, feature detection/cleanup and ordinary-browser fallback. Conflict recovery rereads/inspects and requires intentional replay, never guesses higher revisions.
+- [x] Add discoverable agent skill workflows and provider limits. Record credential-dependent live generation separately; missing-config/error checks do not establish provider success.
 
 ## Slice parity and documentation
 
@@ -70,11 +74,11 @@ Before this slice is complete, expose its validated operations and capability/er
 
 Update public content sources, then run `npm run build` to regenerate documentation/llms output. Never hand-edit generated `dist/` or renderer/viewer bundles. Unsupported actions must report a precise capability/version error rather than silently flatten or ignore content.
 
-## Future validation — not run
+## Validation coverage and remaining acceptance
 
 Extend existing parity/CLI/provider tests and add full creative workflow tests through real local persistence/shared services. Cover malicious IDs/foreign assets, OAuth read/write scope, locked targets, stale revisions, failed generation, late brief changes and preservation of untouched v2 content.
 
-Future commands: `node scripts/build-renderer.mjs`; `npm run build:cli`; `npx tsx --test tests/creative-agent-workflows.test.ts tests/agent-capability-parity.test.ts tests/cli.test.ts tests/provider-capabilities.test.ts tests/briefs.test.ts`; `npm run typecheck`; `npm test`; `npm run build`. When authorized credentials are available, record real provider/model/time/result evidence separately from deterministic contract tests.
+Relevant commands (individual execution evidence is linked above): `node scripts/build-renderer.mjs`; `npm run build:cli`; `npx tsx --test tests/creative-agent-workflows.test.ts tests/agent-capability-parity.test.ts tests/cli.test.ts tests/provider-capabilities.test.ts tests/briefs.test.ts`; `npm run typecheck`; `npm test`; `npm run build`. When authorized credentials are available, record real provider/model/time/result evidence separately from deterministic contract tests.
 
 ## Success criteria
 
@@ -86,4 +90,4 @@ Prompt changes cannot guarantee model compliance; enforce preservation/version/o
 
 ## Unresolved evidence / next step
 
-Refresh the source baseline and predecessor evidence before implementation. Record any failed or unavailable check; do not infer approval from silence, rerun stale writes with a guessed revision, or remove requested scope. Advance only when the stated dependencies and acceptance are met.
+Complete the remaining acceptance against the current source and linked evidence. Record any failed or unavailable check; do not infer approval from silence, rerun stale writes with a guessed revision, or remove requested scope. Advance only when the stated dependencies and acceptance are met.

@@ -52,7 +52,7 @@ export class PagedPaintRuntime {
     try {
       // Only one affected layer and the stroke's finite bounding box enter the CPU workspace.
       // At 4096² this is at most 64 tiles; other layers stay in the backing store.
-      const radius = brush.size / 2 + 1;
+      const radius = brush.size * (1 + (brush.tilt ?? 0)) / 2 + 1;
       const range = (axis: 'x' | 'y', dimension: number) => {
         let min = dimension, max = 0;
         for (const point of points) { min = Math.min(min, point[axis]); max = Math.max(max, point[axis]); }

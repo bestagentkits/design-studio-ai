@@ -14,13 +14,13 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.2.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.0.tgz`, or install the published release directly:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.2/bestagentkits-design-studio-ai-0.3.2.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/bestagentkits-design-studio-ai-0.4.0.tgz
 ```
 
-The [v0.3.2 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.2) includes CLI and skill archives. The package is not published to the npm registry.
+The [v0.4.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.0) includes CLI and skill archives. The package is not published to the npm registry.
 
 The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
 
@@ -77,7 +77,7 @@ For concurrent editing, retain the exact document and revision you read. `projec
 
 ## Creative documents
 
-The bundled schema reads v1/v2 and exposes board/painting operations through `schema --operations`. Preserve v2 roots when applying edits; painting replacement requires its observed generation and owned PNG tiles. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. See [creative tools](../../docs/creative-tools.md) for persistence, public projections and current integration limits.
+The bundled schema reads v1/v2 and exposes board transforms, paste, semantic diagrams and painting layer/group operations through `schema --operations`. Preserve v2 roots when applying edits. `projects paint PROJECT_ID --file command.json` executes a real server-side stroke/fill using the live `paintingCommand` schema; include the observed revision, painting generation and a unique operation ID. An uncertain write can be retried with the identical command and ID. Direct painting replacement still requires owned PNG tiles and verified source hashes. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. Static GIF export uses the saved poster; timed browser exports sample actual frames. See [creative tools](../../docs/creative-tools.md) for persistence, SVG flattening, public projections and acceptance limits.
 
 ## Native character motion
 

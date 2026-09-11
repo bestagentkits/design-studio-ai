@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { randomBytes } from 'node:crypto';
@@ -17,6 +17,23 @@ if (!process.argv.slice(2).some(argument => argument === '--project' || argument
     if (interrupted) break;
   }
   process.exit(code);
+}
+// Authentication limits are production behavior; independent specs receive independent databases.
+if (!process.env.STUDIO_E2E_SPEC_ISOLATED) {
+  const args = process.argv.slice(2), requested = args.filter(arg => arg.endsWith('.spec.ts'));
+  const files = requested.length ? requested : (await readdir('tests')).filter(name => name.endsWith('.spec.ts')).sort().map(name => `tests/${name}`);
+  let result = 0, interrupted = false;
+  for (const file of files) {
+    const project = args.find(arg => arg.startsWith('--project='))?.split('=')[1] || args[args.indexOf('--project') + 1] || 'selected';
+    const output = args.some(arg => arg === '--output' || arg.startsWith('--output=')) ? [] : [`--output=test-results/${project}/${file.split('/').at(-1).replace(/\.spec\.ts$/, '')}`];
+    const child = spawn(process.execPath, [process.argv[1], ...args.filter(arg => !requested.includes(arg)), file, ...output], { stdio: 'inherit', env: { ...process.env, STUDIO_E2E_SPEC_ISOLATED: '1' } });
+    const stop = () => { interrupted = true; child.kill('SIGTERM'); }; process.once('SIGINT', stop); process.once('SIGTERM', stop);
+    const code = await new Promise(resolve => child.once('exit', value => resolve(value ?? 1)));
+    process.removeListener('SIGINT', stop); process.removeListener('SIGTERM', stop);
+    if (code !== 0) result = Number(code);
+    if (interrupted) break;
+  }
+  process.exit(result);
 }
 const port = Number(process.env.E2E_PORT || 8791);
 const origin = `http://127.0.0.1:${port}`;

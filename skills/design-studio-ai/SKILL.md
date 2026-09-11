@@ -119,7 +119,11 @@ Report the project/artifact URL or output path, what was changed, verification p
 
 ## Boards and paint
 
-Read the live v1/v2 schema and preserve boards, paintings and immutable asset references. Use shared board-element operations and generation-checked painting replacement; never fabricate pixel hashes or derived composites. Upload real 512×512 RGBA8 PNG tiles before referencing them. Keep the original project revision and painting generation; same-painting pixel/settings changes conflict. An exact painting-save retry is idempotent while its receipt is retained; never change a payload under the same operationId. Public projections omit private paint source and hidden board elements. JSON remains editable private source. Use authenticated export when creative media is not embedded locally. Typed capabilities and current workspace controls differ; inspect the configured server rather than promising unfinished diagram/library tools.
+Read the live v1/v2 document and operation schemas. Preserve board/painting roots, semantic diagram metadata, emoji identity and immutable asset references. Use shared transforms, paste and diagram operations for board edits; generation-checked layer/group operations for paint structure. For real raster strokes/fills, use MCP `paint_document`, CLI `projects paint PROJECT_ID --file command.json`, or the generated WebMCP API action for `POST /api/projects/{id}/paint`. Discover `paintingCommand` through `/api/schema` before constructing requests.
+
+Carry the observed project revision, painting generation and a unique operation ID. Repeat the identical command under that ID only when its outcome is uncertain; same-painting pixel/settings changes conflict. Never fabricate pixel hashes or derived composites. Direct source replacement needs uploaded real RGBA8 PNG tiles. Keep scope approval and its revision separate from document changes.
+
+Elements artwork records provenance; imported SVG is safely flattened to PNG and loses vector editing. GIF sources retain original owned bytes plus an explicit poster and millisecond playback fields. Static output uses the saved poster; inspect timed exports for actual motion and z-order. Public projections omit private painting source and hidden board elements; JSON remains private editable source. Use authenticated export when media is not embedded locally. Physical iPad/Pencil performance remains unmeasured; report only devices and artifacts actually checked.
 
 ## Native 2D character motion
 

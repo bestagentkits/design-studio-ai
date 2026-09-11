@@ -13,6 +13,8 @@ export class PaintStroke {
   private draft: PaintLayer;
   private dirty = new Set<string>();
   private previous?: PaintPoint;
+  private input: PaintPoint[] = [];
+  private sealed = false;
   private carried: PaintColor;
   private distanceLeft: number;
   private stamps = 0;
@@ -22,26 +24,27 @@ export class PaintStroke {
   private brush: PaintBrush;
   constructor(private source: PaintLayer, private width: number, private height: number,
     private maxTiles: number, private otherTiles: number, brush: PaintBrush, private publish: (draft: PaintLayer) => void,
-    private sampleSource?: (x: number, y: number) => PaintColor) {
+    private sampleSource?: (x: number, y: number) => PaintColor, private coverage?: (x: number, y: number) => number) {
     this.draft = { ...source, tiles: new Map(source.tiles) }; this.brush = structuredClone(brush);
     this.carried = this.brush.color; this.distanceLeft = Math.max(.5, brush.size * brush.spacing);
   }
   get dirtyKeys() { return [...this.dirty]; }
   copyTile(x: number, y: number) { const tile = this.draft.tiles.get(`${x},${y}`); return tile ? new Uint8Array(tile) : undefined; }
   append(points: readonly PaintPoint[]) {
-    if (this.closed) throw new Error('Paint stroke is closed');
+    if (this.closed || this.sealed) throw new Error('Paint stroke is closed');
     try {
       if (points.length + this.samples > 10000) throw new Error('Invalid paint point count');
       for (const point of points) {
         bounded(point.x, 0, this.width - 1, 'x'); bounded(point.y, 0, this.height - 1, 'y'); bounded(point.pressure, 0, 1, 'pressure');
-        const p = { ...point }, a = this.previous; this.samples++;
+        for (const tilt of [point.tiltX, point.tiltY]) if (tilt !== undefined) bounded(tilt, -90, 90, 'tilt');
+        const p = { ...point }, a = this.previous; this.samples++; this.input.push(p);
         if (!a) this.stamp(p, 0);
         else {
           const distance = Math.hypot(p.x - a.x, p.y - a.y), angle = Math.atan2(p.y - a.y, p.x - a.x);
           let travelled = this.distanceLeft;
           for (; travelled <= distance; travelled += Math.max(.5, this.brush.size * this.brush.spacing)) {
             const t = travelled / distance;
-            this.stamp({ x: a.x + (p.x - a.x) * t, y: a.y + (p.y - a.y) * t, pressure: a.pressure + (p.pressure - a.pressure) * t }, angle);
+            this.stamp({ x: a.x + (p.x - a.x) * t, y: a.y + (p.y - a.y) * t, pressure: a.pressure + (p.pressure - a.pressure) * t, tiltX: p.tiltX, tiltY: p.tiltY }, angle);
           }
           this.distanceLeft = travelled - distance;
         }
@@ -52,13 +55,14 @@ export class PaintStroke {
   private stamp(p: PaintPoint, angle: number) {
     const b = this.brush, index = this.stamps++;
     if (this.stamps > 10000) throw new Error('Paint stroke exceeds stamp budget');
-    this.work += (Math.ceil(b.size) + 2) ** 2;
+    this.work += (Math.ceil(b.size * (1 + (b.tilt ?? 0))) + 2) ** 2;
     if (this.work > 8000000) throw new Error('Paint stroke exceeds pixel work budget');
     if (!p.pressure) return;
     const sampled = this.sampleSource ? this.sampleSource(Math.floor(p.x), Math.floor(p.y)) : readPaint(this.source, Math.floor(p.x), Math.floor(p.y));
     // Wet brushes retain their load over empty paper rather than losing opacity at every stamp.
     this.carried = pickup(this.carried, sampled, b.tip ? b.pickup * sampled[3] / 255 : b.pickup);
-    const radius = Math.max(.5, b.size * p.pressure / 2), cos = Math.cos(angle), sin = Math.sin(angle);
+    const tilt = Math.min(1, Math.hypot(p.tiltX ?? 0, p.tiltY ?? 0) / 90) * (b.tilt ?? 0);
+    const radius = Math.max(.5, b.size * p.pressure / 2 * (1 + tilt)), cos = Math.cos(angle), sin = Math.sin(angle);
     for (let y = Math.max(0, Math.floor(p.y - radius)); y <= Math.min(this.height - 1, Math.ceil(p.y + radius)); y++) {
       for (let x = Math.max(0, Math.floor(p.x - radius)); x <= Math.min(this.width - 1, Math.ceil(p.x + radius)); x++) {
         const dx = x + .5 - p.x, dy = y + .5 - p.y, distance = Math.hypot(dx, dy);
@@ -68,7 +72,7 @@ export class PaintStroke {
         // Stable cross-brush bristles and paper grain create coherent fibers, not fresh per-stamp noise.
         const fiber = b.tip === 'bristle' ? .15 + .85 * grain(b.seed, Math.round((-dx * sin + dy * cos) * 1.5), 0, 0) : 1;
         const texture = b.tip ? grain(b.seed, x, y, 0) : grain(b.seed, x, y, index);
-        const alpha = coverage * fiber * b.flow * b.opacity * b.deposit * (1 - b.texture * texture);
+        const alpha = (this.coverage?.(x, y) ?? 1) * coverage * fiber * b.flow * b.opacity * b.deposit * (1 - b.texture * texture);
         if (!alpha || !this.carried[3]) continue;
         const { key, offset } = paintAddress(x, y);
         if (!this.dirty.has(key)) {
@@ -81,9 +85,26 @@ export class PaintStroke {
       }
     }
   }
+  /** Final taper is reconstructed from frozen source, so narrowing never erases older paint. */
+  seal() {
+    if (this.closed) throw new Error('Paint stroke is closed');
+    if (this.sealed) return;
+    if (this.brush.taper && this.input.length > 1) {
+      const distances = [0];
+      for (let i = 1; i < this.input.length; i++) distances.push(distances[i - 1] + Math.hypot(this.input[i].x - this.input[i - 1].x, this.input[i].y - this.input[i - 1].y));
+      const length = distances.at(-1)!, extent = Math.min(length / 2, this.brush.size * 2 * this.brush.taper);
+      if (extent > 0) {
+        const tapered = new PaintStroke(this.source, this.width, this.height, this.maxTiles, this.otherTiles, { ...this.brush, taper: 0 }, this.publish, this.sampleSource, this.coverage);
+        tapered.append(this.input.map((point, i) => ({ ...point, pressure: point.pressure * Math.max(.05, Math.min(1, distances[i] / extent, (length - distances[i]) / extent)) })));
+        this.draft = tapered.draft; this.dirty = tapered.dirty; this.stamps = tapered.stamps;
+      }
+    }
+    this.sealed = true;
+  }
   commit() {
     if (this.closed) throw new Error('Paint stroke is closed');
     if (!this.samples) throw new Error('Invalid paint point count');
+    this.seal();
     this.publish(this.draft); this.closed = true;
     return { stamps: this.stamps, dirtyTiles: this.dirty.size, dirtyKeys: this.dirtyKeys,
       allocatedBytes: (this.otherTiles + this.draft.tiles.size) * PAINT_TILE_SIZE ** 2 * 4 };

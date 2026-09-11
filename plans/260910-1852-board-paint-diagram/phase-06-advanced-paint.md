@@ -6,6 +6,8 @@ Context: [architecture](architecture.md), [acceptance](acceptance-matrix.md), [s
 
 Current implemented subset and remaining gates: [production integration](reports/production-integration.md). Open checklist rows contain requirements beyond the current slice; they are not silently waived.
 
+Current delivery update: Selection/feather/fill, mask/group editing, durable scoped drafts and compositor workers are implemented; see [delivery and actual workload measurements](reports/advanced-paint-delivery.md). Full editor E2E and physical-device quality remain distinct gates.
+
 ## Requirements and design
 
 Deliver real textured brushes and color pickup/deposit/smudge, ink taper, pressure/tilt response and editable raster layers. Include layer opacity/order/groups/masks/alpha lock/clipping and defined normal/multiply/screen/overlay modes at minimum; locked content is protected by shared mutations.
@@ -51,17 +53,19 @@ No deletions planned. Shared owners are serial integration points; another phase
 
 ## Implementation TODO
 
-- [ ] Implement the versioned trusted brush/compositor chosen in 01, shared by browser and isolated server/headless execution. Specify sRGB interchange, premultiplied-alpha handling and mixing math in source/docs; accept finite bounded data, never arbitrary JS/shaders.
-- [ ] Implement seeded tip/grain stamps, paper texture, spacing/flow/opacity, pressure/tilt/ink taper and actual surface-color pickup/deposit/smudge. Compare known pixels to transparency-only overdraw to prove mixing.
-- [ ] Add multiple independent raster layers with group/order/name/visibility/lock/opacity, normal/multiply/screen/overlay, masks, alpha lock and clipping. Neighbor/visible-layer sampling must match painting-wide generation checks.
-- [ ] Implement rectangle/lasso/feather selections, mask-aware erasing and flood fill with tolerance/contiguous/sample-visible controls; bound fill work and allow cancellation without a partial saved action.
+Reconciled 2026-09-11 against [current source and local evidence](reports/implementation-checklist-reconciliation.md). Checked rows record implemented behavior, not full device, cross-surface, format or release acceptance. Unchecked compound rows retain their unverified requirements.
+
+- [x] Implement the versioned trusted brush/compositor chosen in 01, shared by browser and isolated server/headless execution. Specify sRGB interchange, premultiplied-alpha handling and mixing math in source/docs; accept finite bounded data, never arbitrary JS/shaders.
+- [x] Implement seeded tip/grain stamps, paper texture, spacing/flow/opacity, pressure/tilt/ink taper and actual surface-color pickup/deposit/smudge. Compare known pixels to transparency-only overdraw to prove mixing.
+- [x] Add multiple independent raster layers with group/order/name/visibility/lock/opacity, normal/multiply/screen/overlay, masks, alpha lock and clipping. Neighbor/visible-layer sampling must match painting-wide generation checks.
+- [x] Implement rectangle/lasso/feather selections, mask-aware erasing and flood fill with tolerance/contiguous/sample-visible controls; bound fill work and allow cancellation without a partial saved action.
 - [ ] Use sparse 512px immutable lossless tiles and bounded CPU/GPU cache/dirty regions. Budget 2048²/12-layer iPad and 4096²/24-layer desktop workloads including all masks, previews, other media and history storage; atomically reserve in-flight quota before expensive work and release/expire reservations safely; never hold full copies per undo.
-- [ ] Separate immediate local pixels from persistence: stage dirty tiles, validate bytes/dependencies, CAS commit manifest/generation, then acknowledge saved. Bind operation ID/payload hash to owner/project and expose durable status/committed receipt; after a lost response look up the receipt so smudge does not execute twice. Keep retryable stroke input transient/versioned; replay after conflict requires newly inspected state and explicit intent.
+- [x] Separate immediate local pixels from persistence: stage dirty tiles, validate bytes/dependencies, CAS commit manifest/generation, then acknowledge saved. Bind operation ID/payload hash to owner/project and expose durable status/committed receipt; after a lost response look up the receipt so smudge does not execute twice. Keep retryable stroke input transient/versioned; replay after conflict requires newly inspected state and explicit intent.
 - [ ] Add painting-wide conflicts for concurrent pixel/settings changes, even on separate tiles; allow unrelated painting/Board merge only with stable dependencies. Pin old immutable tiles for undo/recovery and protect snapshots/in-flight work from GC. Undo commits restored content at a fresh monotonic painting generation and current schema version.
 - [ ] Freeze the gesture sampling generation, including visible-layer inputs, until completion. Reconcile a live-sync response that arrives mid-stroke without swapping the source pixels; changed source conflicts, cancellation discards only draft pixels. Test late sync with finish, cancel, save and undo.
-- [ ] Implement worker/GPU feature detection and trusted fallback, context-loss recovery, pointer capture/cancel, draft persistence keyed by account/project/base revision and logout isolation. Preserve committed art when a capability is unavailable.
-- [ ] Add focused Paint UI with brush preview/settings, color/mix control, layers, selection/fill, pending/upload/saved/conflict feedback and accessible controls; reopen editable art from Board/design page.
-- [ ] Expose actual server-rasterized stroke/fill/layer/inspect commands through the shared service on every agent surface now. Agent commands must change pixels and return committed IDs/generation, not record descriptive no-op commands.
+- [x] Implement worker/GPU feature detection and trusted fallback, context-loss recovery, pointer capture/cancel, draft persistence keyed by account/project/base revision and logout isolation. Preserve committed art when a capability is unavailable.
+- [x] Add focused Paint UI with brush preview/settings, color/mix control, layers, selection/fill, pending/upload/saved/conflict feedback and accessible controls; reopen editable art from Board/design page.
+- [x] Expose actual server-rasterized stroke/fill/layer/inspect commands through the shared service on every agent surface now. Agent commands must change pixels and return committed IDs/generation, not record descriptive no-op commands.
 
 ## Slice parity and documentation
 
@@ -80,11 +84,11 @@ Before this slice is complete, expose its validated operations and capability/er
 
 Update public content sources, then run `npm run build` to regenerate documentation/llms output. Never hand-edit generated `dist/` or renderer/viewer bundles. Unsupported actions must report a precise capability/version error rather than silently flatten or ignore content.
 
-## Future validation — not run
+## Validation coverage and remaining acceptance
 
 Use independently specified small pixel cases for seeded texture, pressure, mixing versus alpha over, blend modes, mask/clip/alpha lock, feather/fill boundaries and layer ordering; compare browser/server outputs within the tolerance fixed in 01. Exercise same-painting conflict, interrupted upload, malformed/foreign tile, quota preflight/reservation races, lost-response receipt lookup, repeated operation IDs with changed payloads, context loss, recovery account switch, monotonic undo, undo pins and concurrent cleanup.
 
-Future commands: `node scripts/build-renderer.mjs`; `npx tsx --test tests/paint-runtime.test.ts tests/paint-transactions.test.ts tests/collaboration.test.ts tests/security-boundaries.test.ts`; `npm run build:cli`; `npx tsx --test tests/agent-capability-parity.test.ts tests/cli.test.ts`; `npm run typecheck`; `npm run build`; `npm run test:e2e -- tests/paint-ui.spec.ts --project=desktop`; repeat mobile basic workflows and explicit Firefox/WebKit projects with `STUDIO_CROSS_BROWSER=1`.
+Relevant commands (individual execution evidence is linked above): `node scripts/build-renderer.mjs`; `npx tsx --test tests/paint-runtime.test.ts tests/paint-transactions.test.ts tests/collaboration.test.ts tests/security-boundaries.test.ts`; `npm run build:cli`; `npx tsx --test tests/agent-capability-parity.test.ts tests/cli.test.ts`; `npm run typecheck`; `npm run build`; `npm run test:e2e -- tests/paint-ui.spec.ts --project=desktop`; repeat mobile basic workflows and explicit Firefox/WebKit projects with `STUDIO_CROSS_BROWSER=1`.
 
 Run physical iPad/Pencil and desktop workload measurements separately, including prolonged strokes/mixing, layer churn and memory pressure. Inspect real pixels after save/reload and agent edits; record actual device budgets instead of asserting emulation is hardware evidence.
 
@@ -98,4 +102,4 @@ Raster memory/decoded bytes, color math and asynchronous commits are major risks
 
 ## Unresolved evidence / next step
 
-Refresh the source baseline and predecessor evidence before implementation. Record any failed or unavailable check; do not infer approval from silence, rerun stale writes with a guessed revision, or remove requested scope. Advance only when the stated dependencies and acceptance are met.
+Complete the remaining acceptance against the current source and linked evidence. Record any failed or unavailable check; do not infer approval from silence, rerun stale writes with a guessed revision, or remove requested scope. Advance only when the stated dependencies and acceptance are met.

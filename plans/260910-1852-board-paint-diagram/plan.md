@@ -14,7 +14,7 @@ branch: "codex/board-paint-diagrams"
 
 # Board, advanced Paint, Elements and diagrams
 
-Implementation authorized on 2026-09-10; the improved drawing demo was approved on 2026-09-11 and the user requested production integration. Canonical v2, editable board/paint workspaces, immutable tile uploads, painting save receipts, server compositing and public-source redaction now have production source implementations. Integration, recovery and cross-browser acceptance are in progress; the complete nine-phase scope is not finished. See [production integration evidence](reports/production-integration.md) and [earlier feasibility evidence](reports/implementation-progress.md). No commit or deployment performed.
+Implementation authorized on 2026-09-10; the improved drawing demo was approved on 2026-09-11. Production source now includes Board selection/transforms/paste, four diagram families, Elements/GIFs, advanced Paint, semantic raster commands and time-aware export integration. Broad acceptance and release gates remain in progress; this plan does not claim deployment. Current evidence: [Board/diagrams](reports/diagram-board-delivery.md), [Elements/runtime](reports/elements-runtime-delivery.md), [advanced Paint and measured workloads](reports/advanced-paint-delivery.md), [earlier persistence integration](reports/production-integration.md). Release target: v0.4.0; commit, CI and deployment must be verified separately.
 
 ## Outcome and boundaries
 
@@ -35,12 +35,12 @@ All estimates are engineering effort, not delivery dates or benchmark evidence. 
 | 01 | [Engine, UX and paint feasibility](phase-01-engine-ux-paint-spike.md) | None | 3–5 days | In progress |
 | 02 | [Canonical v2, assets and safe writes](phase-02-canonical-v2-assets-cas.md) | 01 | 7–10 days | In progress |
 | 03 | [Board, Draw and embedded editing](phase-03-board-draw-embed.md) | 02 | 8–12 days | In progress |
-| 04 | [Four diagram families and routing](phase-04-diagrams-routing-layout.md) | 03 | 7–11 days | Pending |
-| 05 | [Stickers, emoji and animated GIFs](phase-05-elements-gif.md) | 03 | 4–7 days | Pending |
+| 04 | [Four diagram families and routing](phase-04-diagrams-routing-layout.md) | 03 | 7–11 days | In progress |
+| 05 | [Stickers, emoji and animated GIFs](phase-05-elements-gif.md) | 03 | 4–7 days | In progress |
 | 06 | [Advanced layered Paint](phase-06-advanced-paint.md) | 02, 03 | 12–20 days | In progress |
-| 07 | [Semantic agents and safe providers](phase-07-semantic-agents-providers.md) | 04, 05, 06 | 4–6 days | Pending |
-| 08 | [Rendering, export and publication](phase-08-render-export-publication.md) | 04, 05, 06 | 6–10 days | Pending |
-| 09 | [Acceptance, docs and release handoff](phase-09-acceptance-docs-handoff.md) | 07, 08 | 5–7 days | Pending |
+| 07 | [Semantic agents and safe providers](phase-07-semantic-agents-providers.md) | 04, 05, 06 | 4–6 days | In progress |
+| 08 | [Rendering, export and publication](phase-08-render-export-publication.md) | 04, 05, 06 | 6–10 days | In progress |
+| 09 | [Acceptance, docs and release handoff](phase-09-acceptance-docs-handoff.md) | 07, 08 | 5–7 days | In progress |
 
 Every feature phase includes shared validators/operations, minimum REST/MCP/CLI/WebMCP access, documentation and meaningful tests before its controls are considered complete. Phase 07 improves semantic workflows; Phase 09 verifies integration and generated discovery rather than deferring parity.
 
@@ -55,6 +55,10 @@ Every feature phase includes shared validators/operations, minimum REST/MCP/CLI/
 
 Shared files make phases 04–06 logically independent after 03 but not safe for overlapping edits without explicit ownership. This checkout uses one E2E harness on port 19203; port 8791 belongs to another checkout.
 
+## Current local evidence
+
+[Checklist reconciliation](reports/implementation-checklist-reconciliation.md) records the desktop Board/Paint run (5/5), the earlier 294-test local Node suite and the production CreativeWorkspace probe. At 500/2000 elements, Chromium frame-interval p95 was 17.3/17.5 ms; this measures a standalone scripted pan workload, not physical-device or input-to-pixel latency. The full suite after the latest fixes, exact-head CI, release and deployment remain separate pending gates.
+
 ## Open evidence
 
-Native fallback selected from the released Excalidraw probe. User has no iPad available; recommended baseline is iPad Air 11-inch M2 + Pencil Pro, stable supported iPadOS/Safari at test time. Hardware quality remains unmeasured. Phase 01 still needs integrated input/history/render workload evidence and production retention choices; existence of helper code does not close those gates. Phase file proposed paths identify intended ownership; the execution report identifies implemented files.
+Native fallback selected from the released Excalidraw probe. User has no iPad available; recommended baseline is iPad Air 11-inch M2 + Pencil Pro, stable supported iPadOS/Safari at test time. Hardware quality remains unmeasured. Local CPU and actual browser-worker workload measurements are recorded in the advanced Paint report; they do not measure physical-device input, complete editor latency or total peak memory. Asset retention remains bounded by quotas with no automatic garbage collection. Remaining workload and release gates stay open until independently verified. Phase file proposed paths identify intended ownership; the execution report identifies implemented files.

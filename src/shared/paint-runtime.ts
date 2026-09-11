@@ -1,10 +1,11 @@
 import { PaintStroke, readPaint as read, type PaintLayer as Layer } from './paint-stroke';
 import { bounded, over, PAINT_TILE_SIZE, validateColor, type PaintColor } from './paint-pixels';
 export { PAINT_ALGORITHM, PAINT_TILE_SIZE, type PaintColor } from './paint-pixels';
-export interface PaintPoint { x: number; y: number; pressure: number }
+export interface PaintPoint { x: number; y: number; pressure: number; tiltX?: number; tiltY?: number }
 export interface PaintBrush {
   size: number; spacing: number; flow: number; opacity: number; texture: number;
   seed: number; color: PaintColor; pickup: number; deposit: number;
+  tilt?: number; taper?: number;
   tip?: 'round' | 'bristle' | 'wash'; hardness?: number; mode?: 'paint' | 'erase';
 }
 export function validatePaintInput(width: number, height: number, points: readonly PaintPoint[], brush: PaintBrush) {
@@ -14,6 +15,8 @@ export function validatePaintInput(width: number, height: number, points: readon
     bounded(brush.seed, 0, 0xffffffff, 'seed');
     if (!Number.isInteger(brush.seed)) throw new Error('Invalid paint seed');
     validateColor(brush.color);
+    if (brush.tilt !== undefined) bounded(brush.tilt, 0, 1, 'tilt response');
+    if (brush.taper !== undefined) bounded(brush.taper, 0, 1, 'ink taper');
     if (brush.mode !== undefined && !['paint', 'erase'].includes(brush.mode)) throw new Error('Invalid paint mode');
     if (brush.hardness !== undefined) bounded(brush.hardness, 0, 1, 'hardness');
     if (brush.tip !== undefined && !['round', 'bristle', 'wash'].includes(brush.tip)) throw new Error('Invalid paint tip');
@@ -81,7 +84,7 @@ export class PaintRuntime {
     return copy;
   }
   get layerSettings() { return this.layers.map(({ id, opacity, visible, locked }) => ({ id, opacity, visible, locked })); }
-  beginStroke(id: string, brush: PaintBrush, sampleSource?: (x: number, y: number) => PaintColor): PaintStroke {
+  beginStroke(id: string, brush: PaintBrush, sampleSource?: (x: number, y: number) => PaintColor, coverage?: (x: number, y: number) => number): PaintStroke {
     const layer = this.layer(id), generation = this.generation;
     if (layer.locked) throw new Error('Paint layer is locked');
     validatePaintInput(this.width, this.height, [{ x: 0, y: 0, pressure: 1 }], brush);
@@ -90,7 +93,7 @@ export class PaintRuntime {
     return new PaintStroke(source, this.width, this.height, this.maxTiles, otherTiles, brush, draft => {
       if (generation !== this.generation) throw new Error('Painting generation conflict');
       layer.tiles = draft.tiles; this.generation++;
-    }, sampleSource);
+    }, sampleSource, coverage);
   }
   stroke(id: string, points: readonly PaintPoint[], brush: PaintBrush) {
     validatePaintInput(this.width, this.height, points, brush);

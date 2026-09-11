@@ -40,6 +40,7 @@ test('creative persistence validates real tile bytes, returns durable retry rece
       assert.equal((await projectFrom(await request(`/api/projects/${initial.id}`))).revision, saved.revision);
     });
     await t.test('old clients and guessed future revisions cannot downgrade stored v2', async () => {
+      const staleShape = await request(route, 'PUT', { document: { ...saved.document, schemaVersion: 1 }, expectedRevision: saved.revision }); assert.equal(staleShape.status, 409); assert.match(await staleShape.text(), /document_upgrade_required/);
       const downgrade = await request(route, 'PUT', { document: initial.document, expectedRevision: saved.revision }); assert.equal(downgrade.status, 409); assert.match(await downgrade.text(), /document_upgrade_required/);
       const future = await request(route, 'PUT', { document: initial.document, expectedRevision: saved.revision + 1 }); assert.equal(future.status, 409); assert.match(await future.text(), /revision_conflict/);
       const merge = await request(`/api/projects/${initial.id}/merge`, 'POST', { base: initial.document, document: initial.document, baseRevision: initial.revision }); assert.equal(merge.status, 409); assert.match(await merge.text(), /document_upgrade_required/);

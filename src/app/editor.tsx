@@ -131,6 +131,7 @@ type ToolContext = {
 };
 
 export function Editor({
+  accountId,
   initial,
   initialBriefRequest = "",
   onBack,
@@ -139,6 +140,7 @@ export function Editor({
   notify,
 }: {
   initial: Project;
+  accountId?: string;
   initialBriefRequest?: string;
   onBack: () => void;
   onSettings: () => void;
@@ -400,7 +402,7 @@ export function Editor({
     setRedoCount(0);
   }
   const [creativePaintingId, setCreativePaintingId] = useState<string | null>(null);
-  const [creativeBoardId, setCreativeBoardId] = useState<string | null>(null);
+  const [creativeBoardId, setCreativeBoardId] = useState<string | null>(() => initial.document.pages.length === 1 && initial.document.pages[0].name === 'Board' ? initial.document.pages[0].nodes.find(n => n.type === 'board')?.boardId ?? null : null);
   const creativeOpen = useRef(false);
   // Deleted paintings can reappear through redo; keep a high-water mark across removals.
   const paintGeneration = useRef(0);
@@ -473,8 +475,10 @@ export function Editor({
     setHistoryCount(history.current.length);
     setRedoCount(future.current.length);
   }
+  const manualSaving = useRef(false);
   async function save() {
     if (busy) return;
+    manualSaving.current = true;
     setBusy("Saving");
     setError("");
     try {
@@ -501,7 +505,7 @@ export function Editor({
     } catch (e) {
       setError(message(e));
     } finally {
-      syncing.current = false;
+      syncing.current = false; manualSaving.current = false;
       setBusy("");
     }
   }
@@ -520,7 +524,7 @@ export function Editor({
           : await api<{ project?: Project }>(`/api/projects/${project.id}/changes?since=${projectRef.current.revision}`);
         // A request started before the modal opened may finish during a stroke.
         // Retain its result until the modal closes, then reconcile against local work.
-        while (!stopped && creativeOpen.current) await new Promise(resolve => setTimeout(resolve, 100));
+        while (!stopped && creativeOpen.current && !manualSaving.current) await new Promise(resolve => setTimeout(resolve, 100));
         if (stopped || !result.project) return;
         const remote = result.project;
         // Edits typed during the request are reconciled, never replaced by its response.
@@ -1926,8 +1930,8 @@ export function Editor({
             </div>
           )}
         </aside>
-        {creativePaintingId && <PaintingWorkspace doc={doc} paintingId={creativePaintingId} onClose={() => setCreativePaintingId(null)} onUndo={undo} onRedo={redo} onCommit={(base, next) => { const merged = mergeDocuments(base, next, docRef.current); change(current => Object.assign(current, merged)); }}/>}
-        {creativeBoardId && <CreativeWorkspace doc={doc} boardId={creativeBoardId} onClose={() => setCreativeBoardId(null)} onUndo={undo} onRedo={redo} onCommit={(base, next) => { const merged = mergeDocuments(base, next, docRef.current); change(current => Object.assign(current, merged)); }}/>}
+        {creativePaintingId && <PaintingWorkspace accountId={accountId} doc={doc} paintingId={creativePaintingId} onClose={() => setCreativePaintingId(null)} onUndo={undo} onRedo={redo} onCommit={(base, next) => { const merged = mergeDocuments(base, next, docRef.current); change(current => Object.assign(current, merged)); }}/>}
+        {creativeBoardId && <CreativeWorkspace accountId={accountId} savedDocument={project.document} saveStatus={busy || error || (dirty ? 'Unsaved changes' : 'Saved')} onSave={save} projectId={project.id} doc={doc} boardId={creativeBoardId} onClose={() => setCreativeBoardId(null)} onUndo={undo} onRedo={redo} onCommit={(base, next) => { const merged = mergeDocuments(base, next, docRef.current); change(current => Object.assign(current, merged)); }}/>}
         <section className="canvas-region">
           <div className="canvas-toolbar">
             <div className="insert-tools">

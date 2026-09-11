@@ -1,3 +1,6 @@
+import { executePaintingCommand } from './painting-commands';
+import { inspectElementImage } from '../src/shared/creative-elements-image-bounds';
+import { inspectGif } from '../src/shared/gif-bounds';
 import { documentSaveSchema } from '../src/shared/document-save-contract';
 import { creativeSaveIdentity, readCreativeReceipt } from './creative-save-receipts';
 import { reserveAsset } from './asset-lifecycle';
@@ -76,10 +79,16 @@ export async function saveDocument(
   expectedRevision: number,
   expectedBriefRevision?: number,
   operationId?: string,
+  receiptIdentity?: { key: string; hash: string },
 ) {
   const row = await projectRow(c, projectId);
+  // Diagnose a stale v1 client before validating fields that only exist in v2.
+  if (document && typeof document === 'object' && 'schemaVersion' in document && document.schemaVersion === 1 && JSON.parse(row.document).schemaVersion === 2) {
+    if (expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Project changed. Reload before saving.');
+    fail(409, 'document_upgrade_required', 'This project uses document v2. Upgrade your client and reload before saving.');
+  }
   let parsed = documentSchema.parse(document);
-  const identity = await creativeSaveIdentity(parsed, expectedRevision, operationId, expectedBriefRevision);
+  const identity = receiptIdentity ?? await creativeSaveIdentity(parsed, expectedRevision, operationId, expectedBriefRevision);
   if (identity) { const receipt = await readCreativeReceipt(c, row.id, identity); if (receipt) return receipt; }
   if (expectedRevision !== row.revision) fail(409, "revision_conflict", "Project changed. Reload before saving.");
   const stored = documentSchema.parse(JSON.parse(row.document));
@@ -174,6 +183,8 @@ export async function storeAsset(
       "invalid_media",
       "File bytes do not match the selected media type.",
     );
+  if (['image/png','image/jpeg','image/webp'].includes(mimeType)) { try { inspectElementImage(bytes, mimeType); } catch (e) { fail(400, 'invalid_media', e instanceof Error ? e.message : 'Invalid image'); } }
+  if (mimeType === 'image/gif') { try { inspectGif(bytes); } catch (e) { fail(400, 'invalid_media', e instanceof Error ? e.message : 'Invalid GIF'); } }
   const assetId = id();
   const storageKey = `${owner(c)}/${projectId}/${assetId}`;
   const reservation = await reserveAsset(c, projectId, data.byteLength);
@@ -345,7 +356,8 @@ projectRoutes.patch("/:id", async (c) => {
   });
 });
 projectRoutes.put("/:id/document", async (c) => {
-  const body = documentWriteSchema.parse(await c.req.json());
+  // The owned save service validates the canonical document after its version guard.
+  const body = documentWriteSchema.extend({ document: z.unknown() }).parse(await c.req.json());
   return c.json({
     project: await saveDocument(
       c,
@@ -497,3 +509,5 @@ export async function published(c: Context<Env>, slug: string) {
 }
 
 projectRoutes.get('/:id/motion',async c=>{const row=await projectRow(c,c.req.param('id'));const input=motionInspectionSchema.parse(c.req.query());const doc=documentSchema.parse(JSON.parse(row.document));if(input.nodeId&&!doc.pages.some(p=>p.nodes.some(n=>n.id===input.nodeId&&n.character)))fail(404,'not_found','Unknown character instance');if(input.characterId&&!doc.characters?.some(x=>x.id===input.characterId))fail(404,'not_found','Unknown character');return c.json({revision:row.revision,...inspectMotion(documentSchema.parse(JSON.parse(row.document)),input)});});
+
+projectRoutes.post('/:id/paint', async c => c.json({ project: await executePaintingCommand(c, c.req.param('id'), await c.req.json()) }));

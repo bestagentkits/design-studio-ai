@@ -102,3 +102,13 @@ test('redo of a removed painting advances beyond the editor history generation f
   const twice = restoreDocumentSnapshot(removed, old, 10);
   assert.equal(twice.schemaVersion === 2 && twice.paintings[0].generation, 11);
 });
+
+test('unroutable overlapping connector remains visible with a warning in static exports', async () => {
+  const { diagramNode, diagramEdge } = await import('../src/shared/diagram-presets');
+  const { renderHtml } = await import('../src/shared/render');
+  const doc = fixture();
+  doc.boards[0].elements = [diagramNode('left', 'flowchart', 'process', 'Left'), diagramNode('right', 'flowchart', 'process', 'Right', 400), diagramNode('overlap', 'flowchart', 'process', 'Overlapping node', 100), diagramEdge('connection', 'left', 'right', 'Still connected')];
+  const svg = renderSvg(doc), html = renderHtml(doc);
+  for (const output of [svg, html]) { assert.match(output, /data-route-warning="true"/); assert.match(output, /Still connected/); assert.match(output, /No obstacle-free route/); }
+  assert.equal(doc.boards[0].elements[3].type, 'connector');
+});

@@ -1,3 +1,4 @@
+import { boardElementLocked } from './board-editing';
 import { assertPaintingTransition } from './painting-transition';
 import { z } from 'zod';
 import { boardSchema, boardElementSchema, creativeId } from './board-schema';
@@ -6,6 +7,7 @@ import { upgradeDocument } from './document-upgrade';
 import type { DesignDocument } from './schema';
 
 export const creativeOperationSchemas = [
+  z.object({ op: z.literal('paste-board-elements'), boardId: creativeId, elements: z.array(boardElementSchema).min(1).max(1000), mindMap: boardSchema.shape.mindMap }),
   z.object({ op: z.literal('add-board'), board: boardSchema }),
   z.object({ op: z.literal('upsert-board-elements'), boardId: creativeId, elements: z.array(boardElementSchema).min(1).max(1000) }),
   z.object({ op: z.literal('remove-board-elements'), boardId: creativeId, elementIds: z.array(creativeId).min(1).max(1000) }),
@@ -15,7 +17,7 @@ export const creativeOperationSchemas = [
 const creativeOperationSchema = z.discriminatedUnion('op', creativeOperationSchemas);
 export type CreativeOperation = z.infer<typeof creativeOperationSchema>;
 export function isCreativeOperation(action: { op: string }): action is CreativeOperation {
-  return ['add-board', 'upsert-board-elements', 'remove-board-elements', 'add-painting', 'replace-painting'].includes(action.op);
+  return ['paste-board-elements', 'add-board', 'upsert-board-elements', 'remove-board-elements', 'add-painting', 'replace-painting'].includes(action.op);
 }
 export function applyCreativeOperation(document: DesignDocument, action: CreativeOperation): DesignDocument {
   const doc = upgradeDocument(document);
@@ -36,11 +38,16 @@ export function applyCreativeOperation(document: DesignDocument, action: Creativ
   } else {
     const board = doc.boards.find(b => b.id === action.boardId);
     if (!board) throw new Error('Unknown board');
-    if (action.op === 'upsert-board-elements') {
+    if (action.op === 'paste-board-elements') {
+      if (action.elements.some(e => board.elements.some(old => old.id === e.id))) throw new Error('Pasted element IDs already exist');
+      board.elements.push(...structuredClone(action.elements));
+      if (action.mindMap?.length) board.mindMap = [...board.mindMap ?? [], ...structuredClone(action.mindMap)];
+    } else if (action.op === 'upsert-board-elements') {
       if (new Set(action.elements.map(e => e.id)).size !== action.elements.length) throw new Error('Duplicate element in operation');
       for (const element of action.elements) {
         const index = board.elements.findIndex(e => e.id === element.id);
         if (index < 0) board.elements.push(structuredClone(element)); else {
+          if (board.elements[index].parentId && boardElementLocked(board, board.elements.find(e => e.id === board.elements[index].parentId)!)) throw new Error('Unlock the parent before editing');
           if (board.elements[index].locked && JSON.stringify(board.elements[index]) !== JSON.stringify({ ...element, locked: true })) throw new Error('Unlock the element before editing');
           board.elements[index] = structuredClone(element);
         }
@@ -53,7 +60,7 @@ export function applyCreativeOperation(document: DesignDocument, action: Creativ
         grew = false;
         for (const e of board.elements) if (!removed.has(e.id) && ((e.parentId && removed.has(e.parentId)) || (e.type === 'connector' && [e.start, e.end].some(p => p.binding && removed.has(p.binding.elementId))))) { removed.add(e.id); grew = true; }
       }
-      if (board.elements.some(e => removed.has(e.id) && e.locked)) throw new Error('Unlock affected elements before deleting');
+      if (board.elements.some(e => removed.has(e.id) && boardElementLocked(board, e))) throw new Error('Unlock affected elements before deleting');
       board.elements = board.elements.filter(e => !removed.has(e.id));
       board.mindMap = board.mindMap?.filter(e => !removed.has(e.elementId)).map(e => removed.has(e.parentId ?? '') ? { ...e, parentId: undefined } : e);
     }

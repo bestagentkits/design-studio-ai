@@ -7,7 +7,7 @@ export function googleFontFamily(value: string): string | null {
 }
 export function documentFontFamilies(doc: DesignDocument): string[] {
   const values = [doc.theme.fonts.heading, doc.theme.fonts.body, ...doc.pages.flatMap(page => page.nodes.map(node => String(node.style?.fontFamily ?? '')))];
-  if (doc.schemaVersion === 2) values.push(...doc.boards.flatMap(b => b.elements.flatMap(e => e.type === 'text' && e.visible ? [e.fontFamily] : [])));
+  if (doc.schemaVersion === 2) values.push(...doc.boards.flatMap(b => b.elements.flatMap(e => e.visible ? [...(e.type === 'text' ? [e.fontFamily] : []), ...(e.diagram ? [e.diagram.fontFamily] : []), ...(e.type === 'connector' ? [e.labelFontFamily] : [])] : [])));
   return [...new Set(values.map(googleFontFamily).filter((value): value is string => !!value))].sort();
 }
 export function googleFontsStylesheetUrl(families: readonly string[]): string | null {

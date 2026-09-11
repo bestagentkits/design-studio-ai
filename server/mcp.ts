@@ -1,3 +1,4 @@
+import { paintingCommandSchema } from '../src/shared/painting-command';
 import { documentSaveSchema } from '../src/shared/document-save-contract';
 import { motionInspectionSchema } from '../src/shared/motion-inspection';
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -60,7 +61,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.3.2" },
+    { name: "design-studio-ai", version: "0.4.0" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -192,6 +193,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         body,
       ),
   );
+  server.registerTool('paint_document', { description: 'Execute a real raster stroke or fill on an owned layer. Requires exact document revision and painting generation; reuse operationId only for the same request. Inspect paintingCommand in schema.', inputSchema: { projectId: z.string(), ...paintingCommandSchema.shape } }, async ({ projectId, ...body }) => callApi('POST', `/api/projects/${encodeURIComponent(projectId)}/paint`, body));
   server.registerTool(
     "patch_document",
     {

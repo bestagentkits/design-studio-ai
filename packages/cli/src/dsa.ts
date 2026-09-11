@@ -1,3 +1,4 @@
+import { paintingCommandSchema } from '../../../src/shared/painting-command';
 import { publicCreativeProjection } from '../../../src/shared/public-creative-projection';
 import { Command, CommanderError } from 'commander';
 import { readFile } from 'node:fs/promises';
@@ -14,7 +15,7 @@ import { registerDesignSystemCommands } from './design-system-commands';
 import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
-  .version('0.3.2').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
+  .version('0.4.0').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
   .option('--api-key <token>', 'Stateless API token (prefer DESIGN_STUDIO_API_KEY to avoid shell history)')
   .option('--timeout <milliseconds>', 'Request timeout', '180000').option('--json', 'JSON output (default)')
   .showHelpAfterError(false).exitOverride();
@@ -69,6 +70,7 @@ blockGroup.command('list').action(wrap(() => ({ blocks: blocks.map(({ nodes, ...
 blockGroup.command('get <id>').option('--offset <pixels>', 'Vertical offset', '0').action(wrap((id, options) => { selection(blocks, id); return { nodes: createBlock(id, nonnegativeNumber(options.offset)) }; }));
 
 const projects = program.command('projects').description('Manage persisted projects');
+projects.command('paint <id>').description('Execute a revision-guarded raster stroke/fill from JSON; operationId enables exact retries').requiredOption('--file <path>', 'Painting command JSON or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/paint`, 'POST', paintingCommandSchema.parse(await inputJson(options.file)))));
 const briefs = program.command('brief').description('Persist an interview and explicitly approve its design scope');
 briefs.command('get <id>').action(wrap(id => client().json(`${projectPath(id)}/brief`)));
 briefs.command('put <id>').description('Create/update from JSON: request, interview, answers, scope; every write invalidates approval').requiredOption('--revision <number>', 'Expected brief revision; 0 creates').requiredOption('--file <path>', 'Brief update JSON or - for stdin').action(wrap(async (id, options) => {

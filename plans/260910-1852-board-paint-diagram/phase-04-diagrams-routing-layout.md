@@ -1,8 +1,10 @@
 # Phase 04 — Four diagram families, connectors and layout
 
-Status: pending. Priority: P1. Provisional effort: 7–11 engineering days.
+Status: in progress. Priority: P1. Provisional effort: 7–11 engineering days.
 Dependencies: Phase 03 Board geometry/history and shared operations.
 Context: [architecture](architecture.md), [acceptance](acceptance-matrix.md), [source map](reports/intake-and-source-map.md), [plan](plan.md). Architecture and acceptance override research alternatives.
+
+Current delivery update: All four semantic diagram families and layout/routing tools are implemented; see [delivery](reports/diagram-board-delivery.md). Browser save/reopen acceptance is being rerun.
 
 ## Requirements and design
 
@@ -42,16 +44,18 @@ No deletions planned. Shared owners are serial integration points; another phase
 
 ## Implementation TODO
 
-- [ ] Define semantic roles and endpoint/port/anchor/label ownership on canonical Board primitives; expose create/bind/reconnect/detach/inspect/layout operations via shared services.
+Reconciled 2026-09-11 against [current source and local evidence](reports/implementation-checklist-reconciliation.md). Checked rows record implemented behavior, not full device, cross-surface, format or release acceptance. Unchecked compound rows retain their unverified requirements.
+
+- [x] Define semantic roles and endpoint/port/anchor/label ownership on canonical Board primitives; expose create/bind/reconnect/detach/inspect/layout operations via shared services.
 - [ ] Extend font collection to reachable Board text/connector labels and bundled licensed engine fonts. Wait for font readiness before label bounds/layout; test a non-theme font used only by a connector label and match browser/export wrapping.
-- [ ] Resolve transformed anchors correctly through groups/rotation; implement straight, curved and obstacle-aware orthogonal routes with editable bends/arrowheads/labels and bounded fallback behavior.
-- [ ] Make endpoint deletion cascade its incident connectors in the same undoable transaction by default; explicit detach retains a free endpoint. Duplicate remaps internal bindings; document explicit external-edge policy.
-- [ ] Implement flowchart start/end/process/decision presets, Yes/No branch editing, loops and selected-region layout.
-- [ ] Implement architecture service/database/actor roles, ports/system boundaries, cross-boundary edges and readable labels through group edits.
-- [ ] Implement user-flow screen nodes/thumbnails, action labels/decisions and stable connections as screens move or change.
-- [ ] Implement keyboard/touch sibling/child insertion and tree/radial mind-map layouts; collapse hides descendants without deleting them, and expand restores their semantic data.
+- [x] Resolve transformed anchors correctly through groups/rotation; implement straight, curved and obstacle-aware orthogonal routes with editable bends/arrowheads/labels and bounded fallback behavior.
+- [x] Make endpoint deletion cascade its incident connectors in the same undoable transaction by default; explicit detach retains a free endpoint. Duplicate remaps internal bindings; document explicit external-edge policy.
+- [x] Implement flowchart start/end/process/decision presets, Yes/No branch editing, loops and selected-region layout.
+- [x] Implement architecture service/database/actor roles, ports/system boundaries, cross-boundary edges and readable labels through group edits.
+- [x] Implement user-flow screen nodes/thumbnails, action labels/decisions and stable connections as screens move or change.
+- [x] Implement keyboard/touch sibling/child insertion and tree/radial mind-map layouts; collapse hides descendants without deleting them, and expand restores their semantic data.
 - [ ] Evaluate pinned Dagre release against its actual license/API; combine it with bounded native routing/tree/radial strategies. Preserve pinned nodes, manual bends and selection boundaries unless explicitly overridden.
-- [ ] Tag asynchronous layout by source revision and selection generation; discard stale results. Apply accepted layout in one CAS-checked transaction/history entry and preserve locks.
+- [x] Tag asynchronous layout by source revision and selection generation; discard stale results. Apply accepted layout in one CAS-checked transaction/history entry and preserve locks.
 - [ ] Add complete templates, public examples and agent workflows for every family, including failure/recovery examples; verify current-slice renderer output before exposing diagram controls.
 
 ## Slice parity and documentation
@@ -71,11 +75,11 @@ Before this slice is complete, expose its validated operations and capability/er
 
 Update public content sources, then run `npm run build` to regenerate documentation/llms output. Never hand-edit generated `dist/` or renderer/viewer bundles. Unsupported actions must report a precise capability/version error rather than silently flatten or ignore content.
 
-## Future validation — not run
+## Validation coverage and remaining acceptance
 
 Create table-driven topology/transform cases for all four families, cyclic graph versus invalid mind-map cycle, mixed-content bindings, obstacle routing, self-loop labels, cascade/detach, pin/manual-bend preservation and stale worker results. Browser tests must create/edit/layout/save/reopen each family and exercise keyboard/touch mind-map entry.
 
-Future commands: `npx tsx --test tests/diagrams.test.ts tests/document.test.ts tests/collaboration.test.ts`; `npm run build:cli`; `npx tsx --test tests/agent-capability-parity.test.ts tests/cli.test.ts`; `npm run typecheck`; `npm run build`; `npm run test:e2e -- tests/diagrams-ui.spec.ts --project=desktop`; repeat `--project=mobile`, and explicit Firefox/WebKit projects under `STUDIO_CROSS_BROWSER=1`. Inspect actual SVG connector paths/labels after building renderer.
+Relevant commands (individual execution evidence is linked above): `npx tsx --test tests/diagrams.test.ts tests/document.test.ts tests/collaboration.test.ts`; `npm run build:cli`; `npx tsx --test tests/agent-capability-parity.test.ts tests/cli.test.ts`; `npm run typecheck`; `npm run build`; `npm run test:e2e -- tests/diagrams-ui.spec.ts --project=desktop`; repeat `--project=mobile`, and explicit Firefox/WebKit projects under `STUDIO_CROSS_BROWSER=1`. Inspect actual SVG connector paths/labels after building renderer.
 
 ## Success criteria
 
@@ -87,4 +91,4 @@ DAG layout alone cannot satisfy ports, cycles, obstacles or radial trees. Keep r
 
 ## Unresolved evidence / next step
 
-Refresh the source baseline and predecessor evidence before implementation. Record any failed or unavailable check; do not infer approval from silence, rerun stale writes with a guessed revision, or remove requested scope. Advance only when the stated dependencies and acceptance are met.
+Complete the remaining acceptance against the current source and linked evidence. Record any failed or unavailable check; do not infer approval from silence, rerun stale writes with a guessed revision, or remove requested scope. Advance only when the stated dependencies and acceptance are met.

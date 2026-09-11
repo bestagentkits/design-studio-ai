@@ -22,6 +22,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `schema [--operations]` | JSON Schema from the shared validators; semantic checks still run on writes |
 | `catalog`, `themes list/get`, `templates list/get/instantiate`, `blocks list/get` | Bundled design resources; instantiated IDs are unique |
 | `projects list/get/create/rename/delete/clone` | Persisted project management; clone copies owned asset bytes |
+| `projects paint ID --file command.json` | Server-rendered stroke/fill using observed revision, painting generation and exact retry ID |
 | `projects document get/put/patch` | Canonical document reads and atomic expected-revision writes |
 | `projects document merge/changes` | Three-way merge using the exact earlier base, and revision polling |
 | `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
@@ -101,7 +102,7 @@ Build the complete installable skill archive with `npm run pack:skill`. The [pac
 
 ## Creative documents
 
-Clients must read both v1 and v2 and preserve typed boards and paintings. Shared operations cover board elements and generation-checked painting manifests; actual paint requires owned PNG pixels, never fabricated hashes. See [creative tools](creative-tools.md) for idempotent painting-save retries, publication privacy and current UI limits. Discover live schemas before editing; a v1-only client cannot save an upgraded v2 project.
+Clients must read both v1 and v2 and preserve typed boards, paintings, semantic diagram metadata and immutable assets. Discover shared board transforms, paste, diagram and generation-checked layer/group operations through the live operation schema. Use `POST /api/projects/{id}/paint`, MCP `paint_document`, or `dsa projects paint PROJECT_ID --file command.json` for server-rendered strokes/fills; `paintingCommand` in `/api/schema` owns the request shape, and generated WebMCP exposes the same endpoint. Carry the observed document revision, painting generation and operation ID. Retry the identical command under that ID after uncertain delivery; never fabricate pixel hashes or retry with a guessed revision. See [creative tools](creative-tools.md) for recovery, Elements/GIF timing, publication privacy and device limits. A v1-only client cannot save an upgraded v2 project.
 
 ## Catalog and editor parity
 

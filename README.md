@@ -77,10 +77,10 @@ Set `ENCRYPTION_KEY` and the public `APP_URL` in your environment or a local Com
 
 Create an API token in Settings and inject `DESIGN_STUDIO_API_KEY` into the agent environment. `DESIGN_STUDIO_URL` defaults to the live studio. Network MCP is at `https://studio.agentkit.best/mcp`, with OAuth discovery on the same origin.
 
-Install the published [v0.3.2 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.3.2) CLI tarball:
+Install the published [v0.4.0 release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.0) CLI tarball:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.2/bestagentkits-design-studio-ai-0.3.2.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/bestagentkits-design-studio-ai-0.4.0.tgz
 dsa --help
 ```
 
@@ -90,13 +90,13 @@ The package is **not published to the npm registry**. To build and install from 
 cd packages/cli
 npm pack
 cd ../..
-npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.3.2.tgz
+npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.0.tgz
 dsa --help
 dsa schema
 dsa projects list
 ```
 
-The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.3.2/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
+The release also includes the [installable agent skill ZIP](https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/design-studio-ai-skill.zip). [Agent documentation](docs/agents.md) covers revisions, secret handling, exports, and skill installation.
 
 ## Verify and contribute
 

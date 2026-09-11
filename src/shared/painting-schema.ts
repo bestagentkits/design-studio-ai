@@ -17,7 +17,7 @@ export const paintingSchema = z.object({
   id: creativeId, name: z.string().max(200), width: z.number().int().min(1).max(4096), height: z.number().int().min(1).max(4096),
   generation, colorSpace: z.literal('srgb'), algorithm: z.literal('cpu-srgb-grain-v1'), tileSize: z.literal(512),
   layers: z.array(paintLayerSchema).min(1).max(24),
-  groups: z.array(z.object({ id: creativeId, name: z.string().max(200), visible: z.boolean(), opacity: z.number().min(0).max(1) })).max(24).default([]),
+  groups: z.array(z.object({ id: creativeId, locked: z.boolean().optional(), name: z.string().max(200), visible: z.boolean(), opacity: z.number().min(0).max(1) })).max(24).default([]),
   composite: z.object({ assetId: creativeId, generation, sourceHash: z.string().regex(/^[a-f0-9]{64}$/) }).optional(),
 });
 export type Painting = z.infer<typeof paintingSchema>;

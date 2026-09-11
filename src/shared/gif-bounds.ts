@@ -1,5 +1,5 @@
-export type GifLimits = { maxSourceBytes: number; maxCanvasPixels: number; maxFrames: number; maxPatchPixels: number; maxWorkingBytes: number; maxBlocks: number; maxSubBlocks: number };
-export const GIF_LIMITS: GifLimits = { maxSourceBytes: 20 * 1024 ** 2, maxCanvasPixels: 4096 ** 2, maxFrames: 300, maxPatchPixels: 32 * 1024 ** 2, maxWorkingBytes: 256 * 1024 ** 2, maxBlocks: 2048, maxSubBlocks: 65536 };
+export type GifLimits = { maxSourceBytes: number; maxCanvasPixels: number; maxFrames: number; maxPatchPixels: number; maxWorkingBytes: number; maxBlocks: number; maxSubBlocks: number; maxDurationMs: number };
+export const GIF_LIMITS: GifLimits = { maxSourceBytes: 20 * 1024 ** 2, maxCanvasPixels: 4096 ** 2, maxFrames: 300, maxPatchPixels: 32 * 1024 ** 2, maxWorkingBytes: 256 * 1024 ** 2, maxBlocks: 2048, maxSubBlocks: 65536, maxDurationMs: 600000 };
 export type GifFrameHeader = { left: number; top: number; width: number; height: number; delayMs: number; disposal: number; transparent: boolean; transparentIndex: number };
 export type GifHeader = { width: number; height: number; frames: GifFrameHeader[]; repeat: number | null; background: number[] };
 
@@ -27,7 +27,7 @@ export function inspectGif(bytes: Uint8Array, limits: GifLimits = GIF_LIMITS): G
   const palette = packed & 128 ? take(3 * (1 << ((packed & 7) + 1))) : null;
   const background = palette && backgroundIndex * 3 + 2 < palette.length ? [...palette.subarray(backgroundIndex * 3, backgroundIndex * 3 + 3), 255] : [0, 0, 0, 0];
   const frames: GifFrameHeader[] = [];
-  let repeat: number | null = null, delayMs = 100, disposal = 0, transparent = false, transparentIndex = 0, pixels = 0, largest = 0;
+  let repeat: number | null = null, delayMs = 100, disposal = 0, transparent = false, transparentIndex = 0, pixels = 0, largest = 0, duration = 0;
   while (p < bytes.length) {
     if (++blockCount > limits.maxBlocks) throw new Error('GIF block count budget exceeded');
     const marker = byte();
@@ -66,6 +66,8 @@ export function inspectGif(bytes: Uint8Array, limits: GifLimits = GIF_LIMITS): G
     if (minCodeSize < 2 || minCodeSize > 8) throw new Error('Invalid GIF LZW code size');
     validateGifLzw(blocks(), minCodeSize, w * h);
     if (pixels * 4 + largest * 12 + width * height * 8 + bytes.length * 4 + subBlockCount * 128 + blockCount * 256 > limits.maxWorkingBytes) throw new Error('GIF frame/decode memory budget exceeded');
+    duration += delayMs;
+    if (duration > limits.maxDurationMs) throw new Error('GIF duration budget exceeded');
     frames.push({ left, top, width: w, height: h, delayMs, disposal, transparent, transparentIndex });
     delayMs = 100; disposal = 0; transparent = false; transparentIndex = 0;
   }

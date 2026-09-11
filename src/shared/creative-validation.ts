@@ -1,3 +1,4 @@
+import { diagramValidationErrors } from './diagram-validation';
 import type { z } from 'zod';
 import type { Board } from './board-schema';
 import type { Painting } from './painting-schema';
@@ -24,6 +25,7 @@ export function validateCreativeDocument(doc: {
   }
   let count = doc.pages.reduce((sum, p) => sum + p.nodes.length, 0), points = 0;
   for (const board of doc.boards) {
+    for (const error of diagramValidationErrors(board)) issue(error);
     unique(board.id); count += board.elements.length;
     const elements = new Map(board.elements.map(e => [e.id, e]));
     for (const element of board.elements) {
@@ -36,6 +38,7 @@ export function validateCreativeDocument(doc: {
         if (!target || !['group', 'frame'].includes(target.type) || seen.has(parent)) { issue('Invalid or cyclic board group parent'); break; }
         seen.add(parent); parent = target.parentId;
       }
+      if (element.diagram?.thumbnailAssetId) asset(element.diagram.thumbnailAssetId);
       if ('assetId' in element) asset(element.assetId);
       if (element.type === 'gif') { asset(element.posterAssetId); if (assets.get(element.assetId)?.mimeType !== 'image/gif') issue('GIF elements require a GIF asset'); }
       if (element.type === 'painting' && !paintings.has(element.paintingId)) issue('Board references an unknown painting');

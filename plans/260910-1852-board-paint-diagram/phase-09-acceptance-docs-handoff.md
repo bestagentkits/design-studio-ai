@@ -1,8 +1,10 @@
 # Phase 09 — Acceptance, documentation and release handoff
 
-Status: pending. Priority: P1. Provisional effort: 5–7 engineering days.
+Status: in progress. Priority: P1. Provisional effort: 5–7 engineering days.
 Dependencies: Phases 07 and 08 complete; every feature slice has parity/docs and focused evidence.
 Context: [architecture](architecture.md), [acceptance](acceptance-matrix.md), [source map](reports/intake-and-source-map.md), [plan](plan.md). Architecture and acceptance override research alternatives.
+
+Current delivery update: Owning human/agent/CLI docs and public documentation source updated for v0.4.0. Broad tests, generated-output rebuild, independent review, release and live deployment remain separately tracked; no blanket completion claim.
 
 ## Requirements and design
 

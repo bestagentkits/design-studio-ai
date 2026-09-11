@@ -1,3 +1,4 @@
+import { encodePaintPng } from '../src/shared/paint-png';
 import { builtStaticAssets } from './built-static-assets';
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -185,7 +186,7 @@ test("real SQLite auth, ownership, CAS, private assets, snapshots, BYOK, MCP and
         data.set(
           "file",
           new File(
-            [Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10])],
+            [new Uint8Array(await encodePaintPng(1, 1, new Uint8Array([40, 80, 120, 255])))],
             "test.png",
             { type: "image/png" },
           ),

@@ -622,6 +622,7 @@ export function App() {
     <>
       {project ? (
         <Editor
+          accountId={user?.id}
           key={project.id}
           initial={project}
           initialBriefRequest={openingBriefRequest}
@@ -945,7 +946,7 @@ export function App() {
                       </div>
                       <button className="text-button" onClick={() => begin()}>
                         <Plus size={17} /> New project
-                      </button>
+                      </button><button className="button-secondary" onClick={() => begin('wireframe', 'creative-board')}>New Board</button>
                     </div>
                     <div className="project-controls">
                       <label className="search-box">

@@ -11,6 +11,7 @@ export function visitDocumentAssetIds(doc: DesignDocument, visit: (id: string) =
   }
   if (doc.schemaVersion !== 2) return;
   for (const board of doc.boards) for (const element of board.elements) {
+    if (element.diagram?.thumbnailAssetId) element.diagram.thumbnailAssetId = visit(element.diagram.thumbnailAssetId);
     if ('assetId' in element) element.assetId = visit(element.assetId);
     if (element.type === 'gif') element.posterAssetId = visit(element.posterAssetId);
   }

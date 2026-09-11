@@ -18,7 +18,8 @@ export const apiEndpoints = [
   { method: 'POST', path: '/api/projects', summary: 'Create a project', body: { name: 'My design', kind: 'web' } },
   { method: 'GET', path: '/api/projects/{id}', summary: 'Read a project', body: undefined },
   {method:'GET',path:'/api/projects/{id}/motion',summary:'Inspect character rigs, clips and sampled pose (characterId, nodeId, time query)',body:undefined},
-  { method: 'PUT', path: '/api/projects/{id}/document', summary: 'Save v1/v2 at the observed revision; painting saves support idempotent operationId', body: { expectedRevision: 1, document: {} } },
+  { method: 'POST', path: '/api/projects/{id}/paint', summary: 'Render an owned-layer stroke or fill; paintingCommand requires observed document revision, painting generation and an exact-retry operationId', body: { expectedRevision: 1, expectedGeneration: 0, operationId: 'unique-command-id', paintingId: 'painting', layerId: 'layer', action: { type: 'stroke', preset: 'bristle', size: 16, flow: .8, color: '#336699', points: [{ x: 20, y: 20, pressure: .5 }] } } },
+  { method: 'PUT', path: '/api/projects/{id}/document', summary: 'Save shared v1/v2 boards, diagrams, Elements and painting layers at the observed revision; painting saves accept exact-retry operationId', body: { expectedRevision: 1, document: {} } },
   { method: 'POST', path: '/api/projects/{id}/merge', summary: 'Merge nonconflicting human and agent edits', body: { baseRevision: 1, base: {}, document: {} } },
   { method: 'GET', path: '/api/projects/{id}/changes', summary: 'Read current revision and changes', body: undefined },
   { method: 'GET', path: '/api/projects/{id}/checks', summary: 'Inspect design', body: undefined },
@@ -71,6 +72,6 @@ export function openApiDocument(schemas: Record<string, unknown>) {
       responses: { '2XX': { description: 'Success; exports return file bytes with Content-Type and Content-Disposition' }, '400': { description: 'Invalid request' }, '401': { description: 'Authentication required' }, '403': { description: 'Insufficient scope' }, '404': { description: 'Resource not found' }, '409': { description: 'Revision or merge conflict' } },
     };
   }
-  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.3.2' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
+  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.4.0' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }, schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => /^[\w.-]+$/.test(name))) }, paths };
 }
