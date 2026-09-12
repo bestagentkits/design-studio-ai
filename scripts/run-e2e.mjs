@@ -37,7 +37,13 @@ if (!process.env.STUDIO_E2E_SPEC_ISOLATED) {
 }
 const port = Number(process.env.E2E_PORT || 8791);
 const origin = `http://127.0.0.1:${port}`;
-await new Promise((accept, reject) => { const probe = net.createServer(); probe.once('error', reject); probe.listen(port, '127.0.0.1', () => probe.close(accept)); });
+await new Promise((accept, reject) => {
+  const probe = net.createServer();
+  probe.once('error', () => reject(new Error(
+    `E2E port ${port} is already in use. Another E2E run is probably in progress, or a killed run leaked its server/node.ts process. Find the owner with: netstat -ano | findstr :${port}`,
+  )));
+  probe.listen(port, '127.0.0.1', () => probe.close(accept));
+});
 const directory = await mkdtemp(join(tmpdir(), 'studio-e2e-'));
 // The isolated test server uses this reserved origin for settings persistence only.
 const testProviderOrigins = 'https://browser-provider.example';
