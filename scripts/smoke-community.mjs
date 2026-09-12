@@ -9,6 +9,7 @@ const origin=process.env.COMMUNITY_SMOKE_ORIGIN??'https://studio.agentkit.best';
 const account=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API_TOKEN;
 assert.ok(account&&token,'Cloudflare credentials are required for isolated verification cleanup.');
 const config=JSON.parse(await readFile('wrangler.jsonc','utf8')),database=config.d1_databases[0].database_id;
+assert.equal(origin,config.vars.APP_URL,'Verification origin must match this deployment and its cleanup database.');
 const run=randomUUID(),users=[],projects=[];let listingId;
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const db=async(sql,params=[])=>{
