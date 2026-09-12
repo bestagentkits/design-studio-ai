@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { publicMetadata, stripPublicMetadata, type PublicMetadata } from '../src/shared/public-metadata';
 import type { Env } from './types';
 import { ApiError, origin } from './security';
 import { communityEnabled, COMMUNITY_LIVE } from './community-access';
@@ -56,8 +57,9 @@ async function communityPage(c:import('hono').Context<Env>) {
   let shell=response?.ok?await response.text():'<!doctype html><html><head><title></title></head><body><div id="root"></div></body></html>';
   const start=shell.indexOf('<div id="root">'),end=shell.lastIndexOf('</div>');
   if(start>=0&&end>=start)shell=shell.slice(0,start)+`<div id="root"><main class="community-shell"><nav><a href="/">My projects</a> · <a href="/community">Community</a> · <a href="/docs/community">How sharing works</a></nav>${content}</main></div>`+shell.slice(end+6);
-  shell=shell.replace(/<title>[\s\S]*?<\/title>/,'').replace(/<meta\b[^>]*(?:name="(?:description|robots)"|property="og:[^"]*")[^>]*>/gi,'').replace(/<link\b[^>]*rel="canonical"[^>]*>/gi,'').replace(/<script\b[^>]*type="application\/ld\+json"[^>]*>[\s\S]*?<\/script>/gi,'');
-  const canonical=base+path;
-  shell=shell.replace('</head>',`<title>${escape(title)}</title><meta name="description" content="${escape(description)}"><meta name="robots" content="${indexable?'index,follow':'noindex,follow'}"><link rel="canonical" href="${escape(canonical)}"><meta property="og:title" content="${escape(title)}"><meta property="og:description" content="${escape(description)}"><meta property="og:url" content="${escape(canonical)}">${cover?`<meta property="og:image" content="${escape(cover)}">`:''}</head>`);
+  shell=stripPublicMetadata(shell);
+  const type: PublicMetadata['type'] = path.startsWith('/community/designs/') ? 'ItemPage' : path.startsWith('/community/creators/') ? 'ProfilePage' : 'CollectionPage';
+  const breadcrumbs = [{ name: 'Home', path: '/' }, { name: 'Community', path: '/community' }, ...(path === '/community' ? [] : [{ name: title, path }])];
+  shell=shell.replace('</head>', publicMetadata({ origin: base, path, title, description, type, indexable, image: cover, imageAlt: cover ? title : undefined, breadcrumbs }) + '</head>');
   return c.html(shell,status,{'Cache-Control':'no-store'});
 }
