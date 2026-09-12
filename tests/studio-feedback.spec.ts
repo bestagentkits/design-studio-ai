@@ -22,6 +22,14 @@ test('main navigation keeps its order on the workspace, guide and documentation'
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   }
 });
+test('a failed configuration request does not hide the enabled Community link', async ({ page }) => {
+  let configRequests = 0;
+  // The workspace reads /api/config from more than one caller; block the initial requests so only a retry can reveal the link.
+  await page.route('**/api/config', route => { configRequests += 1; return configRequests <= 2 ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : route.continue(); });
+  await page.goto('/');
+  await expect(page.getByRole('navigation', { name: 'Main navigation', exact: true }).getByRole('link', { name: 'Community', exact: true })).toBeVisible();
+  expect(configRequests).toBeGreaterThan(2);
+});
 test('project, editor tabs, preview and component parameters survive navigation', async ({ page, baseURL }) => {
   const doc = createDocument('web', 'Feedback component'); doc.theme.fonts = { heading: 'Arial', body: 'Arial' };
   const response = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { kind: doc.kind, name: doc.name, document: doc } });
