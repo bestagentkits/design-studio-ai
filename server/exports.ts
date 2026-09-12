@@ -1,4 +1,5 @@
 import { publicCreativeProjection } from '../src/shared/public-creative-projection';
+import type { InspectionRenderOptions } from '../src/shared/visual-inspection';
 
 import {exportOptionsSchema as optionsSchema} from '../src/shared/export-contract';
 import { createMotionArchive } from '../src/shared/motion-export';
@@ -66,7 +67,7 @@ export async function embeddedDocumentFonts(doc: DesignDocument) {
 exportRoutes.post('/:id/export', async c => renderProjectExport(c, c.req.param('id'), await c.req.json()));
 
 export type SnapshotAssetResolver = (url: string) => Promise<{bytes: Uint8Array; mimeType: string}>;
-export async function renderProjectExport(c: Context<Env>, projectId: string, input: unknown, thumbnail = false, snapshot?: Awaited<ReturnType<typeof projectRow>>) {
+export async function renderProjectExport(c: Context<Env>, projectId: string, input: unknown, thumbnail = false, snapshot?: Awaited<ReturnType<typeof projectRow>>, inspection?: InspectionRenderOptions) {
   return withSpan(c, {kind:'export',action:thumbnail?'thumbnail.render':'export.render'}, async span => {
     const owned = await projectRow(c, projectId), row = snapshot ?? owned, options = optionsSchema.parse(input);
     if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
@@ -80,12 +81,12 @@ export async function renderProjectExport(c: Context<Env>, projectId: string, in
       const object = await c.env.ASSETS_BUCKET.get(asset.storage_key);
       if (!object) fail(400, 'missing_asset', 'An asset could not be loaded.');
       return {bytes:new Uint8Array(await object.arrayBuffer()),mimeType:asset.mime_type};
-    }, {thumbnail, onBytes: outputBytes => span.set({outputBytes}), beforeRender: () => rateLimit(c, `${thumbnail?'thumbnail':'export'}:${owner(c)}`, thumbnail?60:20)});
+    }, {thumbnail, inspection, onBytes: outputBytes => span.set({outputBytes}), beforeRender: () => rateLimit(c, `${thumbnail?'thumbnail':'export'}:${owner(c)}`, thumbnail?60:20)});
   });
 }
 
 /** Render only a document and asset resolver already authorized by the calling service. */
-export async function renderSnapshotExport(bindings: Bindings, name: string, document: DesignDocument, input: unknown, resolveAsset: SnapshotAssetResolver, hooks: {thumbnail?:boolean;thumbnailSelection?:{pageIndex:number;time:number;focalX:number;focalY:number};onBytes?:(bytes:number)=>void;beforeRender?:()=>Promise<void>} = {}) {
+export async function renderSnapshotExport(bindings: Bindings, name: string, document: DesignDocument, input: unknown, resolveAsset: SnapshotAssetResolver, hooks: {thumbnail?:boolean;inspection?:InspectionRenderOptions;thumbnailSelection?:{pageIndex:number;time:number;focalX:number;focalY:number};onBytes?:(bytes:number)=>void;beforeRender?:()=>Promise<void>} = {}) {
   const options=optionsSchema.parse(input), thumbnail=hooks.thumbnail ?? false;
   let doc=documentSchema.parse(structuredClone(document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
@@ -96,7 +97,7 @@ export async function renderSnapshotExport(bindings: Bindings, name: string, doc
   const headers = { 'Content-Type': mimeTypes[options.format], 'Content-Disposition': `attachment; filename="${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}"`, 'Cache-Control': 'private,no-store', 'X-Content-Type-Options': 'nosniff' };
   if (options.format === 'json') { const output = JSON.stringify(doc, null, 2); hooks.onBytes?.(new TextEncoder().encode(output).length); return new Response(output, { headers }); }
   if (!['html', 'svg', 'react'].includes(options.format)) {
-    const selectedPages = options.format === 'pdf' || options.format === 'pptx' ? doc.pages : [doc.pages[options.pageIndex]];
+    const selectedPages = hooks.inspection ? hooks.inspection.pageIndices.map(index => doc.pages[index]) : options.format === 'pdf' || options.format === 'pptx' ? doc.pages : [doc.pages[options.pageIndex]];
     const renderNodes = selectedPages.flatMap(page => page.nodes.filter(node => node.visible !== false));
     const totalPixels = selectedPages.reduce((sum, page) => sum + page.width * page.height, 0) + renderNodes.filter(node => node.type === 'model3d').reduce((sum, node) => sum + node.width * node.height, 0);
     if (renderNodes.some(node => node.width * node.height > 16777216) || totalPixels > 67108864) fail(413, 'render_budget_exceeded', 'Reduce page or object dimensions; a render may contain at most 64 megapixels in total and 16 megapixels per object.');
@@ -161,7 +162,17 @@ export async function renderSnapshotExport(bindings: Bindings, name: string, doc
     if (!bundle?.ok) fail(503, 'renderer_not_built', 'Build the renderer bundle before exporting.');
     await page.addScriptTag({ content: await bundle.text() });
     let output: Uint8Array;
-    if (thumbnail) {
+    if (hooks.inspection) {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const encoded = await Promise.race([
+          page.evaluate(({ doc, inspection }: any) => (globalThis as any).studioRenderer.inspectVisual(doc, inspection), { doc, inspection: hooks.inspection }),
+          new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Visual inspection timed out')), 45000); }),
+        ]);
+        if (encoded.length > 12 * 1024 * 1024) fail(413, 'inspection_too_large', 'Reduce inspection dimensions or page count.');
+        output = Buffer.from(encoded, 'base64');
+      } finally { if (timeout) clearTimeout(timeout); }
+    } else if (thumbnail) {
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const encoded = await Promise.race([

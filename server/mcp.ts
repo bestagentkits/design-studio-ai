@@ -1,4 +1,5 @@
 import {operationJobSchema} from '../src/shared/operation-jobs';
+import { visualInspectionSchema, workspaceInspectionSchema, visualInspectionContent, type VisualInspectionResult } from '../src/shared/visual-inspection';
 import { sceneRequestSchema } from '../src/shared/scene-authoring-schema';
 import { paintingCommandSchema } from '../src/shared/painting-command';
 import { documentSaveSchema } from '../src/shared/document-save-contract';
@@ -64,7 +65,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
     );
   const server = new McpServer(
-    { name: "design-studio-ai", version: "0.4.0" },
+    { name: "design-studio-ai", version: "0.4.1" },
     {
       instructions:
         "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
@@ -427,6 +428,19 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
         `/api/projects/${encodeURIComponent(projectId)}/share`,
       ),
   );
+  const inspectApi = async (path: string, body: unknown) => {
+    const response = await app.request(`${origin(c)}${path}`, { method: 'POST', headers: { Authorization: c.req.header('Authorization')!, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }, telemetryEnv(c, toolSpan.getStore()));
+    if (!response.ok) return { isError: true, ...result(await response.json()) };
+    return visualInspectionContent(await response.json() as VisualInspectionResult);
+  };
+  server.registerTool('inspect_project', {
+    description: 'See real saved design pixels: a single page/view/slide or a paginated overview contact sheet. Returns image content plus IDs, revision, time and image bounds. Follow nextOffset to inspect all pages; use mode page with pageId for detail. No publishing or provider call.',
+    inputSchema: { projectId: z.string(), ...visualInspectionSchema.shape }, annotations: { readOnlyHint: true },
+  }, async ({ projectId, ...input }) => inspectApi(`/api/projects/${encodeURIComponent(projectId)}/inspect`, visualInspectionSchema.parse(input)));
+  server.registerTool('inspect_workspace', {
+    description: 'See private covers of your projects, ordered by project ID. Returns real PNG image content with each project ID/revision. Follow nextOffset for remaining projects; call inspect_project to see every page. Each cover shows the first saved page.',
+    inputSchema: workspaceInspectionSchema.shape, annotations: { readOnlyHint: true },
+  }, async input => inspectApi('/api/projects/inspect', workspaceInspectionSchema.parse(input)));
   server.registerTool('get_project_thumbnail', {
     description: 'Get the private persisted PNG cover for a saved revision. A cache miss renders once; 202 returns rendering status and retryAfterSeconds. No provider call.',
     inputSchema: { projectId: z.string(), revision: z.number().int().positive().optional() },

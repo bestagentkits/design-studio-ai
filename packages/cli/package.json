@@ -1,6 +1,6 @@
 {
   "name": "@bestagentkits/design-studio-ai",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Agent-first CLI for Design Studio AI",
   "license": "MIT",
   "type": "module",

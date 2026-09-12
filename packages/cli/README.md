@@ -14,13 +14,13 @@ npm pack
 cd ../..
 ```
 
-Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.0.tgz`, or install the published release directly:
+Install the generated tarball with `npm install -g ./packages/cli/bestagentkits-design-studio-ai-0.4.1.tgz`, or install the published release directly:
 
 ```sh
-npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.0/bestagentkits-design-studio-ai-0.4.0.tgz
+npm install -g https://github.com/bestagentkits/design-studio-ai/releases/download/v0.4.1/bestagentkits-design-studio-ai-0.4.1.tgz
 ```
 
-The [v0.4.0 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.0) includes CLI and skill archives. The package is not published to the npm registry.
+The [v0.4.1 GitHub release](https://github.com/bestagentkits/design-studio-ai/releases/tag/v0.4.1) includes CLI and skill archives. The package is not published to the npm registry.
 
 The reference below follows this checkout. A released archive may lack newer commands or formats; inspect its `--help` and build from source when the needed capability is absent.
 
@@ -48,6 +48,10 @@ Use `design-systems schema` to inspect reusable library definitions before creat
 `brief get/put/interview/approve` manages saved interactive questions, answers, and design scope. A first `brief put PROJECT_ID --revision 0 --file brief.json` requires a `request`; subsequent writes use the brief revision from `brief get`, independently of the document revision. Agents may supply their own `interview` questions and scope without a server provider key, or use `brief interview --provider NAME --revision N` with BYOK. Every change invalidates approval. `brief approve` requires explicit human approval of the current scope and complete required answers. An unapproved brief blocks provider design generation.
 
 `projects check PROJECT_ID` returns deterministic preflight findings with page/node IDs and suggestions for text fitting, estimated contrast, missing media, bounds and export limitations. It reads the saved revision, makes no changes, and does not certify accessibility or visual quality.
+
+Use `projects inspect PROJECT_ID --output pages.png` for a saved-project contact sheet, or add `--mode page --page 0 --revision N` for a revision-bound page PNG. `projects overview --output-dir review` renders your projects' first-page covers. Both print revision, page identity, image bounds, pagination, and local file paths as JSON without raw base64. Follow `nextOffset` using `--offset` until it is null. Workspace files are named `workspace-OFFSET-IMAGE_INDEX.png`; repeating that output replaces the file. No images are written on an API error; an empty workspace writes no files.
+
+Read each command's `--help` for limits and selection options. Open the resulting PNGs with an image viewer before claiming visual review. Images reflect saved content, require the configured browser renderer, and do not publish or invoke a provider. Save and verify browser changes first. The [visual inspection guide](../../docs/agents.md#visual-inspection) explains equivalent REST, MCP and WebMCP calls and frame/coverage limitations.
 
 Use `dsa observability summary`, `dsa observability events`, or `dsa observability trace TRACE_ID` for activity and provider usage. Read `dsa observability --help` and each subcommand's help for filters; use the returned `nextCursor` with `events --cursor` for pagination. The default scope is the authenticated owner. `--scope all` requires an explicitly configured operator using a session/API key on the server; OAuth cannot obtain global access, and `--actor-id` requires operator scope.
 

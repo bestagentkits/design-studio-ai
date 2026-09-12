@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
 import { communityEndpoints, type CommunityEndpoint } from './community-endpoints';
 export const apiEndpoints = [
+  { method: 'POST', path: '/api/projects/{id}/inspect', summary: 'See saved page/view/slide or paginated project contact sheet as PNG images with revision and page mapping; read-only', body: { mode: 'overview', offset: 0, limit: 6 } },
+  { method: 'POST', path: '/api/projects/inspect', summary: 'See paginated private workspace project covers as PNG images with project IDs and revisions; read-only', body: { offset: 0, limit: 6 } },
   ...(communityEndpoints as readonly CommunityEndpoint[]).map(endpoint=>({method:endpoint.method,path:`/api/community${endpoint.path}`,summary:endpoint.summary,body:endpoint.body||endpoint.upload?{}:undefined})),
   {method:'GET',path:'/api/projects/{id}/scene/animation',summary:'Inspect complete animation; required pageId and optional start, end, samples (2–61) query',body:undefined},
   {method:'POST',path:'/api/projects/{id}/operations',summary:'Start idempotent save/export job; reuse operationId and exact payload on uncertain response',body:{kind:'export',operationId:'unique-operation-id',input:{format:'glb',expectedRevision:1,pageIndex:0}}},
@@ -87,6 +89,6 @@ export function openApiDocument(schemas: Record<string, unknown>) {
     };
     if (path.endsWith('/thumbnail')) (paths[path][method.toLowerCase()] as any).responses = { '200': { description: 'Private cached PNG', content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } }, '202': { description: 'Rendering in progress; retry after 2 seconds' }, '400': { description: 'Invalid saved revision or unsupported media' }, '429': { description: 'Thumbnail render rate limit reached' }, '502': { description: 'Rendering failed' }, '401': { description: 'Authentication required' }, '404': { description: 'Project or retained revision unavailable' }, '409': { description: 'Revision changed during rendering' }, '503': { description: 'Render cooldown; retry later' } };
   }
-  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.4.0' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
+  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.4.1' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }, schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => /^[\w.-]+$/.test(name))) }, paths };
 }
