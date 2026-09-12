@@ -1,6 +1,6 @@
 import { screenParam, useScreenState, writeScreen } from './screen-state';
 import { ProjectThumbnail } from './project-thumbnail';
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ArrowDownUp,
@@ -243,7 +243,7 @@ export function App() {
     setTabState(next);
     setProject(null);
   }
-  useEffect(() => {
+  useLayoutEffect(() => {
     const restore = () => {
       const id = screenParam('project');
       if (project && id !== project.id && !window.dispatchEvent(new Event('studio:leave-project', { cancelable: true }))) {
