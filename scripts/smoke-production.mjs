@@ -1,11 +1,17 @@
+import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 const origin = process.env.STUDIO_SMOKE_URL || 'https://studio.agentkit.best';
+const productionDatabase = '920d59d1-d4e9-4e8b-b01b-9dbf45a180aa';
+const config = JSON.parse(await readFile('wrangler.jsonc', 'utf8'));
+const database = config.d1_databases.find(binding => binding.binding === 'DB').database_id;
+assert.equal(database, productionDatabase, 'Cleanup must target the D1 database this deployment publishes to.');
 const checks = [];
 let cookie, token, userId, projectId;
 const extraProjects = [];
 const expect = (condition, label) => { if (!condition) throw new Error(label); checks.push(label); console.log(`PASS ${label}`); };
 const request = (path, method = 'GET', body, useToken = false) => fetch(origin + path, { method, headers: { Origin: origin, ...(body ? { 'Content-Type': 'application/json' } : {}), ...(useToken && token ? { Authorization: `Bearer ${token}` } : cookie ? { Cookie: cookie } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
+let primaryError;
 try {
   const health = await request('/api/health'); expect(health.ok, 'Production API reachable over TLS');
   const registration = await request('/api/auth/register', 'POST', { email: `smoke-${randomUUID()}@studio-test.invalid`, password: randomUUID() + randomUUID(), name: 'Release verification' });
@@ -69,12 +75,19 @@ try {
     const publicPage = await fetch(url);
     expect(publicPage.ok && (await publicPage.text()).includes('id="studio-document"'), `Published ${kind} contains trusted interactive viewer`);
   }
+} catch (error) {
+  primaryError = error;
 } finally {
-  for (const extraId of extraProjects) await request(`/api/projects/${extraId}`, 'DELETE');
-  if (projectId) { const deleted = await request(`/api/projects/${projectId}`, 'DELETE'); console.log(deleted.ok ? 'CLEANED verification project' : 'Verification project cleanup needs attention'); }
+  const cleanupFailures = [];
+  for (const extraId of extraProjects) { const deleted = await request(`/api/projects/${extraId}`, 'DELETE'); if (!deleted.ok) cleanupFailures.push(new Error(`Extra verification project ${extraId} cleanup needs attention`)); }
+  if (projectId) { const deleted = await request(`/api/projects/${projectId}`, 'DELETE'); console.log(deleted.ok ? 'CLEANED verification project' : 'Verification project cleanup needs attention'); if (!deleted.ok) cleanupFailures.push(new Error('Verification project cleanup needs attention')); }
   if (userId && process.env.CLOUDFLARE_API_TOKEN && origin === 'https://studio.agentkit.best') {
-    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/920d59d1-d4e9-4e8b-b01b-9dbf45a180aa/query`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ sql: 'DELETE FROM users WHERE id = ?', params: [userId] }) });
-    console.log(response.ok ? 'CLEANED verification account and temporary credentials' : 'Verification account cleanup needs attention');
+    const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/d1/database/${database}/query`, { method: 'POST', headers: { Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ sql: 'DELETE FROM users WHERE id = ?', params: [userId] }) });
+    const cleaned = response.ok && (await response.json()).success;
+    console.log(cleaned ? 'CLEANED verification account and temporary credentials' : 'Verification account cleanup needs attention');
+    if (!cleaned) cleanupFailures.push(new Error('Verification account cleanup needs attention'));
   }
   await mkdir('.data/verification', { recursive: true }); await writeFile('.data/verification/production-checks.json', JSON.stringify({ origin, checkedAt: new Date().toISOString(), checks }, null, 2));
+  if (cleanupFailures.length > 0) throw new AggregateError(primaryError ? [primaryError, ...cleanupFailures] : cleanupFailures, 'Production smoke cleanup left resources behind; see .data/verification/production-checks.json.');
+  if (primaryError) throw primaryError;
 }
