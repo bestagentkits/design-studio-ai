@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { communityProfileGenerationSchema } from './community';
 import { communityPreflightSchema, communityPublishSchema, communityUnlistSchema, communityRemixSchema, communityProfileSchema, communityReportSchema, communityResolveSchema, communityCollectionSchema, communityQuerySchema } from './community';
 
 /** One operation inventory for REST discovery, MCP, WebMCP and the CLI. */
@@ -25,6 +26,7 @@ export const communityEndpoints = [
   { name:'impact', method:'GET', path:'/me/impact', summary:'Read server-confirmed creator impact and milestone badges' },
   { name:'profile', method:'GET', path:'/me/profile', summary:'Read your opt-in Community profile and revision' },
   { name:'set-profile', method:'PUT', path:'/me/profile', summary:'Create or update your public profile at its observed revision', body:communityProfileSchema },
+  { name:'generate-profile', method:'POST', path:'/me/profile/generate', summary:'Use your configured text provider to suggest a public display name, handle and bio. Incurs provider usage; sends only supplied fields/instructions, defaults to your first configured text connection, and never saves or publishes. Review before set-profile; handle availability is checked again when saving.', body:communityProfileGenerationSchema },
   { name:'save', method:'PUT', path:'/listings/{id}/bookmark', summary:'Idempotently save a live design to your private bookmarks' },
   { name:'unsave', method:'DELETE', path:'/listings/{id}/bookmark', summary:'Idempotently remove a private bookmark' },
   { name:'report', method:'POST', path:'/listings/{id}/reports', summary:'Report a pinned design version with a reason and exact-retry operation ID', body:communityReportSchema },
