@@ -22,8 +22,14 @@ The [shared contracts](../src/shared/community.ts) and [operation inventory](../
 
 Profiles opt in; bookmarks and impact management remain owner-scoped. Operators review version-pinned reports, record hide/restore/dismiss reasons, and curate reviewed listing versions. [Deployment](deployment.md#community-rollout) owns feature and admin configuration. ID grants and verified GitHub email pregrants are separate from observability administration; ordinary password registration does not prove an email grant. Moderation excludes OAuth credentials.
 
+The public-profile form offers **Generate with AI** for display name, handle and bio. It defaults to the first configured text connection, matching the brief editor, and lets the author select another connection. Optional writing instructions and the entered profile fields are sent to that provider; account identity and private projects are not added as context. Generation uses the saved model and may incur provider usage. Without a configured text provider, manual editing remains available with a Settings link.
+
+The [generation service](../server/community-profile-generation.ts) returns a validated suggestion without storing or publishing it. Review and apply the suggestion, then explicitly save the public profile. A suggestion cannot silently replace manual edits made while it was generated. Handles must be valid, non-reserved and available when suggested; the existing uniqueness and revision checks remain authoritative when saving. Provider failures or invalid/taken suggestions return actionable errors rather than fabricated fallback content.
+
 ## People and agents
 
 The public [Community guide](../src/app/community-documentation.tsx) is generated at `/docs/community`. REST, MCP `community_*`, WebMCP `studio_community_*`, and CLI `dsa community` share the operation inventory and validators. Use `community_capabilities`, `studio_community_capabilities`, `dsa community schema`, or `/api/schema` before composing writes. MCP byte results and MCP/WebMCP base64 imports cap at 12 MiB; larger files use CLI or the browser file picker. Download tools return actual bytes, while preview tools identify sandboxed preview resources.
+
+Profile drafting is `POST /api/community/me/profile/generate`, `community_generate_profile`, `studio_community_generate_profile`, or `dsa community generate-profile --file request.json`. The shared request schema accepts an optional provider, draft profile fields and writing instructions. A response contains `suggestion` and the selected `provider`. This incurs generation only; use the separate revision-checked `set-profile` operation after the person reviews the result.
 
 Release evidence and remaining verification work belong in the [implementation plan](../plans/2026-09-12-community-design-sharing/plan.md), not this behavior guide.

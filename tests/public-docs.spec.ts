@@ -144,6 +144,29 @@ test('docs search, endpoint keyboard controls, copy, theme, and history work on 
   expect(errors).toEqual([]);
 });
 
+test('documentation contents keep their open state when navigating sections', async ({ page }, info) => {
+  const narrow = info.project.name === 'mobile';
+  await page.goto('/docs');
+  const sidebar = page.locator('#docs-navigation');
+  if (narrow) {
+    await expect(sidebar).toBeHidden();
+    await page.getByRole('button', { name: 'Open documentation navigation' }).click();
+  }
+  await expect(sidebar).toBeVisible();
+  await sidebar.getByRole('link', { name: '3D characters' }).click();
+  await expect(page).toHaveURL(/\/docs\/3d$/);
+  await expect(page.getByRole('heading', { name: '3D characters', exact: true })).toBeVisible();
+  if (!narrow) {
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: '3D characters' })).toHaveAttribute('aria-current', 'page');
+    await page.getByRole('button', { name: 'Close documentation navigation' }).click();
+    await expect(sidebar).toBeHidden();
+    await page.locator('.docs-article-footer > div > a').last().click();
+    await expect(page).toHaveURL(/\/docs\/motion$/);
+  }
+  await expect(sidebar).toBeHidden();
+});
+
 test('guide starter briefs copy the selected content and preserve keyboard-accessible disclosure', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/guide');

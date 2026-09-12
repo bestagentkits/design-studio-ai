@@ -15,6 +15,10 @@ Use **Character authoring** in a 3D project's editor. It shares the [scene comma
 
 Topology-changing legacy operations reject skinned meshes, morph targets and vertex colors rather than silently discarding their data. UV atlas splitting copies weights and morph deltas to each duplicated vertex. Undo is available for local editor edits; source documents and live state are checked before asynchronous geometry results apply.
 
+## Materials, textures and lighting
+
+Object appearance lives in `scene.material` (color or theme token, metalness, roughness, wireframe, double-sided, an imported `textureAssetId`, one texture resolution and up to eight paint layers of 256 strokes each), while the page owns the saved camera, ambient intensity and its single directional light in `page.scene`. [Scene materials](../src/shared/scene-materials.ts) rasterize the paint layers into color, normal and roughness maps; a painted color map replaces the imported base-color map, painting needs UVs, and UV changes are refused while strokes exist. [Scene runtime](../src/shared/scene-runtime.ts) applies the same materials and lights to the editor, raster exports and GLB export — the directional light exports as `KHR_lights_punctual`, while ambient light has no glTF equivalent and cast shadows render only in the editor viewport. The [scene inspector](../src/app/scene-inspector.tsx) owns the controls and the Matte/Ceramic/Metal/Polished presets, and the [public 3D section](../src/app/scene-documentation.tsx) is the reader-facing contract.
+
 ## Agent surfaces
 
 - Discover `sceneCommands` through `/api/schema` or WebMCP `studio_capabilities`; `dsa scene schema` provides the local CLI contract.
