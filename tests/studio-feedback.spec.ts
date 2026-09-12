@@ -23,6 +23,8 @@ test('main navigation keeps its order on the workspace, guide and documentation'
   }
 });
 test('a failed configuration request does not hide the enabled Community link', async ({ page }) => {
+  const communityEnabled = (await (await page.request.get('/api/config')).json()).community?.enabled === true;
+  test.skip(!communityEnabled, 'Community is disabled on this deployment');
   let configRequests = 0;
   // The workspace reads /api/config from more than one caller; block the initial requests so only a retry can reveal the link.
   await page.route('**/api/config', route => { configRequests += 1; return configRequests <= 2 ? route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }) : route.continue(); });
