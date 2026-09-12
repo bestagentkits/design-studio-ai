@@ -169,14 +169,16 @@ function classify(files) {
   return { mode: 'selected', specs: [...selected].sort(), reasons };
 }
 
-// WEIGHTS are measured end-to-end seconds for one spec on both Playwright projects. Lane setup
-// (install, browser, artifact download) costs roughly a minute of runner time, so sharding only pays
-// off for a large selection: one lane below ~2.5 min of test time, two up to ~5.5 min, three above.
+// WEIGHTS are measured end-to-end seconds for one spec on both Playwright projects (local timing,
+// which matched the CI runner within a second per lane). Lane setup is measured at ~90s on CI
+// (PR #53 run 34691758865: lanes 4.85-5.23 min for 208-212s of specs, verify 2.1 min, build 0.4 min).
+// Going from n to n+1 lanes saves about T/(n(n+1)) of test time and costs that setup, so:
+// one lane up to 3 min of specs, two up to 9 min, three above that.
 function laneCount(specs, requested) {
   if (requested > 0) return requested;
   const seconds = specs.reduce((total, spec) => total + (WEIGHTS[spec.split('/').pop()] ?? 1), 0);
-  if (seconds <= 150) return 1;
-  if (seconds <= 330) return 2;
+  if (seconds <= 180) return 1;
+  if (seconds <= 540) return 2;
   return 3;
 }
 
