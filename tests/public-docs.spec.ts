@@ -63,7 +63,12 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions', 'visualInspection', 'workspaceInspection']);
+  expect(schema.visualInspection.properties.mode.enum).toEqual(['page', 'overview']);
+  expect(schema.visualInspection.properties.expectedRevision).toBeDefined();
+  expect(schema.workspaceInspection.properties.limit.maximum).toBe(12);
+  expect(apiMarkdown).toContain('## POST /api/projects/:id/inspect');
+  expect(apiMarkdown).toContain('## POST /api/projects/inspect');
   expect(schema.supportedDocumentVersions).toEqual([1, 2]);
   expect(schema.community['POST /api/community/listings'].required).toEqual(expect.arrayContaining(['digest','operationId','confirmPublic','acceptLicense','expectedProjectRevision']));
   expect(schema.paintingCommand.required).toEqual(expect.arrayContaining(['expectedRevision', 'expectedGeneration', 'operationId', 'paintingId', 'layerId', 'action']));

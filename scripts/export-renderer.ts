@@ -1,3 +1,4 @@
+import { inspectVisual } from './visual-inspection-renderer';
 import {sceneAngles} from './scene-angle-export';
 import { creativeGifDuration } from '../src/app/creative-elements-export';
 import { motionFrames } from './motion-frame-export';
@@ -193,4 +194,4 @@ async function scene(input: DesignDocument, pageIndex: number, format: 'glb' | '
   const bytes = result instanceof ArrayBuffer ? new Uint8Array(result) : new TextEncoder().encode(JSON.stringify(result));
   return await new Promise<string>((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(String(reader.result).split(',')[1]); reader.onerror = reject; reader.readAsDataURL(new Blob([bytes])); });
 }
-Object.assign(globalThis, { studioRenderer: { thumbnail, present, pptx, video, scene, motionFrames, sceneAngles } });
+Object.assign(globalThis, { studioRenderer: { inspectVisual, thumbnail, present, pptx, video, scene, motionFrames, sceneAngles } });
