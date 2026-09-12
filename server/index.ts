@@ -23,7 +23,7 @@ import { collaborationRoutes } from './collaboration';
 import { designSystemRoutes } from './design-systems';
 import { discoveryRoutes } from './discovery';
 import { designSystemSchema, systemApplySchema, systemUpdateSchema } from '../src/shared/design-systems';
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { getCookie, deleteCookie } from "hono/cookie";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
@@ -59,6 +59,30 @@ import { briefRoutes } from './briefs';
 import { interviewSchema, scopeSchema } from '../src/shared/brief';
 import { inspectDesign } from '../src/shared/design-checks';
 import { projectRow } from './projects';
+
+// Keyed by the ASSETS binding object: one entry per isolate (the test suite reuses the binding
+// across requests, and a distinct stub yields a distinct lookup). A missing or malformed
+// release marker must degrade to null rather than fail a health check.
+const releaseRevisions = new WeakMap<object, Promise<string | null>>();
+function releaseRevision(c: Context<Env>): Promise<string | null> {
+  const assets = c.env.ASSETS;
+  if (!assets) return Promise.resolve(null);
+  const cached = releaseRevisions.get(assets);
+  if (cached) return cached;
+  const pending = (async () => {
+    try {
+      const response = await assets.fetch(new Request(`${origin(c)}/release.json`));
+      if (!response.ok) return null;
+      const release = (await response.json()) as { sha?: unknown } | null;
+      return typeof release?.sha === "string" ? release.sha : null;
+    } catch {
+      return null;
+    }
+  })();
+  releaseRevisions.set(assets, pending);
+  return pending;
+}
+
 export const app = new Hono<Env>();
 app.use("*", observabilityMiddleware);
 app.use("*", async (c, next) => {
@@ -159,8 +183,12 @@ app.onError((error, c) => {
   );
 });
 app.get('/api/openapi', c => c.json(openApiDocument({...communitySchemas(),'POST /api/projects/{id}/operations':z.toJSONSchema(operationJobSchema),'POST /api/projects/{id}/scene':z.toJSONSchema(sceneRequestSchema),'POST /api/projects/{id}/paint':z.toJSONSchema(paintingCommandSchema),'PUT /api/projects/{id}/document':z.toJSONSchema(documentWriteSchema),'POST /api/projects/{id}/export':z.toJSONSchema(exportOptionsSchema), 'PUT /api/providers/{provider}': z.toJSONSchema(providerSettingsSchema), 'POST /api/projects/{id}/media': z.toJSONSchema(mediaInputSchema), 'POST /api/projects/{id}/generate': z.toJSONSchema(generationInputSchema), 'POST /api/projects/{id}/brief/interview': z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
-app.get("/api/health", (c) =>
-  c.json({ ok: true, service: "design-studio-ai" }),
+app.get("/api/health", async (c) =>
+  c.json({
+    ok: true,
+    service: "design-studio-ai",
+    revision: await releaseRevision(c),
+  }),
 );
 app.get('/api/schema', c => c.json({ community:communitySchemas(), operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], paintingCommand:z.toJSONSchema(paintingCommandSchema), documentSave:z.toJSONSchema(documentWriteSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
 app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
