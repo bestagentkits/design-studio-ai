@@ -89,6 +89,6 @@ export function openApiDocument(schemas: Record<string, unknown>) {
     };
     if (path.endsWith('/thumbnail')) (paths[path][method.toLowerCase()] as any).responses = { '200': { description: 'Private cached PNG', content: { 'image/png': { schema: { type: 'string', format: 'binary' } } } }, '202': { description: 'Rendering in progress; retry after 2 seconds' }, '400': { description: 'Invalid saved revision or unsupported media' }, '429': { description: 'Thumbnail render rate limit reached' }, '502': { description: 'Rendering failed' }, '401': { description: 'Authentication required' }, '404': { description: 'Project or retained revision unavailable' }, '409': { description: 'Revision changed during rendering' }, '503': { description: 'Render cooldown; retry later' } };
   }
-  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.4.1' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
+  return { openapi: '3.1.0', info: { title: 'Design Studio AI', version: '0.4.2' }, servers: [{ url: '/' }], security: [{ bearerAuth: [] }],
     components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer' } }, schemas: Object.fromEntries(Object.entries(schemas).filter(([name]) => /^[\w.-]+$/.test(name))) }, paths };
 }
