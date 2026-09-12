@@ -12,7 +12,11 @@ test('the E2E selector fails open and never loses a spec', () => {
   const full = plan(['--mode=full', '--lanes=3']);
   assert.equal(full.mode, 'full');
   assert.deepEqual(full.specs.map((spec: string) => spec.replace('tests/', '')).sort(), SPECS_ON_DISK);
-  assert.deepEqual(full.coverage.unmapped, [], 'every spec on disk must be mapped to an area or always-run');
+
+  // Specs no area maps must still run on every code change, so adding a spec can never be silently
+  // skipped; `coverage.unmapped` is the list of those specs, not an error condition.
+  const scoped = plan(['--files=src/app/community.tsx']);
+  for (const spec of full.coverage.unmapped) assert.ok(scoped.specs.includes(`tests/${spec}`), `${spec} must run on every code change`);
 
   // Partition completeness: a "full" run whose lanes dropped a spec would silently shrink the gate.
   const lanes = full.matrix.include.flatMap((lane: { files: string }) => lane.files.split(' '));

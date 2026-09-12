@@ -30,7 +30,7 @@ const SAFETY_SPECS = ['account-ui.spec.ts', 'oauth-browser.spec.ts', 'community-
 // Paths that invalidate area scoping: a change here can affect any spec, so the full suite runs.
 const CORE_PATHS = [
   /^server\/(index|security|types|projects|providers|mcp|exports|node|node-adapters|operation-worker|published-html|snapshot-export|asset-lifecycle|conversations|google-slides|discovery)\.ts$/,
-  /^src\/shared\/(schema|catalog|catalog-presets|render|operations|document-|public-creative-projection|api-reference|export-contract|export-|react-export|motion-export|font-loading|document-asset-references|brief|collaboration-contract)\.?/,
+  /^src\/shared\/(schema|catalog|catalog-presets|render|operations|document-|public-creative-projection|api-reference|export-contract|frame-export-budget|export-|react-export|motion-export|font-loading|document-asset-references|brief|collaboration-contract)\.?/,
   /^src\/app\/(app|editor|api|canvas-gestures|api-request-body|component-icons|styles|main)\./,
   /^src\/main\.tsx$/, /^src\/styles\.css$/, /^src\/vite-env\.d\.ts$/,
   /^index\.html$/, /^package\.json$/, /^package-lock\.json$/, /^tsconfig\.json$/, /^vite\.config\.ts$/, /^playwright\.config\.ts$/,
@@ -47,8 +47,13 @@ const DOCS_PATHS = [/^docs\//, /^README\.md$/, /^(AGENTS|CLAUDE)\.md$/, /^skills
 const AREAS = [
   {
     name: 'community',
-    paths: [/^src\/app\/community/, /^src\/app\/browser-community-tools/, /^src\/shared\/community/, /^server\/community-/, /^migrations\/00(13|14)-community/],
-    specs: ['community-ui.spec.ts', 'community-publish-ui.spec.ts', 'community-moderation-ui.spec.ts', 'community-engagement-ui.spec.ts', 'community-profile-generation.spec.ts'],
+    paths: [/^src\/app\/community/, /^src\/app\/browser-community-tools/, /^src\/shared\/community/, /^src\/shared\/public-metadata/, /^server\/community-/, /^migrations\/00(13|14)-community/],
+    specs: ['community-ui.spec.ts', 'community-publish-ui.spec.ts', 'community-moderation-ui.spec.ts', 'community-engagement-ui.spec.ts', 'community-profile-generation.spec.ts', 'community-metadata-generation.spec.ts', 'community-publication-completion.spec.ts'],
+  },
+  {
+    name: 'visual-inspection',
+    paths: [/^server\/visual-inspection/, /^src\/shared\/visual-inspection/, /^src\/app\/browser-visual-inspection/, /^src\/app\/visual-inspection/],
+    specs: ['visual-inspection-ui.spec.ts'],
   },
   {
     name: 'providers',
