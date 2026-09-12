@@ -671,13 +671,13 @@ export function App() {
               <Brand />
             </a>
             <nav aria-label="Main navigation">
-              {communityEnabled && <a href="/community">Community</a>}
               {([['projects', 'Workspace'], ['templates', 'Templates'], ['themes', 'Design systems']] as const).map(([key, label]) => (
                 <a key={key} href={workspacePaths[key]} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined}
                   onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); setTab(key); } }}>
                   {label}
                 </a>
               ))}
+              {communityEnabled && <a href="/community">Community</a>}
               <a href="/activity" className={tab === 'activity' ? 'active' : ''} aria-current={tab === 'activity' ? 'page' : undefined}
                 onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); setTab('activity'); } }}>
                 <Activity size={16} aria-hidden="true" /> Activity
