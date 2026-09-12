@@ -2493,9 +2493,6 @@ details summary {
     width: 28px;
     height: 28px;
   }
-  .main-header nav {
-    display: none;
-  }
   .header-end {
     gap: var(--s2);
   }
