@@ -178,7 +178,13 @@ jobs:
             assert.equal(response.status, 200);
             return response.json();
           };
-          const health = await read('/api/health');
+          // Edge propagation can serve the previous revision for a few seconds after the upload completes.
+          const deadline = Date.now() + 90_000;
+          let health = await read('/api/health');
+          while (health.revision !== process.env.GITHUB_SHA && Date.now() < deadline) {
+            await new Promise(accept => setTimeout(accept, 3000));
+            health = await read('/api/health');
+          }
           assert.equal(health.ok, true);
           assert.equal(health.revision, process.env.GITHUB_SHA, `live revision ${health.revision} is not the deployed commit ${process.env.GITHUB_SHA}`);
           assert.equal((await read('/.well-known/oauth-protected-resource/mcp')).resource, origin + '/mcp');
