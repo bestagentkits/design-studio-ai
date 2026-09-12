@@ -125,7 +125,11 @@ test('documentation and visual guide remain readable and navigable without JavaS
     await expect(page.locator('#conversation')).toBeInViewport();
     await expect(page.locator('#conversation')).toContainText('Approve scope');
     await fitsViewport(page);
-    for (const image of await page.locator('.guide-screenshot img').all()) {
+    // The guide renders one figure per GuideImage in src/app/guide.tsx; require the known two so the
+    // loop cannot silently cover nothing, without breaking when a third screenshot is added.
+    const guideScreenshots = page.locator('.guide-screenshot img');
+    await expect(guideScreenshots.nth(1)).toBeAttached();
+    for (const image of await guideScreenshots.all()) {
       await image.scrollIntoViewIfNeeded();
       await expect(image).toBeVisible();
       await expect.poll(() => image.evaluate(element => (element as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);

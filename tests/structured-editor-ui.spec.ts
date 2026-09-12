@@ -82,6 +82,11 @@ test('hierarchical grouping saves and reloads, numeric shortcuts and canvas cont
     await mobilePanel(page, info, 'Canvas');
     for (const handle of ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w']) await expect(page.getByRole('button', { name: `Transform ${handle}`, exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Transform rotate', exact: true })).toBeVisible();
+    const beforeResize = (await readProject(page, project.id)).document.pages[0].nodes.find(node => node.id === 'alpha')!;
+    const alphaBox = (await page.getByRole('button', { name: 'Alpha layer, shape', exact: true }).boundingBox())!, seBox = (await page.getByRole('button', { name: 'Transform se', exact: true }).boundingBox())!;
+    const canvasScale = alphaBox.width / beforeResize.width, resizeX = 24, resizeY = 16;
+    await page.mouse.move(seBox.x + seBox.width / 2, seBox.y + seBox.height / 2); await page.mouse.down();
+    await page.mouse.move(seBox.x + seBox.width / 2 + resizeX, seBox.y + seBox.height / 2 + resizeY, { steps: 8 }); await page.mouse.up();
     const zoom = page.locator('.zoom-value'), before = await zoom.textContent();
     await page.locator('.canvas-viewport').hover();
     if (info.project.name === 'webkit' && info.project.use.isMobile) await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
@@ -96,6 +101,10 @@ test('hierarchical grouping saves and reloads, numeric shortcuts and canvas cont
     await page.locator('.inspector').getByRole('button', { name: 'Page', exact: true }).click();
     await page.getByRole('button', { name: 'Copy page', exact: true }).click(); await saveProject(page, project.id);
     const pages = (await readProject(page, project.id)).document.pages; expect(pages).toHaveLength(2);
+    const resized = pages.find(candidate => candidate.id === 'page')!.nodes.find(node => node.id === 'alpha')!;
+    expect(resized.x).toBeCloseTo(beforeResize.x, 3); expect(resized.y).toBeCloseTo(beforeResize.y, 3);
+    expect(Math.abs(resized.width - (beforeResize.width + resizeX / canvasScale))).toBeLessThan(2);
+    expect(Math.abs(resized.height - (beforeResize.height + resizeY / canvasScale))).toBeLessThan(2);
     const copied = pages.find(candidate => candidate.id !== 'page')!, copiedAlpha = copied.nodes.find(node => node.name === 'Alpha layer')!;
     const copiedBeta = copied.nodes.find(node => node.name === 'Beta layer')!, copiedFrame = copied.nodes.find(node => node.name === 'Content frame')!;
     expect(copiedAlpha.id).not.toBe('alpha'); expect(copiedAlpha.parentId).toBe(copiedFrame.id);

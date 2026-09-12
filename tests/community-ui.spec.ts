@@ -10,8 +10,16 @@ test('guest exploration preserves filters and requires an account only for priva
   await page.getByRole('button',{name:'Filters',exact:true}).click();
   await page.getByLabel('Tags',{exact:true}).fill('minimal, editorial');
   await page.getByLabel('First published',{exact:true}).selectOption('month');
+  const filteredRequest = page.waitForRequest(request => {
+    const url = new URL(request.url());
+    return url.pathname.endsWith('/api/community/listings') && url.searchParams.get('tags') === 'minimal, editorial';
+  });
   await page.getByRole('button',{name:'Apply filters'}).click();
   await expect(page).toHaveURL(/period=month/);
+  await filteredRequest;
+  const appliedFilters = new URL(page.url()).searchParams;
+  expect(appliedFilters.get('tags')).toBe('minimal, editorial');
+  expect(appliedFilters.get('period')).toBe('month');
   await page.goBack();
   await expect(page).not.toHaveURL(/period=month/);
   await expect(page.getByRole('searchbox',{name:'Search public designs'})).toHaveValue('typography');

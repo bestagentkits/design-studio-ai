@@ -1,4 +1,6 @@
 import { test, expect } from './authenticated-browser';
+import { request as playwrightRequest } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 test('publish reviews a saved revision and explicit license before building real files',async({page,baseURL},testInfo)=>{
   test.setTimeout(180_000);
   const headers={Origin:baseURL!};const created=await page.request.post('/api/projects',{headers,data:{name:'Community publication browser check',kind:'web'}});expect(created.status()).toBe(201);const {project}=await created.json();
@@ -16,6 +18,19 @@ test('publish reviews a saved revision and explicit license before building real
   const file=page.getByRole('link',{name:/Studio project package/});await expect(file).toBeVisible();
   const download=await page.request.get((await file.getAttribute('href'))!);expect(download.ok()).toBe(true);expect(download.headers()['content-type']).toContain('zip');expect((await download.body()).subarray(0,2).toString()).toBe('PK');
   await expect(page.getByText('Page / screen 1',{exact:true})).toBeVisible();
+  const ownerListings=await (await page.request.get('/api/community/me/listings')).json();const listingId=ownerListings.listings.find((item:{title:string})=>item.title==='Community publication browser check').id;
+  // A fresh API context inherits the browser context's cookies; clear them so "anonymous" and
+  // "second user" are genuinely separate identities rather than aliases of the signed-in owner.
+  const publicApi=await playwrightRequest.newContext({baseURL,storageState:{cookies:[],origins:[]}});const publicSearch=await publicApi.get('/api/community/listings?limit=48');expect(publicSearch.ok()).toBe(true);const publicListings=await publicSearch.json();expect(publicListings.listings.some((item:{id:string})=>item.id===listingId)).toBe(true);
+  const anonymousWrite=await publicApi.post('/api/community/listings',{data:{}});expect(anonymousWrite.status()).toBe(401);
+  const secondUser=await playwrightRequest.newContext({baseURL,storageState:{cookies:[],origins:[]}});const secondRegistration=await secondUser.post('/api/auth/register',{headers,data:{email:`community-cross-owner-${randomUUID()}@studio.test`,name:'Community cross owner',password:randomUUID()+randomUUID()}});expect(secondRegistration.status()).toBe(201);
+  const secondProfile=await secondUser.put('/api/community/me/profile',{headers,data:{handle:`cross-owner-${randomUUID().slice(0,8)}`,displayName:'Community cross owner',bio:'',expectedProfileRevision:0}});expect(secondProfile.ok()).toBe(true);
+  const secondProjectResponse=await secondUser.post('/api/projects',{headers,data:{name:'Community cross owner probe',kind:'web'}});expect(secondProjectResponse.status()).toBe(201);const secondProject=await secondProjectResponse.json();
+  const secondMetadata={projectId:secondProject.project.id,expectedProjectRevision:secondProject.project.revision,title:'Community cross owner probe',description:'',tags:[],cover:{pageIndex:0}};
+  const secondPreflightResponse=await secondUser.post('/api/community/preflight',{headers,data:secondMetadata});expect(secondPreflightResponse.ok()).toBe(true);const secondPreflight=await secondPreflightResponse.json();
+  const crossOwnerRelease=await secondUser.post(`/api/community/listings/${listingId}/releases`,{headers,data:{...secondMetadata,operationId:randomUUID(),digest:secondPreflight.preflight.digest,license:'CC-BY-4.0',acceptLicense:true,confirmPublic:true,expectedListingRevision:1}});expect(crossOwnerRelease.status()).toBe(404);
+  const crossOwnerUnlist=await secondUser.post(`/api/community/listings/${listingId}/unlist`,{headers,data:{operationId:randomUUID(),expectedListingRevision:1}});expect(crossOwnerUnlist.status()).toBe(404);
+  await secondUser.dispose();await publicApi.dispose();
   await page.goto('/community/publishing');await page.getByRole('button',{name:'Review update',exact:true}).click();await page.getByLabel('Description',{exact:true}).fill('Updated public metadata for the second immutable version.');await page.getByRole('button',{name:'Review public preflight'}).click();await page.getByRole('checkbox',{name:/I have the rights/}).check();await page.getByRole('checkbox',{name:/I reviewed the public content/}).check();await page.getByRole('button',{name:'Publish updated version',exact:true}).click();await expect(page.getByRole('link',{name:'View published design'})).toBeVisible({timeout:120_000});await page.getByRole('link',{name:'View published design'}).click();await expect(page.getByText('Website · Version 2',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'Save Community publication browser check',exact:true}).click();
   await page.reload();await expect(page.getByRole('button',{name:'Unsave Community publication browser check',exact:true})).toHaveAttribute('aria-pressed','true');

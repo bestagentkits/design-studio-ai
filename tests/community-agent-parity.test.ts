@@ -23,6 +23,18 @@ function browserTools() {
 }
 const content = (result: unknown) => JSON.parse((result as {content:{text:string}[]}).content[0].text);
 const publishBody = {projectId:'project',expectedProjectRevision:1,title:'Design',description:'',tags:[],formats:[],operationId:'publish-op',digest:'a'.repeat(64),license:'CC-BY-4.0',acceptLicense:true,confirmPublic:true};
+// The published inventory must stay pinned to these exact named operations, not to a recomputed map.
+const expectedCommunitySchemaKeys=['POST /api/community/preflight','POST /api/community/listings','POST /api/community/listings/{id}/releases','POST /api/community/listings/{id}/unlist','POST /api/community/listings/{id}/remix','PUT /api/community/me/profile','POST /api/community/me/profile/generate','POST /api/community/metadata/generate','POST /api/community/listings/{id}/reports','POST /api/community/moderation/reports/{id}/resolve','POST /api/community/moderation/collections','PUT /api/community/moderation/collections/{id}'];
+function pinCapabilitySchemas(schemas:Record<string,{type?:string;required?:string[];additionalProperties?:boolean;properties?:Record<string,unknown>}>) {
+  assert.deepEqual(Object.keys(schemas).sort(),[...expectedCommunitySchemaKeys].sort());
+  const publish=schemas['POST /api/community/listings'];
+  assert.equal(publish.type,'object');assert.equal(publish.additionalProperties,false);
+  for(const field of ['projectId','expectedProjectRevision','title','operationId','digest','license','acceptLicense','confirmPublic']) assert.ok(publish.required?.includes(field),`publish schema must require ${field}`);
+  assert.equal(publish.required?.includes('description'),false,'defaulted presentation fields stay optional');
+  const preflight=schemas['POST /api/community/preflight'];
+  assert.equal(preflight.additionalProperties,false);
+  for(const field of ['projectId','expectedProjectRevision','title']) assert.ok(preflight.required?.includes(field),`preflight schema must require ${field}`);
+}
 
 test('WebMCP discovers every shared endpoint with compact metadata and exact canonical request schemas', async () => {
   const {tools,unregister}=browserTools();
@@ -31,7 +43,7 @@ test('WebMCP discovers every shared endpoint with compact metadata and exact can
   for(const tool of metadata) assert.ok(Buffer.byteLength(JSON.stringify(tool))<4096,tool.name);
   assert.equal(tools.size,communityEndpoints.length+1);
   const capabilities=content(await tools.get('studio_community_capabilities')!.execute({}));
-  assert.deepEqual(capabilities.schemas,communitySchemas()); assert.equal(capabilities.importLimitBytes,12*1024*1024);
+  pinCapabilitySchemas(capabilities.schemas); assert.equal(capabilities.importLimitBytes,12*1024*1024);
   for(const endpoint of communityEndpoints) {
     const tool=tools.get(`studio_community_${endpoint.name.replaceAll('-','_')}`)!;
     assert.ok(tool,endpoint.name); assert.equal(tool.annotations?.readOnlyHint,endpoint.method==='GET');
@@ -45,6 +57,9 @@ test('WebMCP validates consent, revisions, nested formats, query scope and impor
   t.mock.method(globalThis,'fetch',async(path:string,init?:RequestInit)=>{calls.push({path,init});return Response.json({ok:true});});
   const publish=tools.get('studio_community_publish')!;
   for(const body of [{...publishBody,confirmPublic:false},{...publishBody,acceptLicense:false},{...publishBody,expectedProjectRevision:0},{...publishBody,formats:[{format:'fake'}]}]) await assert.rejects(publish.execute({body}));
+  const missingRequired:Record<string,unknown>={...publishBody};delete missingRequired.projectId;
+  await assert.rejects(publish.execute({body:missingRequired}));
+  await assert.rejects(publish.execute({body:{...publishBody,unexpectedField:true}}));
   const search=tools.get('studio_community_search')!;
   await assert.rejects(search.execute({query:{q:'x'.repeat(201)}}));
   await assert.rejects(search.execute({query:{privateProjectId:'private'}}));
@@ -79,9 +94,13 @@ function mcpTools(request:Parameters<typeof registerCommunityTools>[1]) {
 test('MCP shares schemas, validates publishing and transfers package bytes with a bounded multipart envelope', async () => {
   const requests:{method:string;path:string;body?:unknown}[]=[];
   const tools=mcpTools(async(method,path,body)=>{requests.push({method,path,body});return Response.json({ok:true});});
-  assert.equal(tools.size,communityEndpoints.length+1);assert.deepEqual(content(await tools.get('community_capabilities')!.execute({})).schemas,communitySchemas());
+  assert.equal(tools.size,communityEndpoints.length+1);pinCapabilitySchemas(content(await tools.get('community_capabilities')!.execute({})).schemas);
   assert.equal(tools.get('community_unlist')!.definition.annotations?.destructiveHint,true);
   await assert.rejects(tools.get('community_publish')!.execute({body:{...publishBody,confirmPublic:false}}));assert.equal(requests.length,0);
+  const missingRequired:Record<string,unknown>={...publishBody};delete missingRequired.projectId;
+  await assert.rejects(tools.get('community_publish')!.execute({body:missingRequired}));
+  await assert.rejects(tools.get('community_publish')!.execute({body:{...publishBody,unexpectedField:true}}));
+  assert.equal(requests.length,0);
   const document=createDocument();document.pages[0].nodes=[];
   const bytes=await buildCommunityPackage(document,[],{title:'Transfer test',creator:{handle:'unit',displayName:'Unit'},license:'CC-BY-4.0'});
   const input={operationId:'import-op',base64:Buffer.from(bytes).toString('base64')}, tool=tools.get('community_import')!;

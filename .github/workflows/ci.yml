@@ -6,7 +6,62 @@ on:
 permissions:
   contents: read
 jobs:
+  # Change-based selection: the browser lane runs only the specs whose mapped source paths changed
+  # (scripts/test-plan.mjs). Main pushes, CI-critical paths, unclassified paths, documentation-only
+  # diffs and any selector error are handled inside that script; the unit lane always runs in full.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select browser lanes for this change
+        id: plan
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            git fetch --no-tags --depth=1 origin "$BASE_REF"
+            git diff --name-only "origin/$BASE_REF...HEAD" > changed.txt
+            node scripts/test-plan.mjs --files-from=changed.txt > plan.json
+          else
+            node scripts/test-plan.mjs --mode=full > plan.json
+          fi
+          node -e "const plan=require('./plan.json');require('node:fs').appendFileSync(process.env.GITHUB_OUTPUT,'mode='+plan.mode+'\n'+'matrix='+JSON.stringify(plan.matrix)+'\n')"
+          node -e "const plan=require('./plan.json');console.log('E2E mode: '+plan.mode);console.log('matrix: '+JSON.stringify(plan.matrix));for(const reason of plan.reasons)console.log('  '+reason);for(const lane of plan.matrix.include)console.log('  '+lane.lane+': '+(lane.files?lane.files.split(' ').length:0)+' specs')"
+  # The site is built once here: the browser lanes and the deploy download this artifact instead of
+  # repeating the build, and they no longer race against the unit job.
+  build:
+    needs: plan
+    if: needs.plan.outputs.mode != 'docs-only'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Stamp the release marker
+        run: |
+          node -e "require('node:fs').writeFileSync('dist/release.json', JSON.stringify({ sha: process.env.GITHUB_SHA }))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+  # Everything that needs the repository, the unit suite and the packaging gates. Runs in parallel
+  # with `build`; the browser lanes start once `build` has published the site.
   verify:
+    needs: plan
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -17,38 +72,62 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm ci --prefix packages/cli
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
       - run: npm run build:cli
       - run: npm run typecheck
       - run: npm test
-      - run: npm run build
       - run: npm run pack:skill
-      - run: npm run test:e2e
-      - run: npm pack
+      - name: Pack the CLI package
         working-directory: packages/cli
-      - uses: actions/upload-artifact@v4
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        with:
-          name: production-assets
-          path: dist
-          if-no-files-found: error
-          retention-days: 1
+        run: |
+          npm pack --json > pack.json
+          node -e "const [entry]=JSON.parse(require('node:fs').readFileSync('pack.json','utf8'));if(entry.files.length===0)throw new Error('npm pack produced an empty file list');if(!entry.files.some(file=>file.path==='dist/dsa.js'))throw new Error('npm pack is missing dist/dsa.js');console.log('Packed '+entry.files.length+' files including dist/dsa.js')"
+          rm pack.json
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: browser-test-results
+          name: unit-test-output
           path: test-results
-  deploy:
-    needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  e2e:
+    needs: [plan, build]
+    if: needs.plan.outputs.mode != 'docs-only'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    concurrency:
-      group: cloudflare-production
-      cancel-in-progress: false
-    environment:
-      name: production
-      url: https://studio.agentkit.best
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: dist
+      - run: npm run test:e2e -- ${{ matrix.files }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-test-results-${{ matrix.lane }}
+          path: test-results
+  head-check:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [verify, e2e]
+    runs-on: ubuntu-latest
+    outputs:
+      current: ${{ steps.head.outputs.current }}
     steps:
       - uses: actions/checkout@v4
       - name: Check this is still the main head
@@ -59,20 +138,29 @@ jobs:
           else
             echo 'Skipping superseded main commit.'
           fi
+  deploy:
+    needs: [build, verify, e2e, head-check]
+    if: needs.head-check.outputs.current == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: cloudflare-production
+      cancel-in-progress: false
+    environment:
+      name: production
+      url: https://studio.agentkit.best
+    steps:
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        if: steps.head.outputs.current == 'true'
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-        if: steps.head.outputs.current == 'true'
       - uses: actions/download-artifact@v4
-        if: steps.head.outputs.current == 'true'
         with:
-          name: production-assets
+          name: web-build
           path: dist
       - name: Apply migrations and deploy verified revision
-        if: steps.head.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -81,7 +169,6 @@ jobs:
           npm run cf -- d1 migrations apply design-studio-ai --remote
           npm run cf -- deploy --keep-vars --message "$GITHUB_SHA"
       - name: Verify public production endpoints
-        if: steps.head.outputs.current == 'true'
         run: |
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
@@ -91,13 +178,14 @@ jobs:
             assert.equal(response.status, 200);
             return response.json();
           };
-          assert.equal((await read('/api/health')).ok, true);
+          const health = await read('/api/health');
+          assert.equal(health.ok, true);
+          assert.equal(health.revision, process.env.GITHUB_SHA, `live revision ${health.revision} is not the deployed commit ${process.env.GITHUB_SHA}`);
           assert.equal((await read('/.well-known/oauth-protected-resource/mcp')).resource, origin + '/mcp');
           assert.equal((await read('/.well-known/oauth-authorization-server')).authorization_endpoint, origin + '/oauth/authorize');
-          console.log('Production health and OAuth discovery passed.');
+          console.log('Production health, release revision and OAuth discovery passed.');
           NODE
       - name: Verify persistent thumbnails on production
-        if: steps.head.outputs.current == 'true'
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

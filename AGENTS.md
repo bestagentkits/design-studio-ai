@@ -38,6 +38,10 @@ Use npm with the Node version declared in [package.json](package.json). Install 
 
 The [CI workflow](.github/workflows/ci.yml) owns the full release gates. Fix observed failures instead of weakening assertions or claiming an unrun check passed. Distinguish provider configuration/error checks from successful live generation, and inspect actual exported files before claiming format fidelity.
 
+The TypeScript, unit and build gates always run in full. The browser lane is selected by [scripts/test-plan.mjs](scripts/test-plan.mjs) from the changed paths: pushes to `main`, CI-critical paths, unclassified paths and any selector error run every spec, documentation-only changes skip the browser lane, and everything else runs the mapped specs plus the always-run security set (`account-ui`, `oauth-browser`, `community-publish-ui`, `community-moderation-ui`, `workspace`). Reproduce a selection locally with `npm run test:e2e -- $(node scripts/test-plan.mjs --format=args)`; `npm run test:e2e` with no arguments still runs everything. Add a new spec to the area table in that script, or it runs on every code change by design.
+
+Pushes to `main` and the [nightly workflow](.github/workflows/nightly.yml) execute the full browser suite, so a pull request only exercises the lanes mapped to its changed paths.
+
 ## Avoid competing processes and generated edits
 
 - Use [scripts/run-e2e.mjs](scripts/run-e2e.mjs) through `npm run test:e2e` for isolated browser tests. Keep its per-device databases and production rate limits intact.

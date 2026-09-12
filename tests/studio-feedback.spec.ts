@@ -59,7 +59,11 @@ test('motion space playback, collapsible panes, and real saved thumbnails', asyn
   await page.keyboard.press('Space'); await expect(page.getByRole('button', { name: 'Play timeline', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Collapse timeline', exact: true }).click(); await expect(page.locator('.motion-content')).toBeHidden();
   await page.getByRole('button', { name: 'Expand timeline', exact: true }).click(); await expect(page.locator('.motion-content')).toBeVisible();
-  if (await page.locator('.pane-controls').isVisible()) {
+  // Desktop keeps frame-level pane controls; the compact layout (<=760px) hides them and navigates panels instead.
+  const paneControls = page.locator('.pane-controls');
+  if (['mobile', 'webkit'].includes(info.project.name)) await expect(paneControls).toBeHidden();
+  else {
+    await expect(paneControls).toBeVisible();
     await page.getByRole('button', { name: 'Collapse properties', exact: true }).click(); await expect(page.locator('.inspector')).toBeHidden();
     await page.getByRole('button', { name: 'Expand properties', exact: true }).click(); await expect(page.locator('.inspector')).toBeVisible();
   }

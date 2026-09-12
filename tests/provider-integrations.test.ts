@@ -20,12 +20,14 @@ test('DeepSeek and custom text requests use the selected API format and authenti
   assert.deepEqual(JSON.parse(official.init.body), { model: 'deepseek-flash', messages: [{ role: 'system', content: 'Return JSON' }, { role: 'user', content: 'Design a page' }], response_format: { type: 'json_object' }, max_tokens: 2000 });
   for (const protocol of ['openai', 'anthropic', 'gemini'] as const) {
     const request = buildTextRequest({ provider: 'custom-team', protocol, base_url: 'https://team.example/v1', key: 'user:password', authMethod: 'basic' }, body);
+    const pathname = new URL(request.url).pathname, payload = JSON.parse(request.init.body);
     assert.equal(new URL(request.url).origin, 'https://team.example');
     assert.equal(request.init.headers.Authorization, `Basic ${btoa('user:password')}`);
     assert.equal(request.init.headers['x-goog-api-key'], undefined);
     assert.equal(request.init.headers['x-api-key'], undefined);
-    if (protocol === 'anthropic') assert.equal(JSON.parse(request.init.body).max_tokens, 2000);
-    if (protocol === 'gemini') assert.equal(JSON.parse(request.init.body).generationConfig.responseMimeType, 'application/json');
+    if (protocol === 'openai') { assert.equal(pathname, '/v1/chat/completions'); assert.equal(payload.response_format.type, 'json_object'); }
+    if (protocol === 'anthropic') { assert.equal(pathname, '/v1/messages'); assert.equal(request.init.headers['anthropic-version'], '2023-06-01'); assert.equal(payload.system, 'Return JSON'); assert.equal(payload.messages[0].content, 'Design a page'); }
+    if (protocol === 'gemini') { assert.equal(pathname, '/v1/models/model-id:generateContent'); assert.equal(payload.systemInstruction.parts[0].text, 'Return JSON'); assert.equal(payload.contents[0].parts[0].text, 'Design a page'); }
   }
   assert.deepEqual(providerHeaders({ provider: 'custom-team', authMethod: 'none', key: 'never-transmitted' }), {});
   assert.deepEqual(providerHeaders({ provider: 'custom-team', authMethod: 'api-key', authHeader: 'X-Team-Key', key: 'unit-test-value' }), { 'X-Team-Key': 'unit-test-value' });

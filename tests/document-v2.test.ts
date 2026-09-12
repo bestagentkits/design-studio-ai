@@ -66,10 +66,21 @@ test('painting composite-only refresh merges with local painting source edits an
 test('nested asset remapping covers textures, board media, paint masks/tiles and composites', () => {
   const doc = fixture(), art = painting();
   const old = { id: 'old', name: 'Tile', type: 'image', mimeType: 'image/png', url: '/api/assets/old' }, next = { ...old, id: 'new', url: '/api/assets/new' };
-  doc.assets = [old]; art.layers[0].tiles = [{ x: 0, y: 0, assetId: 'old', hash: 'a'.repeat(64), generation: 0 }];
+  const gifOld = { id: 'gif-old', name: 'Loop', type: 'image', mimeType: 'image/gif', url: '/api/assets/gif-old' }, gifNext = { ...gifOld, id: 'gif-new', url: '/api/assets/gif-new' };
+  doc.assets = [old, gifOld]; art.layers[0].tiles = [{ x: 0, y: 0, assetId: 'old', hash: 'a'.repeat(64), generation: 0 }];
   art.layers[0].mask = { enabled: true, tiles: structuredClone(art.layers[0].tiles) }; art.composite = { assetId: 'old', sourceHash: 'b'.repeat(64), generation: 0 }; doc.paintings.push(art);
-  remapDocumentAssets(doc, new Map([['old', next]]));
-  assert.equal(doc.paintings[0].layers[0].mask?.tiles[0].assetId, 'new'); assert.equal(doc.paintings[0].composite?.assetId, 'new');
+  doc.pages[0].nodes.push({ id: 'textured', type: 'model3d', name: 'Textured', x: 0, y: 0, width: 200, height: 200, data: { prompt: 'Render from old reference' }, scene: { material: { textureAssetId: 'old' } } });
+  doc.boards[0].elements.push(
+    boardElementSchema.parse({ id: 'board-photo', type: 'image', name: 'Photo', x: 0, y: 0, width: 120, height: 80, assetId: 'old' }),
+    boardElementSchema.parse({ id: 'board-gif', type: 'gif', name: 'Loop', x: 200, y: 0, width: 120, height: 80, assetId: 'gif-old', posterAssetId: 'gif-old', posterTime: 0, playing: true, loop: true }),
+  );
+  remapDocumentAssets(doc, new Map([['old', next], ['gif-old', gifNext]]));
+  assert.deepEqual(doc.assets.map(a => a.id), ['new', 'gif-new']);
+  assert.equal(doc.pages[0].nodes.find(n => n.id === 'textured')?.scene?.material?.textureAssetId, 'new');
+  const photo = doc.boards[0].elements.find(e => e.id === 'board-photo'); assert.ok(photo?.type === 'image' && photo.assetId === 'new');
+  const gif = doc.boards[0].elements.find(e => e.id === 'board-gif'); assert.ok(gif?.type === 'gif' && gif.assetId === 'gif-new' && gif.posterAssetId === 'gif-new');
+  assert.equal(doc.paintings[0].layers[0].tiles[0].assetId, 'new'); assert.equal(doc.paintings[0].layers[0].mask?.tiles[0].assetId, 'new'); assert.equal(doc.paintings[0].composite?.assetId, 'new');
+  assert.equal(doc.pages[0].nodes.find(n => n.id === 'textured')?.data?.prompt, 'Render from old reference');
   assert.equal(documentSchema.parse(doc).schemaVersion, 2);
 });
 test('public projection excludes hidden board data and all original painting pixels', () => {
@@ -80,6 +91,21 @@ test('public projection excludes hidden board data and all original painting pix
   const result = publicCreativeProjection(doc), text = JSON.stringify(result);
   assert.doesNotMatch(text, /secret-tile|unused-secret|Secret note/); assert.match(text, /public-pixels/);
   assert.equal(result.schemaVersion === 2 && result.paintings.length, 0); assert.equal(documentSchema.parse(result).schemaVersion, 2);
+});
+test('legacy v1 documents are refused until upgraded, then unreferenced assets are pruned', () => {
+  const legacy = createDocument('web', 'Legacy share');
+  legacy.assets = [
+    { id: 'orphan', name: 'Orphan', type: 'image', mimeType: 'image/png', url: '/api/assets/orphan' },
+    { id: 'used', name: 'Used', type: 'image', mimeType: 'image/png', url: '/api/assets/used' },
+  ];
+  legacy.pages[0].nodes.push({ id: 'used-image', type: 'image', name: 'Used', x: 0, y: 0, width: 10, height: 10, src: '/api/assets/used' });
+  assert.equal(legacy.schemaVersion, 1, 'the fixture must exercise the legacy path');
+  // Publishing or exporting a v1 document as-is registered every asset it carried, including
+  // unreferenced ones, which then became publicly retrievable.
+  assert.throws(() => publicCreativeProjection(legacy), /Upgrade the document/);
+  const projected = publicCreativeProjection(upgradeDocument(legacy));
+  assert.deepEqual(projected.assets.map(asset => asset.id), ['used']);
+  assert.doesNotMatch(JSON.stringify(projected), /orphan/);
 });
 test('blank board painting embeds render while nonblank paintings still require composites', () => {
   const blank = fixture(), blankPaint = painting('blank-paint');

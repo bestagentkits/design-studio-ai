@@ -7,11 +7,16 @@ import { interpolateNode, renderHtml, renderSvg } from '../src/shared/render';
 
 test('catalog documents remain editable and schema-valid across theme variants', () => {
   for (const template of templates) for (const theme of themes) {
-    const doc = documentSchema.parse(createDocument(template.kind, template.name, theme.id, template.id));
+    const doc = documentSchema.parse(createDocument(template.kind, template.name, theme.id, template.id)), svg = renderSvg(doc);
     assert.ok(doc.pages[0].nodes.length > 0);
-    assert.ok(renderSvg(doc).startsWith('<svg'));
+    assert.ok(svg.startsWith('<svg'));
+    assert.ok(svg.includes(`<rect width="100%" height="100%" fill="${theme.colors.background}"/>`));
     assert.ok(renderHtml(doc).includes(theme.colors.background));
     assert.equal(doc.theme.id, theme.id);
+    const probe = documentSchema.parse(createDocument('web', 'Theme probe', theme.id));
+    assert.ok(renderSvg(probe).includes(`fill="${theme.colors.text}"`));
+    const recolored = structuredClone(doc); recolored.theme = structuredClone(themes.find(t => t.id !== theme.id)!);
+    assert.notEqual(renderSvg(recolored), svg);
   }
 });
 test('rendered untrusted content cannot add markup or styling URLs', () => {

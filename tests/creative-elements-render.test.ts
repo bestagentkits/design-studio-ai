@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { build } from 'esbuild';
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 import { gif } from './helpers/gif-fixture';
 
 test('real browser export GIF samples retain mixed vector z-order, pause and static poster', { timeout: 30000 }, async () => {
@@ -37,13 +37,15 @@ test('SVG importer rasterizes safe gradients and rejects active or external cont
   const bundle = await build({ stdin: { contents: `import {sanitizeElementSvg,rasterizeElementSvg} from './src/app/creative-elements-svg';window.svgProbe=async()=>{
     const root='<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8">';
     const attacks=['<script>alert(1)</script>','<image href="https://example.com/a.png"/>','<rect onload="alert(1)"/>','<rect fill="url(https://example.com/a.svg)"/>','<foreignObject/>','<style>@import "https://example.com/a.css";</style>'];
-    const blocked=attacks.map(body=>{try{sanitizeElementSvg(root+body+'</svg>');return false;}catch{return true;}});
+    const rejected=attacks.map(body=>{try{sanitizeElementSvg(root+body+'</svg>');return null;}catch(error){return (error as Error).name;}});
+    const benign=root+'<rect width="8" height="8" fill="#00ff00"/></svg>';
+    let benignAccepted=false;try{benignAccepted=sanitizeElementSvg(benign).svg.includes('<rect');}catch{benignAccepted=false;}
     const safe=root+'<defs><linearGradient id="g"><stop stop-color="#ff0000"/><stop offset="1" stop-color="#ff0000"/></linearGradient></defs><rect width="8" height="8" fill="url(#g)"/></svg>';
-    const result=await rasterizeElementSvg(safe),bitmap=await createImageBitmap(result.blob),canvas=document.createElement('canvas');canvas.width=8;canvas.height=8;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();return {blocked,pixel:Array.from(ctx.getImageData(4,4,1,1).data),mime:result.blob.type};};`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'iife', platform: 'browser' });
+    const result=await rasterizeElementSvg(safe),bitmap=await createImageBitmap(result.blob),canvas=document.createElement('canvas');canvas.width=8;canvas.height=8;const ctx=canvas.getContext('2d');ctx.drawImage(bitmap,0,0);bitmap.close();return {rejected,benignAccepted,pixel:Array.from(ctx.getImageData(4,4,1,1).data),mime:result.blob.type};};`, resolveDir: process.cwd(), loader: 'ts' }, bundle: true, write: false, format: 'iife', platform: 'browser' });
   const browser = await chromium.launch({ headless: true });
   try { const page = await browser.newPage(); await page.setContent('<!doctype html><body></body>'); await page.addScriptTag({ content: bundle.outputFiles[0].text });
-    const result = await page.evaluate(() => (window as unknown as { svgProbe: () => Promise<{blocked: boolean[];pixel:number[];mime:string}> }).svgProbe());
-    assert.deepEqual(result.blocked, Array(6).fill(true)); assert.deepEqual(result.pixel, [255,0,0,255]); assert.equal(result.mime, 'image/png');
+    const result = await page.evaluate(() => (window as unknown as { svgProbe: () => Promise<{rejected:(string|null)[];benignAccepted:boolean;pixel:number[];mime:string}> }).svgProbe());
+    assert.deepEqual(result.rejected, Array(6).fill('Error')); assert.equal(result.benignAccepted, true, 'A benign SVG must be accepted, not rejected by a blanket throw'); assert.deepEqual(result.pixel, [255,0,0,255]); assert.equal(result.mime, 'image/png');
   } finally { await browser.close(); }
 });
 

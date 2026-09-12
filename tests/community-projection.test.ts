@@ -65,6 +65,11 @@ test('character dependency closure keeps public switches and slider clips, exclu
   assert.equal(projected.clips[0].bakedFrom,undefined); assert.equal(projected.slots[0].attachmentId,undefined);
   assert.deepEqual(result.assets.map(a=>a.id),['public','switch']);
   assert.deepEqual(evaluateCharacter(projected,result.pages[0].nodes[0].character!,.75),before);
+  // Concrete pinned outcome: the surviving switch channel must resolve the slot attachment at t=.75,
+  // so a constant-returning evaluator cannot satisfy the invariance check above.
+  const pose=evaluateCharacter(projected,result.pages[0].nodes[0].character!,.75);
+  assert.deepEqual(pose.slots.slot,{attachment:'switch-attachment',opacity:1,order:0});
+  assert.deepEqual(pose.bones.root,{x:0,y:0,rotation:0,scaleX:1,scaleY:1});
   assert.equal(JSON.stringify(result).includes('PRIVATE'),false); documentSchema.parse(result);
 });
 

@@ -29,9 +29,13 @@ test('bound endpoints follow rotated ports and manual bends survive layouts', ()
   const result = layoutDiagram(board, 'layered'); assert.deepEqual(result.elements.find(e => e.id === 'edge'), edge);
 });
 test('selected layout preserves locked nodes and rejects stale results', () => {
-  const board = boardSchema.parse({ id: 'b', name: 'test', ...diagramTemplate('flowchart', 'f') }); board.elements[1].locked = true;
-  const result = layoutDiagram(board, 'layered', ['f_n0', 'f_n1']);
-  assert.deepEqual(result.elements[1], board.elements[1]); assert.deepEqual(result.elements[2], board.elements[2]);
+  const board = boardSchema.parse({ id: 'b', name: 'test', ...diagramTemplate('flowchart', 'f') });
+  board.elements.find(e => e.id === 'f_n1')!.locked = true; board.elements.find(e => e.id === 'f_n2')!.locked = true;
+  const original = structuredClone(board);
+  const result = layoutDiagram(board, 'layered', ['f_n0', 'f_n1', 'f_n2']);
+  assert.deepEqual(result.elements.find(e => e.id === 'f_n1'), original.elements.find(e => e.id === 'f_n1'));
+  assert.deepEqual(result.elements.find(e => e.id === 'f_n2'), original.elements.find(e => e.id === 'f_n2'));
+  assert.notDeepEqual(result.elements.find(e => e.id === 'f_n0'), original.elements.find(e => e.id === 'f_n0'));
   const ticket = prepareDiagramLayout(board, 'layered'); board.elements[0].x++;
   assert.throws(() => acceptDiagramLayout(board, [], ticket), /changed/);
 });
@@ -58,8 +62,21 @@ test('label placement follows route length and semantic SVG escapes user text', 
 
 test('new diagram templates avoid existing artwork and earlier template ports', () => {
   let doc = upgradeDocument(createDocument('slides')); doc.boards.push(boardSchema.parse({ id: 'board', name: 'test', elements: [diagramNode('art', 'flowchart', 'process', 'Artwork', 60, 80)] }));
-  for (const family of ['flowchart', 'architecture', 'user-flow', 'mind-map'] as const) doc = upgradeDocument(applyDiagramOperation(doc, { op: 'diagram-template', boardId: 'board', family, prefix: family }));
-  for (const element of doc.boards[0].elements) if (element.type === 'connector') assert.ok(diagramConnectorPoints(doc.boards[0], element).length >= 2);
+  const artwork = doc.boards[0].elements.find(e => e.id === 'art')!;
+  const seen = new Set(['art']);
+  for (const family of ['flowchart', 'architecture', 'user-flow', 'mind-map'] as const) {
+    const before = new Set(doc.boards[0].elements.map(e => e.id));
+    doc = upgradeDocument(applyDiagramOperation(doc, { op: 'diagram-template', boardId: 'board', family, prefix: family }));
+    const created = doc.boards[0].elements.filter(e => !before.has(e.id));
+    assert.ok(created.some(e => e.type !== 'connector'), `${family} template created nodes`);
+    for (const element of created) {
+      const overlaps = element.x < artwork.x + artwork.width && element.x + element.width > artwork.x && element.y < artwork.y + artwork.height && element.y + element.height > artwork.y;
+      assert.ok(!overlaps, `${family} element ${element.id} overlaps the pre-existing artwork`);
+      assert.ok(!seen.has(element.id), `template id ${element.id} collides with an earlier template`);
+      seen.add(element.id);
+    }
+    for (const element of created) if (element.type === 'connector') assert.ok(diagramConnectorPoints(doc.boards[0], element).length >= 2);
+  }
 });
 test('large boards route against all obstacles without rejecting the count alone', () => {
   const boxes = Array.from({ length: 600 }, (_, i) => ({ x: 100 + i % 30 * 260, y: Math.floor(i / 30) * 200, width: 180, height: 80 }));

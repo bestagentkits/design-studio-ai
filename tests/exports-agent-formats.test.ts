@@ -63,7 +63,11 @@ test('authenticated React and scene exports preserve assets, animation, ownershi
     const createdToken = await request('/api/tokens', 'POST', { name: 'Export regression' }); assert.equal(createdToken.status, 201);
     token = (await createdToken.json() as { token: string }).token;
     const web = await create(createDocument('web', 'Portable interface'));
-    web.document.assets.push(await upload(web.id)); await save(web);
+    const media = await upload(web.id); web.document.assets.push(media);
+    // The asset must be referenced: a public export carries the media the document uses, and
+    // unreferenced assets are pruned (asserting the old pass-through here encoded the v1 leak).
+    web.document.pages[0].nodes.push({ id: 'media-node', type: 'image', name: 'Media', x: 0, y: 0, width: 10, height: 10, src: media.url });
+    await save(web);
     const archiveResponse = await exportFile(web.id, 'react'); assert.equal(archiveResponse.status, 200, await archiveResponse.clone().text());
     assert.equal(archiveResponse.headers.get('content-type'), 'application/zip'); assert.match(archiveResponse.headers.get('content-disposition')!, /\.zip"$/);
     const zip = await JSZip.loadAsync(await archiveResponse.arrayBuffer());

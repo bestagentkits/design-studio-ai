@@ -1,4 +1,5 @@
 import { publicCreativeProjection } from '../src/shared/public-creative-projection';
+import { upgradeDocument } from '../src/shared/document-upgrade';
 import type { InspectionRenderOptions } from '../src/shared/visual-inspection';
 
 import {exportOptionsSchema as optionsSchema} from '../src/shared/export-contract';
@@ -75,7 +76,7 @@ export async function renderProjectExport(c: Context<Env>, projectId: string, in
     span.event.projectId = row.id; span.event.action = thumbnail ? 'thumbnail.render' : `export.${options.format}`;
     await updateEvent(c.env, span.event);
     let doc = documentSchema.parse(JSON.parse(row.document));
-    if (options.format !== 'json') { doc = publicCreativeProjection(doc); await validateAssets(c, doc, row.id); }
+    if (options.format !== 'json') { doc = publicCreativeProjection(upgradeDocument(doc)); await validateAssets(c, doc, row.id); }
     return renderSnapshotExport(c.env, row.name, doc, options, async url => {
       const asset = await c.env.DB.prepare('SELECT storage_key,mime_type FROM assets WHERE id=? AND user_id=?').bind(url.split('/').pop(), owner(c)).first<{storage_key:string;mime_type:string}>();
       if (!asset) fail(400, 'missing_asset', 'A referenced asset is unavailable.');

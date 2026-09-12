@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createDocument} from '../src/shared/catalog';
 import {documentSchema} from '../src/shared/schema';
 import {mutateDocument} from '../src/shared/operations';
-import {characterSchema,characterInstanceSchema,constraintSchema,motionChannelSchema} from '../src/shared/character-schema';
+import {characterSchema,characterInstanceSchema,constraintSchema,motionChannelSchema,attachmentSchema} from '../src/shared/character-schema';
 import {evaluateCharacter,attachmentVertices} from '../src/shared/character-runtime';
 import {worldMatrices,point} from '../src/shared/character-math';
 import {sampleChannel} from '../src/shared/motion-channels';
@@ -19,6 +19,8 @@ test('v1 rejects character data; operations upgrade atomically and preserve exis
 test('invalid dependencies, asset refs and geometry are rejected before evaluation',()=>{
  const doc={...createDocument(),schemaVersion:2 as const,characters:[rig()]};doc.characters[0].bones[0].parentId='arm';assert.equal(documentSchema.safeParse(doc).success,false);
  doc.characters=[rig()];doc.characters[0].constraints.push(constraintSchema.parse({id:'ik',name:'IK',type:'ik',bones:['root'],targetBoneId:'arm'}));assert.equal(documentSchema.safeParse(doc).success,false);
+ const dangling=rig();dangling.slots.push({id:'slot',name:'Slot',boneId:'root',opacity:1,blend:'normal'});dangling.attachments.push(attachmentSchema.parse({id:'art',name:'Art',slotId:'slot',kind:'region',assetId:'missing',width:10,height:10}));assert.equal(documentSchema.safeParse({...createDocument(),schemaVersion:2 as const,characters:[dangling]}).success,false);
+ const danglingSkin=rig();danglingSkin.skins.push({id:'skin',name:'Skin',attachments:{slot:'missing'}});assert.equal(documentSchema.safeParse({...createDocument(),schemaVersion:2 as const,characters:[danglingSkin]}).success,false);
 });
 test('per-property curves are independent; discrete keys hold; authored turns remain unwrapped',()=>{
  const c=motionChannelSchema.parse({id:'c',target:'bone',targetId:'root',property:'rotation',keys:[{id:'a',time:0,value:0,easing:'linear'},{id:'b',time:2,value:720}]});assert.equal(sampleChannel(c,1),360);assert.equal(sampleChannel({...c,property:'order'},1),0);assert.equal(sampleChannel(c,2),720);

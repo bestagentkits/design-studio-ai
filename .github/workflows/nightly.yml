@@ -1,0 +1,110 @@
+name: Nightly full verification
+# The scheduled run deliberately ignores change-based lane selection (scripts/test-plan.mjs): a
+# nightly suite exists to catch drift that a diff-scoped plan would never schedule.
+on:
+  schedule:
+    - cron: '0 18 * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix packages/cli
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build:cli
+      - run: npm run typecheck
+      - run: npm test
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: nightly-unit-output
+          path: test-results
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: dist
+          if-no-files-found: error
+          retention-days: 1
+  browser-full:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: dist
+      - name: Confirm the full plan ignores change-based selection
+        run: node scripts/test-plan.mjs --mode=full
+      # No spec arguments: scripts/run-e2e.mjs enumerates every tests/*.spec.ts on both projects.
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: nightly-browser-results
+          path: test-results
+  cross-browser:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('package-lock.json') }}
+      - run: npx playwright install --with-deps firefox webkit
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: dist
+      - run: STUDIO_CROSS_BROWSER=1 npm run test:e2e -- tests/character-editor-ui.spec.ts tests/structured-editor-ui.spec.ts tests/editor-ergonomics.spec.ts --project=${{ matrix.project }}
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: nightly-cross-browser-results-${{ matrix.project }}
+          path: test-results

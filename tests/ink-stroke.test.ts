@@ -29,11 +29,13 @@ test('pressure transitions filter velocity, retain actual pen pressure and valid
 });
 test('dots, repeated samples and completed taper remain finite and deterministic', () => {
   const dot = [{ x: 50, y: 50, pressure: .7 }];
-  assert.ok(inkStrokeToSvg(dot, 16).length > 0);
+  const dotPath = inkStrokeToSvg(dot, 16);
+  assert.match(dotPath, /^M .+ Q .+ Z$/, 'A single point should still emit a closed path command sequence');
+  assert.doesNotMatch(dotPath, /NaN|Infinity/);
   assert.equal(hitTestInk(dot, 16, 50, 50, 0), true);
   const points = trace(10);
   assert.equal(inkStrokeToSvg(points, 16), inkStrokeToSvg(structuredClone(points), 16));
-  assert.doesNotMatch(inkStrokeToSvg([...dot, ...dot], 16), /NaN|Infinity/);
+  assert.doesNotMatch(inkStrokeToSvg(dot, 16) + inkStrokeToSvg([...dot, ...dot], 16), /NaN|Infinity/);
   assert.notEqual(inkStrokeToSvg(points, 16, false), inkStrokeToSvg(points, 16, true));
   assert.throws(() => inkStrokeToSvg([], 16));
 });

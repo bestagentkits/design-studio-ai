@@ -7,6 +7,7 @@ import { FileBucket, SqliteDatabase } from '../server/node-adapters';
 import { claimCommunityAdminEmails, isCommunityAdmin } from '../server/community-admin-grants';
 import { verifiedGitHubEmails } from '../server/github-login';
 import { hash } from '../server/security';
+import { ZodError } from 'zod';
 import type { Bindings } from '../server/types';
 
 test('provider email selection accepts verified secondary identities and rejects unverified or malformed claims', () => {
@@ -16,7 +17,7 @@ test('provider email selection accepts verified secondary identities and rejects
     {email:'also-verified@example.test',primary:true,verified:true},
   ]),['verified@example.test','also-verified@example.test']);
   assert.deepEqual(verifiedGitHubEmails([{email:'admin@example.test',primary:true,verified:false}]),[]);
-  for(const input of [{email:'admin@example.test'},[{email:'admin@example.test',primary:true}],[{email:'admin@example.test',primary:true,verified:'true'}],[{email:'not-an-email',primary:true,verified:true}]]) assert.throws(()=>verifiedGitHubEmails(input));
+  for(const input of [{email:'admin@example.test'},[{email:'admin@example.test',primary:true}],[{email:'admin@example.test',primary:true,verified:'true'}],[{email:'not-an-email',primary:true,verified:true}]]) assert.throws(()=>verifiedGitHubEmails(input),ZodError);
 });
 
 test('Community admin grants use real persisted verified claims, exact ID allowlists and live revocation', async t => {

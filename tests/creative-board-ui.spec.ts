@@ -16,11 +16,18 @@ async function newBoard(page: Page, baseURL: string) {
   await page.getByRole('button', { name: 'Open creative board', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Creative board', exact: true })).toBeVisible(); return projectId;
 }
-async function saveBoard(page: Page, id: string, predicate: (doc: any) => boolean) {
+type BoardElement = { id: string; name?: string; type: string; width?: number; height?: number; assetId?: string; posterAssetId?: string; unicode?: string; attribution?: string; diagram?: { family: string }; start?: { binding?: unknown }; end?: { binding?: unknown }; playing?: boolean; loop?: boolean; posterTime?: number };
+type DocumentAsset = { id: string; url: string; name: string; mimeType: string };
+type SavedBoardDocument = { boards: { elements: BoardElement[] }[]; assets: DocumentAsset[] };
+async function savedDocument(page: Page, id: string) {
+  // Playwright's json() is untyped; the saved project document is a known shape asserted below.
+  return (await (await page.request.get(`/api/projects/${id}`)).json()).project.document as SavedBoardDocument;
+}
+async function saveBoard(page: Page, id: string, predicate: (doc: Partial<SavedBoardDocument>) => boolean) {
   await page.getByRole('button', { name: 'Close creative board', exact: true }).click();
   await page.getByRole('button', { name: 'Save', exact: true }).click();
-  await expect.poll(async () => predicate((await (await page.request.get(`/api/projects/${id}`)).json()).project.document)).toBe(true);
-  return (await (await page.request.get(`/api/projects/${id}`)).json()).project.document;
+  await expect.poll(async () => predicate(await savedDocument(page, id))).toBe(true);
+  return savedDocument(page, id);
 }
 
 test('New Board keeps searchable Elements, keyboard transforms, order and diagram layouts after reopening', async ({ page, baseURL }) => {
@@ -31,9 +38,16 @@ test('New Board keeps searchable Elements, keyboard transforms, order and diagra
   await page.getByRole('searchbox', { name: 'Search elements' }).fill('award');
   await page.getByRole('button', { name: 'Celebration star', exact: true }).click();
   await expect(page.getByLabel('Element x', { exact: true })).toHaveValue('80');
+  const sticker = canvas.locator('[data-board-element]').filter({ has: page.locator('image') }).first();
+  const stickerId = await sticker.getAttribute('data-board-element'); const beforeHref = await sticker.locator('image').getAttribute('href');
+  expect(stickerId).toBeTruthy(); expect(beforeHref).toBeTruthy();
   await page.getByLabel('Sticker color', { exact: true }).fill('#22aa66');
   await page.getByRole('button', { name: 'Recolor selected sticker', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Recolor selected sticker', exact: true })).toBeEnabled();
+  const stickerGroup = canvas.locator(`[data-board-element="${stickerId}"]`);
+  await expect(stickerGroup.locator('image')).not.toHaveAttribute('href', beforeHref!);
+  const afterHref = await stickerGroup.locator('image').getAttribute('href');
+  expect(afterHref).toBeTruthy(); expect(afterHref).not.toBe(beforeHref);
+  await expect(page.getByRole('region', { name: 'Elements library' }).getByRole('alert')).toHaveCount(0);
   await canvas.focus(); await page.keyboard.press('ArrowRight');
   await expect(page.getByLabel('Element x', { exact: true })).toHaveValue('81');
   await page.getByRole('searchbox', { name: 'Search elements' }).fill('👍');
@@ -50,15 +64,26 @@ test('New Board keeps searchable Elements, keyboard transforms, order and diagra
     await page.getByRole('button', { name: `Insert ${family} example`, exact: true }).click();
   }
   await page.getByRole('button', { name: 'layered layout', exact: true }).click();
-  const saved = await saveBoard(page, id, doc => doc.boards?.[0]?.elements.filter((e: any) => e.diagram).length === 19);
+  const saved = await saveBoard(page, id, doc => doc.boards?.[0]?.elements.filter(e => e.diagram).length === 19);
   const elements = saved.boards[0].elements;
-  expect(elements.find((e: any) => e.type === 'emoji').unicode).toBe('👍🏼');
-  expect(elements.find((e: any) => e.type === 'sticker').attribution).toContain('MIT');
-  expect(elements.findIndex((e: any) => e.type === 'emoji')).toBeLessThan(elements.findIndex((e: any) => e.type === 'sticker'));
-  expect(new Set(elements.filter((e: any) => e.diagram).map((e: any) => e.diagram.family)).size).toBe(4);
-  expect(elements.filter((e: any) => e.type === 'connector').every((e: any) => e.start.binding && e.end.binding)).toBe(true);
+  expect(elements.find(e => e.type === 'emoji')!.unicode).toBe('👍🏼');
+  expect(elements.find(e => e.type === 'sticker')!.attribution).toContain('MIT');
+  expect(elements.findIndex(e => e.type === 'emoji')).toBeLessThan(elements.findIndex(e => e.type === 'sticker'));
+  expect(new Set(elements.filter(e => e.diagram).map(e => e.diagram!.family)).size).toBe(4);
+  expect(elements.filter(e => e.type === 'connector').every(e => e.start!.binding && e.end!.binding)).toBe(true);
+  const recolored = elements.find(e => e.id === stickerId)!;
+  const replacement = saved.assets.find(a => a.url === afterHref)!, previous = saved.assets.find(a => a.url === beforeHref)!;
+  expect(recolored.type).toBe('sticker'); expect(replacement).toBeTruthy(); expect(previous).toBeTruthy();
+  expect(recolored.assetId).toBe(replacement.id);
+  expect(replacement.id).not.toBe(previous.id);
+  expect(replacement.mimeType).toBe('image/png'); expect(replacement.name).toMatch(/Studio recipe v1/);
   await page.reload(); await expect(page.getByRole('dialog', { name: 'Creative board', exact: true })).toBeVisible();
-  await expect(canvas.locator('[data-board-element]')).not.toHaveCount(0);
+  await page.getByRole('button', { name: 'Fit diagram', exact: true }).click();
+  const reopenedIds = await canvas.locator('[data-board-element]').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-board-element')));
+  expect(reopenedIds.slice().sort()).toEqual(elements.map((e) => e.id).slice().sort());
+  // One distinct single-word label per native family, so the reopened canvas proves all four families rendered.
+  for (const label of ['Complete', 'Customer', 'Dashboard', 'Delivery']) await expect(canvas).toContainText(label);
+  for (const connector of elements.filter((e) => e.type === 'connector')) await expect(canvas.locator(`[data-board-element="${connector.id}"] path`)).not.toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -87,13 +112,13 @@ test('owned GIF stays paused, plays real frames, saves selected poster and impor
   await expect(page.getByRole('alert')).toContainText('Unsupported SVG element');
   await upload.setInputFiles({ name: 'vector.svg', mimeType: 'image/svg+xml', buffer: Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="64" height="32"><rect width="64" height="32" fill="#ee4455"/></svg>') });
   await expect(page.getByRole('status').filter({ hasText: 'SVG imported as a PNG' })).toBeVisible();
-  const saved = await saveBoard(page, id, doc => doc.boards?.[0]?.elements.some((e: any) => e.name === 'vector.png'));
-  const animation = saved.boards[0].elements.find((e: any) => e.type === 'gif');
+  const saved = await saveBoard(page, id, doc => doc.boards?.[0]?.elements.some(e => e.name === 'vector.png') ?? false);
+  const animation = saved.boards[0].elements.find(e => e.type === 'gif')!;
   expect(animation.playing).toBe(false); expect(animation.loop).toBe(false); expect(animation.posterTime).toBe(20);
-  expect(saved.assets.find((a: any) => a.id === animation.assetId).mimeType).toBe('image/gif');
-  expect(saved.assets.find((a: any) => a.id === animation.posterAssetId).mimeType).toBe('image/png');
-  const image = saved.boards[0].elements.find((e: any) => e.name === 'vector.png');
-  expect(image.width / image.height).toBe(2); expect(saved.assets.find((a: any) => a.id === image.assetId).mimeType).toBe('image/png');
+  expect(saved.assets.find(a => a.id === animation.assetId)!.mimeType).toBe('image/gif');
+  expect(saved.assets.find(a => a.id === animation.posterAssetId)!.mimeType).toBe('image/png');
+  const image = saved.boards[0].elements.find(e => e.name === 'vector.png')!;
+  expect(image.width! / image.height!).toBe(2); expect(saved.assets.find(a => a.id === image.assetId)!.mimeType).toBe('image/png');
   await page.reload(); await expect(page.getByRole('dialog', { name: 'Creative board', exact: true })).toBeVisible();
   await expect.poll(() => gifCanvas.evaluate((c: HTMLCanvasElement) => c.width)).toBe(2);
   const reopened = await pixels(); await gifCanvas.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))); expect(await pixels()).toEqual(reopened);
@@ -111,7 +136,7 @@ test('unsaved Board draft survives repeated reload and Save Board persists the r
   await page.reload(); await expect(page.getByRole('button', { name: 'Restore draft', exact: true })).toBeVisible();
   await page.reload(); await page.getByRole('button', { name: 'Restore draft', exact: true }).click();
   await page.getByRole('button', { name: 'Save Board', exact: true }).click();
-  await expect.poll(async () => (await (await page.request.get(`/api/projects/${id}`)).json()).project.document.boards[0].elements.filter((e: any) => e.type === 'stroke').length).toBe(1);
+  await expect.poll(async () => (await savedDocument(page, id)).boards[0].elements.filter(e => e.type === 'stroke').length).toBe(1);
   await page.reload(); await expect(canvas).toBeVisible();
   await expect(page.getByRole('button', { name: 'Restore draft', exact: true })).toHaveCount(0);
 });

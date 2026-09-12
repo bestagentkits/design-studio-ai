@@ -12,7 +12,7 @@
     "dev:api": "tsx watch server/node.ts",
     "build": "node scripts/build-renderer.mjs && vite build && node scripts/build-public-docs.mjs",
     "typecheck": "tsc --noEmit && tsc -p packages/cli/tsconfig.json",
-    "test": "node scripts/build-renderer.mjs && tsx --test tests/*.test.ts",
+    "test": "node scripts/build-renderer.mjs && node -e \"const {globSync}=require('node:fs');const n=globSync('tests/**/*.test.ts').length;if(n===0){console.error('No unit tests matched tests/**/*.test.ts');process.exit(1);}console.log('Unit test files:',n)\" && tsx --test \"tests/**/*.test.ts\"",
     "start": "tsx server/node.ts",
     "cf": "node scripts/cloudflare.mjs",
     "deploy": "npm run build && node scripts/cloudflare.mjs deploy",
