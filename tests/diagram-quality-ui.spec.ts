@@ -78,6 +78,9 @@ test('four native diagram families render with embedded Vietnamese fonts and por
   }
   for(const board of doc.boards){
     const crop=fitDiagramBounds(board.elements),svg=boardSvg(board,doc,crop,1100,Math.round(1100*crop.height/crop.width));
+    expect(svg).toContain('@font-face');
+    expect(svg).toMatch(/<text [^>]*font-family="Patrick Hand"/);
+    if(board.id==='mind-map') for(const label of ['Nét vẽ tự nhiên','Font tiếng Việt','Màu sắc tùy chỉnh']) expect(svg.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ')).toContain(label);
     await writeFile(info.outputPath(`${board.id}.svg`),svg);
     await page.evaluate(async svg => {
       const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml');
@@ -86,8 +89,8 @@ test('four native diagram families render with embedded Vietnamese fonts and por
       await image.decode();
     }, svg);
     await page.setContent(`<style>body{margin:24px;background:#fff}svg{max-width:100%;height:auto}</style>${svg}`);
-    await page.evaluate(()=>document.fonts.ready);
-    expect(await page.evaluate(()=>document.fonts.check('24px "Patrick Hand"'))).toBe(true);
+    // FontFaceSet.check() returns true for an absent family, so require a real declared face to be loaded.
+    expect(await page.evaluate(async()=>{await document.fonts.ready;await document.fonts.load('24px "Patrick Hand"');return Array.from(document.fonts).some(face=>face.family.replace(/["']/g,'').trim().toLowerCase()==='patrick hand'&&face.status==='loaded');})).toBe(true);
     await expect(page.locator('[data-route-warning]')).toHaveCount(0);
     await page.screenshot({path:info.outputPath(`${board.id}.png`),fullPage:true});
     if(browserName==='chromium') await page.pdf({path:info.outputPath(`${board.id}.pdf`),printBackground:true,width:'1200px',height:'1000px'});

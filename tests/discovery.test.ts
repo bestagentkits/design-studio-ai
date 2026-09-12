@@ -4,6 +4,7 @@ import { readFile, readdir, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Hono } from 'hono';
+import { ZodError } from 'zod';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import { DiscoveryCache, discoveryRoutes, filterFontCatalog, filterModelCatalog, modelDiscoveryRequest, parseGoogleFonts, parseModelPage } from '../server/discovery';
 import { ApiError, authenticate, encrypt, hash, secret } from '../server/security';
@@ -38,7 +39,7 @@ test('official model response shapes retain IDs and safely discard unrelated fie
   assert.deepEqual(parseModelPage('gemini', { models: [{ name: 'models/gemini-2.5-flash', displayName: 'Gemini Flash', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding', supportedGenerationMethods: ['embedContent'] }], nextPageToken: 'next' }), { models: [{ id: 'gemini-2.5-flash', name: 'Gemini Flash' }], cursor: 'next' });
   assert.equal(parseModelPage('openrouter', { data: [{ id: 'openai/gpt-4.1', name: 'OpenAI: GPT-4.1' }] }).models[0].id, 'openai/gpt-4.1');
   assert.deepEqual(parseModelPage('fal', { models: [{ endpoint_id: 'fal-ai/flux/dev', metadata: { display_name: 'FLUX.1 [dev]', category: 'text-to-image' } }], has_more: true, next_cursor: 'Mg==' }), { models: [{ id: 'fal-ai/flux/dev', name: 'FLUX.1 [dev]', category: 'text-to-image' }], cursor: 'Mg==' });
-  assert.throws(() => parseModelPage('openai', { error: 'Unauthorized' }));
+  assert.throws(() => parseModelPage('openai', { error: 'Unauthorized' }), ZodError);
   assert.equal(parseModelPage('openai', { data: [{ id: 'x'.repeat(201) }, { id: 42 }] }).models.length, 0);
 });
 

@@ -45,9 +45,17 @@ test('shared SVG is deterministic, embeds fonts and uses real sketch curves/hatc
 });
 test('tree layout allocates space for uneven subtrees and preserves non-diagram artwork',()=>{
   const nodes=Array.from({length:7},(_,i)=>diagramNode(`n${i}`,'mind-map','topic',`Topic ${i}`));
-  const board=boardSchema.parse({id:'b',name:'Tree',elements:nodes,mindMap:nodes.map((n,i)=>({elementId:n.id,parentId:i?(i<3?'n0':'n1'):undefined}))});
+  const artwork={id:'art-1',name:'Artwork',type:'shape',x:2000,y:2000,width:100,height:100,shape:'rectangle',fill:'#ffffff',stroke:'#111111',strokeWidth:1};
+  const board=boardSchema.parse({id:'b',name:'Tree',elements:[...nodes,artwork],mindMap:nodes.map((n,i)=>({elementId:n.id,parentId:i?(i<3?'n0':'n1'):undefined}))});
   const result=layoutDiagram(board,'tree');
   for(const a of result.elements)for(const b of result.elements)if(a.id!==b.id)assert.ok(a.x+a.width<=b.x||b.x+b.width<=a.x||a.y+a.height<=b.y||b.y+b.height<=a.y);
+  const preserved=result.elements.find(e=>e.id==='art-1');
+  assert.deepEqual(preserved,board.elements.find(e=>e.id==='art-1'));
+  assert.deepEqual({x:preserved!.x,y:preserved!.y,width:preserved!.width,height:preserved!.height},{x:2000,y:2000,width:100,height:100});
+  const children=board.mindMap!.filter(m=>m.parentId==='n1').map(m=>result.elements.find(e=>e.id===m.elementId)!);
+  assert.equal(children.length,4);
+  const parent=result.elements.find(e=>e.id==='n1')!;
+  assert.ok(Math.abs(parent.y+parent.height/2-(Math.min(...children.map(c=>c.y))+Math.max(...children.map(c=>c.y+c.height)))/2)<1e-9);
 });
 test('label-only patches preserve ports, fonts and sizing; style-only patches preserve all other appearance',()=>{
   let d=document();d.boards[0].elements=[diagramNode('n','flowchart','process','Before')];

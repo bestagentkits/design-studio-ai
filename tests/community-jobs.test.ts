@@ -18,9 +18,23 @@ import {documentSchema} from '../src/shared/schema';
 
 test('independent documents remap navigation, toggles, timeline targets and shared scene rigs',()=>{
  const document=createDocument('web','Linked design'),second=createDocument('web','Second page').pages[0];second.id='second-page';document.pages.push(second);
- document.pages[0].nodes[0].interactions=[{trigger:'click',action:'navigate',target:second.id},{trigger:'click',action:'toggle',target:document.pages[0].nodes[1].id},{trigger:'click',action:'url',target:'https://example.com'}];
- const copy=independentCommunityDocument(document,'recipient');assert.equal(copy.pages[0].nodes[0].interactions![0].target,copy.pages[1].id);assert.equal(copy.pages[0].nodes[0].interactions![1].target,copy.pages[0].nodes[1].id);assert.equal(copy.pages[0].nodes[0].interactions![2].target,'https://example.com');documentSchema.parse(copy);
- const scene=createDocument('3d','Rig');const object=scene.pages[0].nodes.find(n=>n.type==='model3d')!;const linked=structuredClone(object);linked.id='linked-rig';linked.scene={...linked.scene,rigId:object.id};linked.data={...linked.data,rigSourceId:object.id};scene.pages[0].nodes.push(linked);const rigCopy=independentCommunityDocument(scene,'rig-recipient');const copiedRoot=rigCopy.pages[0].nodes.find(n=>n.name===object.name&&n.id!==rigCopy.pages[0].nodes.at(-1)!.id)!;assert.equal(rigCopy.pages[0].nodes.at(-1)!.scene!.rigId,copiedRoot.id);assert.equal(rigCopy.pages[0].nodes.at(-1)!.data!.rigSourceId,copiedRoot.id);
+ const firstNode=document.pages[0].nodes[0],secondNode=document.pages[0].nodes[1],secondPageId=second.id,secondPageNode=second.nodes[0];
+ firstNode.interactions=[{trigger:'click',action:'navigate',target:secondPageId},{trigger:'click',action:'toggle',target:secondNode.id},{trigger:'click',action:'url',target:'https://example.com'}];
+ document.timeline={duration:2,fps:30,tracks:[{id:'track-first',nodeId:firstNode.id,keyframes:[]},{id:'track-second',nodeId:secondPageNode.id,keyframes:[]}]};
+ const copy=independentCommunityDocument(document,'recipient'),interactions=copy.pages[0].nodes[0].interactions!;
+ assert.notEqual(copy.pages[0].id,document.pages[0].id);assert.notEqual(copy.pages[1].id,secondPageId);
+ assert.notEqual(copy.pages[0].nodes[0].id,firstNode.id);assert.notEqual(copy.pages[0].nodes[1].id,secondNode.id);
+ assert.equal(interactions[0].target,copy.pages[1].id);assert.notEqual(interactions[0].target,secondPageId);
+ assert.equal(interactions[1].target,copy.pages[0].nodes[1].id);assert.notEqual(interactions[1].target,secondNode.id);
+ assert.equal(interactions[2].target,'https://example.com');
+ const tracks=copy.timeline!.tracks;
+ assert.notEqual(tracks[0].id,'track-first');assert.equal(tracks[0].nodeId,copy.pages[0].nodes[0].id);assert.notEqual(tracks[0].nodeId,firstNode.id);
+ assert.notEqual(tracks[1].id,'track-second');assert.equal(tracks[1].nodeId,copy.pages[1].nodes[0].id);assert.notEqual(tracks[1].nodeId,secondPageNode.id);
+ documentSchema.parse(copy);
+ // A target the mapping cannot resolve keeps its original reference and the track is still copied.
+ const unknown=createDocument('web','Unknown timeline target');unknown.timeline={duration:1,fps:24,tracks:[{id:'track-absent',nodeId:'absent-node',keyframes:[]}]};
+ const unknownCopy=independentCommunityDocument(unknown,'recipient');assert.notEqual(unknownCopy.timeline!.tracks[0].id,'track-absent');assert.equal(unknownCopy.timeline!.tracks[0].nodeId,'absent-node');
+ const scene=createDocument('3d','Rig');const object=scene.pages[0].nodes.find(n=>n.type==='model3d')!;const linked=structuredClone(object);linked.id='linked-rig';linked.scene={...linked.scene,rigId:object.id};linked.data={...linked.data,rigSourceId:object.id};scene.pages[0].nodes.push(linked);const rigCopy=independentCommunityDocument(scene,'rig-recipient');const copiedRoot=rigCopy.pages[0].nodes.find(n=>n.name===object.name&&n.id!==rigCopy.pages[0].nodes.at(-1)!.id)!,copiedLinked=rigCopy.pages[0].nodes.at(-1)!;assert.notEqual(copiedLinked.id,'linked-rig');assert.equal(copiedLinked.scene!.rigId,copiedRoot.id);assert.notEqual(copiedLinked.scene!.rigId,object.id);assert.equal(copiedLinked.data!.rigSourceId,copiedRoot.id);assert.notEqual(copiedLinked.data!.rigSourceId,object.id);
 });
 
 test('real Community publication produces portable files and independent remix/import with durable revocation', {timeout:120000},async()=>{

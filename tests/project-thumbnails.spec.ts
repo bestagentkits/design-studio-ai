@@ -38,7 +38,8 @@ test('saved thumbnails contain design pixels, reuse their revision and refresh a
   expect(created.status()).toBe(201);
   const { project } = await created.json();
   let reads = 0;
-  page.on('request', request => { if (request.method() === 'GET' && request.url() === `${baseURL}/api/projects/${project.id}`) reads++; });
+  const projectPath = `/api/projects/${encodeURIComponent(project.id)}`;
+  page.on('request', request => { if (request.method() === 'GET' && new URL(request.url()).pathname === projectPath) reads++; });
   const image = page.getByRole('img', { name: `Preview of ${document.name}`, exact: true });
   try {
     await page.goto('/');
@@ -54,6 +55,7 @@ test('saved thumbnails contain design pixels, reuse their revision and refresh a
     expect(reads).toBe(0);
     await page.locator('.project-open').filter({ hasText: document.name }).click();
     await expect(page.getByRole('button', { name: 'Back to workspace', exact: true })).toBeVisible();
+    expect(reads).toBeGreaterThan(0);
     const before = reads;
     await page.getByRole('button', { name: 'Back to workspace', exact: true }).click();
     await expect(image).toHaveAttribute('src', src!); expect(reads).toBe(before);

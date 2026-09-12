@@ -216,3 +216,95 @@ test("prompt opens a saved interview, accepts agent questions, and approves an e
     await page.request.delete(`/api/projects/${id}`, { headers });
   }
 });
+test("a configured text provider enables the AI interview and generation entries", async ({
+  page,
+  baseURL,
+}) => {
+  const headers = { Origin: baseURL! };
+  const registration = await page.request.post("/api/auth/register", {
+    headers,
+    data: {
+      email: `provider-gate-${randomUUID()}@studio.test`,
+      name: "Provider gate verification",
+      password: randomUUID() + randomUUID(),
+    },
+  });
+  expect(registration.status()).toBe(201);
+  // The E2E server reserves this allowlisted origin for settings persistence (scripts/run-e2e.mjs).
+  const connection = await page.request.put(
+    "/api/providers/custom-onboarding-text",
+    {
+      headers,
+      data: {
+        name: "Onboarding text",
+        baseUrl: "https://browser-provider.example/v1",
+        model: "onboarding-model",
+        protocol: "openai",
+        authMethod: "none",
+      },
+    },
+  );
+  expect(connection.status()).toBe(200);
+  const projectResponse = await page.request.post("/api/projects", {
+    headers,
+    data: { name: "Provider gate" },
+  });
+  expect(projectResponse.status()).toBe(201);
+  const id = (await projectResponse.json()).project.id as string;
+  const route = `/api/projects/${id}/brief`;
+  try {
+    const created = await page.request.put(route, {
+      headers,
+      data: { expectedRevision: 0, request: "A provider-enabled brief" },
+    });
+    expect(created.status()).toBe(200);
+    await page.goto(`/?project=${id}`);
+    // The interview entry derives its disabled state from a configured text provider, not a fixed gate.
+    const interviewButton = page.getByRole("button", {
+      name: "Ask AI to start the interview",
+    });
+    await expect(interviewButton).toBeEnabled();
+    const interviewRequest = page.waitForRequest(
+      (request) =>
+        request.url().includes(`/api/projects/${id}/brief/interview`) &&
+        request.method() === "POST",
+    );
+    await interviewButton.click();
+    expect((await interviewRequest).postDataJSON().provider).toBe(
+      "custom-onboarding-text",
+    );
+    let brief = (await (await page.request.get(route)).json()).brief;
+    const saved = await page.request.put(route, {
+      headers,
+      data: {
+        expectedRevision: brief.revision,
+        scope: {
+          objective: "A provider-enabled brief",
+          audience: "Neighbors",
+          direction: "Warm and welcoming",
+          deliverables: ["One landing page"],
+          constraints: [],
+          acceptanceCriteria: ["Visitors can find the exchange"],
+        },
+      },
+    });
+    expect(saved.status()).toBe(200);
+    brief = (await saved.json()).brief;
+    const approved = await page.request.post(`${route}/approve`, {
+      headers,
+      data: { expectedRevision: brief.revision },
+    });
+    expect(approved.status()).toBe(200);
+    // An approved brief with a non-empty default document opens the editor; `brief=open` keeps the
+    // approved scope workspace on screen so the generation entry is observable.
+    await page.goto(`/?project=${id}&brief=open`);
+    await expect(
+      page.getByRole("button", { name: "Generate design", exact: true }),
+    ).toBeEnabled();
+  } finally {
+    await page.request.delete(`/api/projects/${id}`, { headers });
+    await page.request.delete("/api/providers/custom-onboarding-text", {
+      headers,
+    });
+  }
+});

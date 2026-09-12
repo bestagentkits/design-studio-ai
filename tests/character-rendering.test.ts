@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {build} from 'esbuild';
-import {chromium} from 'playwright';
+import {chromium} from '@playwright/test';
 
 test('WebGL and Canvas preserve texture orientation, alpha and inverse clipping',async()=>{
  const bundle=await build({stdin:{contents:`import {CharacterWebGL} from './src/shared/character-webgl';import {drawCharacter} from './src/shared/character-canvas';import {characterSchema,characterInstanceSchema} from './src/shared/character-schema';

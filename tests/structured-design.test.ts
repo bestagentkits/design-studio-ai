@@ -162,10 +162,17 @@ test('mesh edits reject unknown selections and malformed geometry', () => {
   assert.equal(meshSchema.safeParse({ ...quad(), uv: [0, 0] }).success, false);
 });
 test('UV projection is finite and skinning permits vertex edits but rejects topology edits', () => {
-  for (const op of ['uv-planar', 'uv-sphere'] as const) {
-    const uv = editMesh(quad(), { op, selection: [] }).uv!;
-    assert.equal(uv.length, 8); assert.ok(uv.every(n => Number.isFinite(n) && n >= 0 && n <= 1));
-  }
+  // Dominant-axis planar projection of this Z-flat quad is exactly (x, y); constants or swapped axes cannot pass.
+  const planar = editMesh(quad(), { op: 'uv-planar', selection: [] }).uv!, planarExpected = [0, 0, 1, 0, 1, 1, 0, 1];
+  assert.equal(planar.length, 8);
+  planar.forEach((value, i) => close(value, planarExpected[i]));
+  assert.equal(new Set(Array.from({ length: 4 }, (_, i) => `${planar[i * 2]},${planar[i * 2 + 1]}`)).size, 4);
+  // Spherical projection: u = .5 + atan2(z, x) / 2pi, v = .5 - asin(y / radius) / pi. The quad lies on z = 0, so the
+  // two corners at (0,0,0) and (1,0,0) share the equator meridian and legitimately project to the same UV.
+  const sphere = editMesh(quad(), { op: 'uv-sphere', selection: [] }).uv!, sphereExpected = [[.5, .5], [.5, .5], [.5, .25], [.5, 0]];
+  assert.equal(sphere.length, 8); assert.ok(sphere.every(n => Number.isFinite(n) && n >= 0 && n <= 1));
+  sphere.forEach((value, i) => close(value, sphereExpected[Math.floor(i / 2)][i % 2]));
+  assert.equal(new Set(Array.from({ length: 4 }, (_, i) => `${sphere[i * 2]},${sphere[i * 2 + 1]}`)).size, 3);
   const skinned = { ...quad(), skinIndices: Array(16).fill(0), skinWeights: Array.from({ length: 16 }, (_, i) => i % 4 ? 0 : 1) };
   for (const op of ['extrude', 'inset', 'delete-faces', 'subdivide', 'weld'] as const) assert.throws(() => editMesh(skinned, { op, selection: [0] }), /unskinned/);
   const translated = editMesh(skinned, { op: 'translate', selection: [0], vector: [1, 2, 3] });

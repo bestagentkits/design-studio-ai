@@ -4,6 +4,8 @@ import {createDocument} from '../src/shared/catalog';
 import {newCharacter,addCharacterLayer,gridMesh} from '../src/shared/character-editing';
 import {characterInstanceSchema} from '../src/shared/character-schema';
 
+declare global{interface Window{imageDecodes:number;characterNode:Element;readinessDrops:number}}
+
 test('mesh stays loaded across live document updates and Save enables Share in preview',async({page,baseURL})=>{
  const headers={Origin:baseURL!},doc=createDocument('video','Sync regression');
  doc.schemaVersion=2;doc.pages[0].nodes=[];doc.timeline={duration:6,fps:30,tracks:[]};
@@ -16,22 +18,25 @@ test('mesh stays loaded across live document updates and Save enables Share in p
  const project=(await response.json()).project;
  await page.addInitScript(()=>{
   const original=HTMLImageElement.prototype.decode;
-  (window as any).imageDecodes=0;
-  HTMLImageElement.prototype.decode=async function(){(window as any).imageDecodes++;await original.call(this);await new Promise(r=>setTimeout(r,100));};
+  window.imageDecodes=0;
+  HTMLImageElement.prototype.decode=async function(){window.imageDecodes++;await original.call(this);await new Promise(r=>setTimeout(r,100));};
  });
  try{
   await page.goto(`/?project=${project.id}&mode=preview`);
   const view=page.locator('[data-character-ready]').first();await expect(view).toHaveAttribute('data-character-ready','true');
   await page.evaluate(()=>{
-   (window as any).readinessDrops=0;
-   new MutationObserver(records=>{for(const r of records)if((r.target as Element).getAttribute('data-character-ready')==='false')(window as any).readinessDrops++;}).observe(document.querySelector('[data-character-ready]')!,{attributes:true,attributeFilter:['data-character-ready']});
+   const node=document.querySelector('[data-character-ready]')!;
+   window.characterNode=node;window.readinessDrops=0;
+   new MutationObserver(records=>{for(const r of records)if((r.target as Element).getAttribute('data-character-ready')==='false')window.readinessDrops++;}).observe(document.body,{attributes:true,subtree:true,attributeFilter:['data-character-ready']});
   });
-  const initialDecodes=await page.evaluate(()=>(window as any).imageDecodes);
+  const initialDecodes=await page.evaluate(()=>window.imageDecodes);
+  expect(initialDecodes).toBeGreaterThan(0);
   const remote=structuredClone(project.document);remote.name='Remote name';
   const update=await page.request.put(`/api/projects/${project.id}/document`,{headers,data:{document:remote,expectedRevision:project.revision}});expect(update.status()).toBe(200);
   await expect(page.getByRole('textbox',{name:'Project name',exact:true})).toHaveValue('Remote name');
-  expect(await page.evaluate(()=>(window as any).imageDecodes)).toBe(initialDecodes);
-  expect(await page.evaluate(()=>(window as any).readinessDrops)).toBe(0);
+  expect(await page.evaluate(()=>window.characterNode===document.querySelector('[data-character-ready]'))).toBe(true);
+  expect(await page.evaluate(()=>window.imageDecodes)).toBe(initialDecodes);
+  expect(await page.evaluate(()=>window.readinessDrops)).toBe(0);
   await page.getByRole('checkbox',{name:'Live',exact:true}).uncheck();
   await page.getByRole('textbox',{name:'Project name',exact:true}).fill('Saved name');
   await page.getByRole('button',{name:'Save',exact:true}).click();

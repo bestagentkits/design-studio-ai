@@ -4,6 +4,7 @@ import { fillPainting } from '../src/shared/painting-fill';
 import { selectionCoverage } from '../src/shared/painting-selection';
 import { PaintRuntime } from '../src/shared/paint-runtime';
 import { paintBrushPreset } from '../src/shared/paint-brush-presets';
+import type { Painting } from '../src/shared/painting-schema';
 const red = [255, 0, 0, 255] as [number, number, number, number];
 const transparent = [0, 0, 0, 0] as [number, number, number, number];
 test('contiguous fill does not cross an opaque boundary', async () => {
@@ -38,7 +39,9 @@ test('final ink taper narrows both ends without erasing the frozen source', () =
 });
 test('locked groups prevent pixel replacement, ungroup bypass and resize', async () => {
   const { assertPaintingTransition } = await import('../src/shared/painting-transition');
-  const painting = {id:'paint',name:'Paint',width:512,height:512,generation:0,colorSpace:'srgb' as const,algorithm:'cpu-srgb-grain-v1' as const,tileSize:512 as const,groups:[{id:'group',name:'Group',opacity:1,visible:true,locked:true}],layers:[{id:'layer',name:'Layer',groupId:'group',tiles:[],visible:true,locked:false,opacity:1,blend:'normal' as const,alphaLock:false,clipping:false}]};
+  const painting: Painting = {id:'paint',name:'Paint',width:512,height:512,generation:0,colorSpace:'srgb',algorithm:'cpu-srgb-grain-v1',tileSize:512,groups:[{id:'group',name:'Group',opacity:1,visible:true,locked:true}],layers:[{id:'layer',name:'Layer',groupId:'group',tiles:[],visible:true,locked:false,opacity:1,blend:'normal',alphaLock:false,clipping:false}]};
   const resized=structuredClone(painting);resized.width=256;assert.throws(()=>assertPaintingTransition(painting,resized),/Unlock/);
   const ungrouped=structuredClone(painting);ungrouped.groups=[];assert.throws(()=>assertPaintingTransition(painting,ungrouped),/Unlock/);
+  const repainted=structuredClone(painting);repainted.layers[0].tiles.push({x:0,y:0,assetId:'asset',hash:'a'.repeat(64),generation:0});assert.throws(()=>assertPaintingTransition(painting,repainted),/Unlock/);
+  const remasked=structuredClone(painting);remasked.layers[0].mask={enabled:true,tiles:[{x:0,y:0,assetId:'asset',hash:'a'.repeat(64),generation:0}]};assert.throws(()=>assertPaintingTransition(painting,remasked),/Unlock/);
 });

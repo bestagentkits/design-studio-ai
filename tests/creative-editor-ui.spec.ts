@@ -29,7 +29,7 @@ test('real editor stores smooth ink and layered paint, reloads them and excludes
   await expect(canvas.locator('[data-board-element] text')).toContainText('Text');
   await page.getByRole('button', { name: 'Close creative board' }).click();
   await page.getByRole('button', { name: 'Open painting studio', exact: true }).click();
-  await expect(page.getByRole('status').filter({ hasText: 'Bristle texture' })).toBeVisible();
+  await expect(page.getByLabel('Painting canvas', { exact: true })).toHaveAttribute('aria-busy', 'false');
   const paint = page.getByLabel('Painting canvas', { exact: true }), rect = await paint.boundingBox(); expect(rect).toBeTruthy();
   await page.mouse.move(rect!.x + rect!.width * .2, rect!.y + rect!.height * .4); await page.mouse.down();
   for (let i = 0; i < 20; i++) await page.mouse.move(rect!.x + rect!.width * (.2 + i * .025), rect!.y + rect!.height * (.4 + Math.sin(i / 4) * .05));

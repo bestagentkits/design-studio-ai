@@ -1,4 +1,5 @@
 import { test, expect } from './authenticated-browser';
+import { randomUUID } from 'node:crypto';
 
 test('custom connections persist and appear in editor provider choices without a reload', async ({ page, baseURL }, info) => {
   const created = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { name: 'Provider workflow' } });
@@ -63,4 +64,55 @@ test('custom connections persist and appear in editor provider choices without a
   await expect(selector.locator('option[value="custom-browser-team"]')).toHaveCount(0);
   await page.request.delete(`/api/projects/${briefProject.id}`, { headers: { Origin: baseURL! } });
   await page.request.delete(`/api/projects/${project.id}`, { headers: { Origin: baseURL! } });
+});
+
+test('credential-authenticated custom connections send the key without ever returning it', async ({ page, baseURL }) => {
+  const secret = `sk-e2e-${randomUUID()}`;
+  const created = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { name: 'Credential provider' } });
+  expect(created.status()).toBe(201);
+  const project = (await created.json()).project;
+  await page.goto(`/?project=${project.id}`);
+  if ((page.viewportSize()?.width ?? 1440) < 768) await page.locator('.mobile-editor-nav').getByRole('button', { name: 'Chat & layers', exact: true }).click();
+  await page.locator('.provider-settings').click();
+  const dialog = page.getByRole('dialog');
+  try {
+    await dialog.getByRole('button', { name: /Add custom provider/ }).click();
+    await dialog.getByLabel('Provider name', { exact: true }).fill('Keyed custom');
+    await dialog.getByLabel('Provider ID', { exact: true }).fill('browser-keyed');
+    await dialog.getByLabel('API format', { exact: true }).selectOption('openai');
+    await dialog.getByLabel('Base URL', { exact: true }).fill('https://browser-provider.example/v1');
+    await dialog.getByLabel('Authentication method', { exact: true }).selectOption('api-key');
+    await dialog.getByLabel('Authentication header', { exact: true }).fill('X-API-Key');
+    await dialog.getByRole('combobox', { name: 'Default model', exact: true }).fill('keyed-model');
+    const request = page.waitForRequest(r => r.url().endsWith('/api/providers/custom-browser-keyed') && r.method() === 'PUT');
+    await dialog.getByLabel('API key', { exact: true }).fill(secret);
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    const sent = (await request).postDataJSON();
+    expect(sent.authMethod).toBe('api-key');
+    expect(sent.authHeader).toBe('X-API-Key');
+    expect(sent.apiKey).toBe(secret);
+    await expect(dialog.getByRole('status').filter({ hasText: 'Keyed custom connected.' })).toBeVisible();
+    // The credential is submitted from the password field, then cleared and never re-rendered.
+    await expect(dialog.getByLabel('API key', { exact: true })).toHaveValue('');
+    expect(await page.content()).not.toContain(secret);
+    const providers = (await (await page.request.get('/api/providers')).json()).providers;
+    const connection = providers.find((p: { provider: string }) => p.provider === 'custom-browser-keyed');
+    // The connection is accepted against the allowlisted test origin and reports masked metadata only.
+    expect(connection.baseUrl).toBe('https://browser-provider.example/v1');
+    expect(connection.authMethod).toBe('api-key');
+    expect(connection.authHeader).toBe('X-API-Key');
+    expect(connection.apiKey).toBe('••••••••');
+    expect(JSON.stringify(providers)).not.toContain(secret);
+    // Re-opening the saved connection keeps the credential out of the form.
+    await dialog.getByRole('button', { name: /Keyed custom/ }).click();
+    await expect(dialog.getByLabel('API key', { exact: true })).toHaveValue('');
+    // Changing the authentication contract without re-entering a credential is rejected.
+    await dialog.getByLabel('Authentication method', { exact: true }).selectOption('basic');
+    await dialog.getByRole('button', { name: 'Save connection', exact: true }).click();
+    await expect(dialog.getByRole('alert')).toContainText('Enter a credential');
+  } finally {
+    await page.keyboard.press('Escape');
+    await page.request.delete('/api/providers/custom-browser-keyed', { headers: { Origin: baseURL! } });
+    await page.request.delete(`/api/projects/${project.id}`, { headers: { Origin: baseURL! } });
+  }
 });
