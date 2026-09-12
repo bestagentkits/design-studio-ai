@@ -44,4 +44,4 @@ The portal supports searchable section navigation, endpoint filtering, native ex
 
 Public content is present in HTML before JavaScript runs; JavaScript enables search/copy/navigation behavior. Without JavaScript, navigation remains visible and copy-only controls are hidden. Templates/manual editing do not require BYOK; generation does. Provider/Google verification, experimental WebMCP, encoder limitations, and format fidelity boundaries remain explicitly documented.
 
-See [web-documentation verification](../plans/2026-09-07-bootstrap-design-studio-ai/reports/web-documentation.md) for the observed checks. Serving/deployment validation is distinct from successful local rendering.
+See [web-documentation verification](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/2026-09-07-bootstrap-design-studio-ai/reports/web-documentation.md) for the observed checks. Serving/deployment validation is distinct from successful local rendering.

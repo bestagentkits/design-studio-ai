@@ -2,7 +2,7 @@
 
 Design Studio AI is an MIT-licensed design workspace where agents can perform the same design operations as people through a structured API, MCP tools, WebMCP, and a command-line client. The intended workflow is roughly 90% agent work: describe an outcome, inspect the rendered result, make targeted edits, and export or publish it.
 
-This brief records the requested product scope. It is not a claim that every feature is already implemented. Delivery evidence belongs in the [implementation plan](../plans/2026-09-07-bootstrap-design-studio-ai/plan.md).
+This brief records the requested product scope. It is not a claim that every feature is already implemented. Delivery evidence belongs in the [implementation plan](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/2026-09-07-bootstrap-design-studio-ai/plan.md).
 
 ## Outcomes and constraints
 

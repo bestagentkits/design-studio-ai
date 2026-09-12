@@ -44,6 +44,6 @@ Painting adds rectangle/lasso selections, feathering, tolerant contiguous or who
 
 ## Acceptance limits
 
-The [active plan](../plans/260910-1852-board-paint-diagram/plan.md) tracks observed browser, runtime and artifact evidence separately from implementation. Local browser or CPU checks do not establish physical iPad/Pencil latency, palm handling, peak process memory, or a live deployment. Physical-device acceptance remains unmeasured. Inspect the actual exported artifact before claiming fidelity, and keep generated runtime/source inventories synchronized through the owning build scripts.
+The [archived plan](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/260910-1852-board-paint-diagram/plan.md) tracks observed browser, runtime and artifact evidence separately from implementation. Local browser or CPU checks do not establish physical iPad/Pencil latency, palm handling, peak process memory, or a live deployment. Physical-device acceptance remains unmeasured. Inspect the actual exported artifact before claiming fidelity, and keep generated runtime/source inventories synchronized through the owning build scripts.
 
 Select a Board embed in the page editor to edit **Board view** crop coordinates and dimensions in the inspector. **Create linked view** shares the editable source board while keeping its own crop; **Duplicate** creates independent board content. Panning or zooming the creative workspace does not change the page embed crop.
