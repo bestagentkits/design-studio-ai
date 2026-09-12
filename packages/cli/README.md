@@ -77,7 +77,7 @@ For concurrent editing, retain the exact document and revision you read. `projec
 
 ## Community designs
 
-`dsa community schema` discovers the current source build's shared commands and inputs. Search with `dsa community search --q TEXT --kind web --sort newest`; download an available artifact with `dsa community download FILE_ID --out design.zip`. Import that portable archive using `dsa community import --file design.zip --operation-id UNIQUE_ID`, then poll `dsa community job UNIQUE_ID`. Imports and remixes own independent media.
+`dsa community schema` discovers the current source build's shared commands and inputs. Search with `dsa community search --q TEXT --kind web --sort newest`; download an available artifact with `dsa community download LISTING_ID VERSION FILE_ID --out design.zip`. Import that portable archive using `dsa community import --file design.zip --operation-id UNIQUE_ID`, then poll `dsa community job UNIQUE_ID`. Imports and remixes own independent media.
 
 Publishing requires preflight, the exact reviewed digest and project revision, a stable operation ID, and explicit CC BY 4.0/public consent. Pass canonical JSON using `--file request.json`; retry an uncertain operation with the identical payload and ID. Existing project share/publish commands retain their original behavior. See the [Community guide](../../docs/community.md) for privacy, licenses, profiles and operator authorization. Community commands require the current source build until included in a tagged CLI release.
 

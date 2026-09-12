@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {randomUUID} from 'node:crypto';
-import {readFile} from 'node:fs/promises';
+import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {readCommunityPackage} from '../src/shared/community-package.ts';
 import {encodePaintPng} from '../src/shared/paint-png.ts';
 
@@ -10,7 +10,11 @@ const account=process.env.CLOUDFLARE_ACCOUNT_ID,token=process.env.CLOUDFLARE_API
 assert.ok(account&&token,'Cloudflare credentials are required for isolated verification cleanup.');
 const config=JSON.parse(await readFile('wrangler.jsonc','utf8')),database=config.d1_databases[0].database_id;
 assert.equal(origin,config.vars.APP_URL,'Verification origin must match this deployment and its cleanup database.');
-const run=randomUUID(),users=[],projects=[];let listingId;
+const run=randomUUID(),users=[],projects=[],identities=[];let listingId;
+const receiptDirectory=new URL('../.data/community-smoke/',import.meta.url),receiptPath=new URL(run+'.json',receiptDirectory);
+await mkdir(receiptDirectory,{recursive:true});
+const saveReceipt=async(cleaned=false)=>writeFile(receiptPath,JSON.stringify({run,origin,database,identities,projectIds:projects.map(project=>project.id),listingId,updatedAt:new Date().toISOString(),...(cleaned?{cleanedAt:new Date().toISOString()}:{})},null,2),{mode:0o600});
+await saveReceipt();
 const delay=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const db=async(sql,params=[])=>{
   const response=await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/d1/database/${database}/query`,{method:'POST',redirect:'manual',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({sql,params}),signal:AbortSignal.timeout(30000)});
@@ -24,8 +28,22 @@ const job=async(operationId,user)=>{
   throw new Error('Community operation did not complete within five minutes.');
 };
 async function register(role){
-  const email=`community-smoke-${role}-${run}@studio-test.invalid`,response=await request('/api/auth/register','POST',{email,password:randomUUID()+randomUUID(),name:'Community release verification'});
-  const body=await json(response,201),user={id:body.user.id,email,cookie:response.headers.get('set-cookie').split(';')[0]};users.push(user);return user;
+  const email=`community-smoke-${role}-${run}@studio-test.invalid`,identity={email};identities.push(identity);await saveReceipt();
+  const response=await request('/api/auth/register','POST',{email,password:randomUUID()+randomUUID(),name:'Community release verification'});
+  const body=await json(response,201),user={id:body.user.id,email,cookie:response.headers.get('set-cookie').split(';')[0]};users.push(user);identity.id=user.id;await saveReceipt();return user;
+}
+async function settleOwnedJobs(userIds){
+  const placeholders=userIds.map(()=>'?').join(','),deadline=Date.now()+35*60*1000;
+  // A settled request cannot resume receiving. Fence any uncertain upload; its write attempts remain charged below.
+  await db(`UPDATE community_jobs SET status='failed',stage='failed',error=? WHERE user_id IN(${placeholders}) AND status='queued' AND stage='receiving'`,[JSON.stringify({code:'verification_cleanup',message:'The isolated verification upload was abandoned.'}),...userIds]);
+  while(true){
+    const pending=await db(`SELECT user_id,operation_id FROM community_jobs WHERE user_id IN(${placeholders}) AND status IN('queued','running')`,userIds);
+    const writers=await db(`SELECT COUNT(*) n FROM community_files WHERE user_id IN(${placeholders}) AND status!='deleted' AND write_token=id AND write_until>?`,[...userIds,Date.now()]);
+    if(!pending.length&&!writers[0].n)return;
+    assert.ok(Date.now()<deadline,'Verification cleanup is waiting for an active job/write quarantine; recovery identities remain in the ignored receipt.');
+    for(const pendingJob of pending){const user=users.find(user=>user.id===pendingJob.user_id);assert.ok(user?.cookie,'A pending verification job needs its original session for recovery.');await json(await request('/api/community/jobs/'+pendingJob.operation_id,'GET',undefined,user));}
+    await delay(3000);
+  }
 }
 try{
   const configuration=await json(await request('/api/config'));assert.equal(configuration.community.enabled,true);
@@ -83,18 +101,46 @@ try{
   assert.equal(files[0].n,0,'Source deletion must drive queue cleanup without unrelated work.');
   console.log('PASS production source revocation, queue-driven purge and surviving independent asset bytes.');
 }finally{
-  for(const project of projects){let response=await request('/api/projects/'+project.id,'DELETE',undefined,project.user);const deadline=Date.now()+330000;while(response.status===409&&Date.now()<deadline){await delay(3000);response=await request('/api/projects/'+project.id,'DELETE',undefined,project.user);}assert.ok(response.status===200||response.status===404,'Verification project cleanup failed.');}
-  for(const project of projects)await db('DELETE FROM community_source_locks WHERE project_id=?',[project.id]);
-  for(const user of users){
-    const identity=await db('SELECT id FROM users WHERE id=? AND email=?',[user.id,user.email]);assert.equal(identity.length,1,'Only this run may be cleaned.');
-    const files=await db('SELECT storage_key FROM community_files WHERE user_id=?',[user.id]);
-    for(const file of files){assert.ok(file.storage_key.startsWith('community/'+user.id+'/'));const response=await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/design-studio-ai-assets/objects/${file.storage_key.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',redirect:'manual',headers:{Authorization:`Bearer ${token}`}});assert.ok(response.ok||response.status===404,'Verification file cleanup failed.');}
-    const listingSelector='SELECT id FROM community_listings WHERE user_id=?';
-    for(const table of ['community_collection_items','community_reports','community_contributions','community_bookmarks','community_daily_stats','community_delivery_receipts'])await db(`DELETE FROM ${table} WHERE listing_id IN(${listingSelector})`,[user.id]);
-    await db('DELETE FROM community_search WHERE listing_id IN('+listingSelector+')',[user.id]);
-    await db('DELETE FROM community_files WHERE user_id=?',[user.id]);await db('DELETE FROM community_storage_reservations WHERE user_id=?',[user.id]);
-    await db('DELETE FROM community_versions WHERE listing_id IN('+listingSelector+')',[user.id]);await db('DELETE FROM community_jobs WHERE user_id=?',[user.id]);await db('DELETE FROM community_listings WHERE user_id=?',[user.id]);
-    await db('DELETE FROM users WHERE id=? AND email=?',[user.id,user.email]);
+  // Verify every identity before mutation, including registration whose HTTP response was lost.
+  for(const identity of identities){
+    assert.ok(identity.email.endsWith(`-${run}@studio-test.invalid`));
+    const matches=await db('SELECT id FROM users WHERE email=?',[identity.email]);
+    assert.ok(matches.length<=1,'Verification identity is ambiguous.');
+    if(identity.id)assert.equal(matches[0]?.id,identity.id,'Only this run may be cleaned.');
+    if(matches.length&&!identity.id){identity.id=matches[0].id;users.push({id:identity.id,email:identity.email});}
   }
+  await saveReceipt();
+  const userIds=users.map(user=>user.id);
+  if(userIds.length){
+    const placeholders=userIds.map(()=>'?').join(','),listingSelector=`SELECT id FROM community_listings WHERE user_id IN(${placeholders})`;
+    await settleOwnedJobs(userIds);
+    // A job may have committed after a polling timeout or a lost response; the database owns the inventory.
+    const ownedProjects=await db(`SELECT id,user_id FROM projects WHERE user_id IN(${placeholders})`,userIds);
+    for(const owned of ownedProjects)if(!projects.some(project=>project.id===owned.id))projects.push({id:owned.id,user:users.find(user=>user.id===owned.user_id)});
+    await saveReceipt();
+    for(const project of projects){
+      assert.ok(project.user?.cookie,'A recovered project needs the original verification session for API deletion.');
+      let response=await request('/api/projects/'+project.id,'DELETE',undefined,project.user);const deadline=Date.now()+330000;
+      while(response.status===409&&Date.now()<deadline){await delay(3000);response=await request('/api/projects/'+project.id,'DELETE',undefined,project.user);}
+      assert.ok(response.status===200||response.status===404,'Verification project cleanup failed.');
+    }
+    // Project deletion can enqueue cleanup. Never purge records while a queue worker or delayed put can still write.
+    await settleOwnedJobs(userIds);
+    assert.equal((await db(`SELECT COUNT(*) n FROM projects WHERE user_id IN(${placeholders})`,userIds))[0].n,0,'A verification project appeared during cleanup; retain recovery records.');
+    const files=await db(`SELECT user_id,storage_key FROM community_files WHERE user_id IN(${placeholders})`,userIds);
+    for(const file of files){assert.ok(file.storage_key.startsWith('community/'+file.user_id+'/'));const response=await fetch(`https://api.cloudflare.com/client/v4/accounts/${account}/r2/buckets/design-studio-ai-assets/objects/${file.storage_key.split('/').map(encodeURIComponent).join('/')}`,{method:'DELETE',redirect:'manual',headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(30000)});assert.ok(response.ok||response.status===404,'Verification file cleanup failed.');}
+    await db(`DELETE FROM community_moderation_actions WHERE report_id IN(SELECT id FROM community_reports WHERE listing_id IN(${listingSelector}))`,userIds);
+    for(const table of ['community_collection_items','community_reports','community_contributions','community_bookmarks','community_daily_stats','community_delivery_receipts'])await db(`DELETE FROM ${table} WHERE listing_id IN(${listingSelector})`,userIds);
+    await db(`DELETE FROM community_search WHERE listing_id IN(${listingSelector})`,userIds);
+    // Reader remix jobs reference author listings: remove all users' dependencies before any listing or account.
+    await db(`DELETE FROM community_files WHERE user_id IN(${placeholders})`,userIds);
+    await db(`DELETE FROM community_storage_reservations WHERE user_id IN(${placeholders})`,userIds);
+    await db(`DELETE FROM community_jobs WHERE user_id IN(${placeholders})`,userIds);
+    await db(`DELETE FROM community_versions WHERE listing_id IN(${listingSelector})`,userIds);
+    await db(`DELETE FROM community_listings WHERE user_id IN(${placeholders})`,userIds);
+    for(const project of projects)await db('DELETE FROM community_source_locks WHERE project_id=?',[project.id]);
+    for(const user of users)await db('DELETE FROM users WHERE id=? AND email=?',[user.id,user.email]);
+  }
+  await saveReceipt(true);
   console.log('CLEANED isolated Community verification accounts, projects and files.');
 }

@@ -234,15 +234,25 @@ async function inflateEntry(bytes: Uint8Array, entry: ZipEntry, running: {bytes:
     if (typeof DecompressionStream === 'undefined') throw new Error('This runtime cannot inflate ZIP packages. Import using a supported browser or server.');
     let position = entry.start;
     const end = entry.start + entry.compressed;
+    let inputSinceYield = 0;
+    let cancelled = false;
     // Native inflation can expand a whole input chunk before JS observes output.
-    // Small pull-driven chunks let the byte guard cancel a bomb before that allocation grows.
+    // Native writable buffers can also accept many chunks before delivering output.
+    // Yield each 4 KiB so native output and its byte guard can run between batches.
     const compressed = new ReadableStream<BufferSource>({
-      pull(controller) {
+      async pull(controller) {
+        if (inputSinceYield >= 4096) {
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+          inputSinceYield = 0;
+        }
+        if (cancelled) return;
         if (position === end) { controller.close(); return; }
         const next = Math.min(position + 1024, end);
         controller.enqueue(new Uint8Array(bytes.subarray(position, next)));
+        inputSinceYield += next - position;
         position = next;
       },
+      cancel() { cancelled = true; },
     });
     const reader = compressed.pipeThrough(new DecompressionStream('deflate-raw')).getReader();
     output = new Uint8Array(entry.expanded);
