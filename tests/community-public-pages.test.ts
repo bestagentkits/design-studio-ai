@@ -25,6 +25,12 @@ test('public Community HTML, canonical metadata and sitemap reveal only live lis
       const response=await get(path),html=await response.text();assert.equal(response.status,200);assert.match(response.headers.get('Cache-Control')??'',/no-store/);
       assert.match(html,/Useful &lt;script&gt;alert\(1\)&lt;\/script&gt; design/);assert.equal(html.includes('PRIVATE HIDDEN TITLE'),false);assert.equal(html.includes('private-email@'),false);
       assert.match(html,new RegExp(`<link rel="canonical" href="${base}${path}">`));assert.ok(!html.includes('<script>alert(1)</script>'));
+      assert.equal(html.match(/name="twitter:card"/g)?.length,1);
+      assert.match(html,/name="twitter:card" content="summary_large_image"/);
+      assert.match(html,/property="og:image" content="https:\/\/studio.test\/social-card.png"/);
+      const graph=JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1])['@graph'];
+      assert.equal(graph[1]['@type'],path.includes('/designs/')?'ItemPage':path.includes('/creators/')?'ProfilePage':'CollectionPage');
+      assert.equal(graph[1].url,base+path);
     }
     const sitemap=await(await get('/sitemap.xml')).text();assert.match(sitemap,/community\/designs\/live-design/);assert.ok(!sitemap.includes('hidden-design'));assert.ok(!sitemap.includes('/community/moderation'));
     assert.equal((await get('/community/designs/hidden-design')).status,404);

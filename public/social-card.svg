@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#f6f5f1"/>
+  <circle cx="1120" cy="30" r="300" fill="#eeede5"/>
+  <circle cx="1070" cy="560" r="240" fill="#f0ded4"/>
+  <rect x="64" y="62" width="54" height="54" rx="14" fill="#e86540"/>
+  <path d="m91 72 4.5 12.5L108 89l-12.5 4.5L91 106l-4.5-12.5L74 89l12.5-4.5Z" fill="none" stroke="#fffaf3" stroke-width="2.4" stroke-linejoin="round"/>
+  <g fill="#292a26" font-family="Arial, sans-serif">
+    <text x="136" y="99" font-size="28" font-weight="600">Design Studio AI</text>
+    <text x="64" y="247" font-size="68" font-family="Georgia, serif">A little more room</text>
+    <text x="64" y="326" font-size="68" font-family="Georgia, serif">for a good idea.</text>
+    <text x="67" y="393" font-size="25" fill="#62645c">A design workspace for people and agents.</text>
+    <text x="67" y="537" font-size="18" fill="#62645c">Web · Slides · Documents · 3D · Motion</text>
+  </g>
+  <g transform="translate(833 170) rotate(8 135 170)">
+    <rect x="8" y="12" width="267" height="335" rx="12" fill="#292a26" opacity=".08"/>
+    <rect width="267" height="335" rx="12" fill="#fffefa" stroke="#dedfd6"/>
+    <rect x="24" y="25" width="219" height="147" rx="6" fill="#dce4d7"/>
+    <circle cx="133" cy="98" r="49" fill="#8a9e82"/>
+    <path d="m112 80 45 18-45 18Z" fill="#f7f6f0"/>
+    <rect x="24" y="199" width="163" height="12" rx="6" fill="#444e3f"/>
+    <rect x="24" y="226" width="216" height="6" rx="3" fill="#d4d7cd"/>
+    <rect x="24" y="243" width="181" height="6" rx="3" fill="#d4d7cd"/>
+    <rect x="24" y="280" width="84" height="29" rx="5" fill="#e86540"/>
+  </g>
+  <path d="m844 449 13 51 11-19 22-1Z" fill="#e86540" stroke="#fffefa" stroke-width="4" stroke-linejoin="round"/>
+</svg>
