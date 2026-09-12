@@ -4,15 +4,17 @@ import { mkdir } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 async function pane(page: Page, name: string) { const nav = page.locator('.mobile-editor-nav'); if (await nav.isVisible()) await nav.getByRole('button', { name, exact: true }).click(); }
 
-test('main navigation remains available on guide and documentation', async ({ page }, info) => {
+const mainNavigationOrder = ['Workspace', 'Templates', 'Design systems', 'Community', 'Activity', 'Documentation', 'Guide'];
+
+test('main navigation keeps its order on the workspace, guide and documentation', async ({ page }, info) => {
   await mkdir('plans/260910-1813-studio-feedback/reports', { recursive: true });
   await page.goto('/');
   await expect(page.locator('.creation-section').getByRole('heading', { level: 1 })).toBeVisible();
   await page.screenshot({ path: `plans/260910-1813-studio-feedback/reports/home-${info.project.name}.png` });
-  for (const route of ['/guide', '/docs']) {
+  for (const route of ['/', '/guide', '/docs']) {
     await page.goto(route);
     const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
-    await expect(nav.getByRole('link', { name: 'Templates', exact: true })).toBeVisible();
+    await expect(nav.getByRole('link')).toHaveText(mainNavigationOrder);
     await expect(nav.getByRole('link', { name: 'Design systems', exact: true })).toHaveAttribute('href', '/design-systems');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   }
