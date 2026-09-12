@@ -17,7 +17,7 @@ Start here when maintaining Design Studio AI. The [root README](../README.md) in
 
 Use the executable owners linked from each guide for current schemas, routes, commands, and configuration. These guides provide context and navigation; the product brief records requested scope rather than proof of completion.
 
-[Plans and reports](../plans/) preserve implementation decisions and observed checks. [Release verification](../plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) is evidence for that release, not current implementation authority. Use source and tests to establish behavior for a new change.
+[Archived plans and reports](https://github.com/bestagentkits/design-studio-ai/tree/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/) preserve historical implementation decisions and observed checks. [Release verification](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) is evidence for that release, not current implementation authority. New plans and reports stay local in the Git-ignored `plans/` directory. Use source and tests to establish behavior for a new change.
 
 [Editable 3D characters](3d-characters.md) covers mesh, rig, expressions, UV painting and agent commands.
 

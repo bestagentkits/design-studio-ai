@@ -113,6 +113,6 @@ Run `npm run typecheck`, `npm test`, and `npm run build`. `npm run test:e2e` sta
 - WebMCP is experimental and feature-detected; other browsers retain the human UI and network MCP.
 - Upstream dependency audit findings remain; see [security notes](docs/deployment.md#dependency-security).
 
-[Product brief](docs/product-brief.md) records the requested scope. [Release verification](plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) records the observed checks and limitations for v0.2.0. [Initial delivery evidence](plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md) remains available for v0.1.0.
+[Product brief](docs/product-brief.md) records the requested scope. [Release verification](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/2026-09-07-bootstrap-design-studio-ai/reports/release-v020.md) records the observed checks and limitations for v0.2.0. [Initial delivery evidence](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md) remains available for v0.1.0.
 
 Discover and share reusable designs in [Community](https://studio.agentkit.best/community). [Community documentation](docs/community.md) covers publishing, portable downloads, independent remixes, contextual search and moderation.

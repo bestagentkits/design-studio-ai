@@ -59,7 +59,7 @@ npm run deploy
 
 Enter the stable encryption key at Wrangler's prompt. Other installations must substitute their configured database name. Keep `APP_URL` synchronized with the custom domain. Deploy builds the application and trusted renderer; it does not automatically migrate D1. Apply required migrations before the code that uses them.
 
-Missing browser configuration returns a capability error for server PNG/PDF/PPTX/video/GLB/glTF; JSON/HTML/SVG and React source ZIP do not require a browser. Verify health, sessions, persisted revisions, authenticated MCP, immutable publication, and actual export bytes after deployment. Release observations belong in the [finalization report](../plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
+Missing browser configuration returns a capability error for server PNG/PDF/PPTX/video/GLB/glTF; JSON/HTML/SVG and React source ZIP do not require a browser. Verify health, sessions, persisted revisions, authenticated MCP, immutable publication, and actual export bytes after deployment. Release observations belong in the [finalization report](https://github.com/bestagentkits/design-studio-ai/blob/1a23d4a4a4ca4c14c6c15f2ae7318004a908ce2b/plans/2026-09-07-bootstrap-design-studio-ai/reports/finalization.md).
 
 ### Automatic production deployment
 
