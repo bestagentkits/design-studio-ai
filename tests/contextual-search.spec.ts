@@ -3,14 +3,15 @@ test('contextual search keeps private queries out of Community and restores focu
   const created=await page.request.post('/api/projects',{headers:{Origin:baseURL!},data:{name:'Private search lighthouse',kind:'web'}});expect(created.status()).toBe(201);
   await page.goto('/');
   const trigger=page.getByRole('button',{name:'Search My projects',exact:true});await trigger.focus();await page.keyboard.press('Control+k');
-  const input=page.getByRole('combobox',{name:'Search my projects'});await input.fill('Private search lighthouse');
+  const input=page.getByRole('combobox',{name:'Search my projects'});await expect(input).toBeFocused();await page.keyboard.type('Private search lighthouse');
   await expect(page.getByRole('option').filter({hasText:'Private search lighthouse'})).toBeVisible();
   await page.getByRole('button',{name:'Community',exact:true}).click();
   await expect(page.getByRole('combobox',{name:'Search Community',exact:true})).toHaveValue('');
   expect(page.url()).not.toContain('lighthouse');
   await page.getByRole('button',{name:'My projects',exact:true}).click();await expect(input).toHaveValue('Private search lighthouse');
   await page.keyboard.press('Escape');await expect(page.getByRole('dialog')).toHaveCount(0);await expect(trigger).toBeFocused();
+  await page.keyboard.press('Meta+k');await expect(input).toBeFocused();await page.keyboard.press('Escape');
   await page.goto('/community?kind=web&tags=minimal');await expect(page.getByRole('button',{name:'Search Community',exact:true})).toBeVisible();await page.keyboard.press('Control+k');await expect(page.getByRole('combobox',{name:'Search Community',exact:true})).toBeVisible();
-  const publicRequest=page.waitForRequest(request=>request.url().includes('/api/community/listings?')&&new URL(request.url()).searchParams.get('q')==='editorial');await page.getByRole('combobox',{name:'Search Community',exact:true}).fill('editorial');const params=new URL((await publicRequest).url()).searchParams;expect(params.get('kind')).toBe('web');expect(params.get('tags')).toBe('minimal');
+  const publicRequest=page.waitForRequest(request=>request.url().includes('/api/community/listings?')&&new URL(request.url()).searchParams.get('q')==='editorial');await expect(page.getByRole('combobox',{name:'Search Community',exact:true})).toBeFocused();await page.keyboard.type('editorial');const params=new URL((await publicRequest).url()).searchParams;expect(params.get('kind')).toBe('web');expect(params.get('tags')).toBe('minimal');
   await page.keyboard.press('Escape');await page.goto('/docs');await expect(page.locator('.docs-app')).toHaveAttribute('data-interactive','true');await page.keyboard.press('Control+k');await expect(page.getByRole('searchbox',{name:'Search documentation'})).toBeVisible();
 });
