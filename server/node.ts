@@ -1,4 +1,5 @@
 import {drainOperations} from './operation-worker';
+import {drainCommunityJobs} from './community-jobs';
 import { serve } from "@hono/node-server";
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -44,6 +45,9 @@ const env: Bindings = {
   EXPORT_BROWSER: launchExportBrowser,
   APP_URL: process.env.APP_URL ?? `http://localhost:${port}`,
   ALLOW_REGISTRATION: process.env.ALLOW_REGISTRATION ?? "true",
+  COMMUNITY_ENABLED: process.env.COMMUNITY_ENABLED ?? 'false',
+  COMMUNITY_ADMIN_IDS: process.env.COMMUNITY_ADMIN_IDS,
+  COMMUNITY_ADMIN_EMAILS: process.env.COMMUNITY_ADMIN_EMAILS,
   ENCRYPTION_KEY: process.env.ENCRYPTION_KEY,
   PROVIDER_ALLOWED_ORIGINS: process.env.PROVIDER_ALLOWED_ORIGINS,
   GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
@@ -77,7 +81,14 @@ const server = serve(
       `Design Studio AI listening on http://${process.env.HOST ?? "127.0.0.1"}:${port}`,
     ),
 );
-let operationRunning=false;const operationTimer=setInterval(async()=>{if(operationRunning)return;operationRunning=true;try{await drainOperations(env);}catch(error){console.error('Operation runner failed',error instanceof Error?error.name:'unknown');}finally{operationRunning=false;}},1000);
+let operationRunning=false, communityTurn=false;
+const operationTimer=setInterval(async()=>{
+  if(operationRunning)return;
+  operationRunning=true;communityTurn=!communityTurn;
+  try{if(communityTurn)await drainCommunityJobs(env);else await drainOperations(env);}
+  catch(error){console.error('Operation runner failed',error instanceof Error?error.name:'unknown');}
+  finally{operationRunning=false;}
+},1000);
 const shutdown = () => {
   clearInterval(operationTimer);
   server.close(() => {

@@ -24,7 +24,10 @@ export interface Bucket {
   delete(key: string): Promise<unknown>;
 }
 export interface Bindings {
-  OPERATION_QUEUE?: {send(message:{id:string}):Promise<void>};
+  OPERATION_QUEUE?: {send(message:{id:string;kind?:'community'}):Promise<void>};
+  COMMUNITY_ENABLED?: string;
+  COMMUNITY_ADMIN_IDS?: string;
+  COMMUNITY_ADMIN_EMAILS?: string;
   DB: Database;
   ASSETS_BUCKET: Bucket;
   BROWSER?: Parameters<typeof puppeteer.launch>[0]; EXPORT_BROWSER?: () => Promise<import("./exports").ExportBrowser>;

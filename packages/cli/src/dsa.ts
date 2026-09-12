@@ -1,4 +1,5 @@
 import {registerOperationCommands} from './operation-commands';
+import {registerCommunityCommands} from './community-commands';
 import { registerSceneCommands } from './scene-commands';
 import { paintingCommandSchema } from '../../../src/shared/painting-command';
 import { publicCreativeProjection } from '../../../src/shared/public-creative-projection';
@@ -26,6 +27,7 @@ const client = () => new Client(program.opts());
 registerDesignSystemCommands(program, client);
 registerSceneCommands(program, client);
 registerOperationCommands(program, client);
+registerCommunityCommands(program, client);
 registerObservabilityCommands(program, client);
 const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;

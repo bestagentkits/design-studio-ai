@@ -24,6 +24,7 @@ import { mergeRequestSchema } from '../src/shared/collaboration-contract';
 import { withSpan, telemetryEnv, type TelemetrySpan } from './observability';
 import { registerObservabilityTools } from './observability-tools';
 import { registerDesignSystemTools } from './design-system-tools';
+import { registerCommunityTools } from './community-agent-tools';
 export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   if (c.req.header("Origin") && c.req.header("Origin") !== origin(c))
     fail(403, "invalid_origin", "MCP origin is not allowed.");
@@ -108,6 +109,10 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   server.registerTool('start_operation',{description:'Start a durable save or export job. Reuse the same operation ID and payload after an uncertain response.',inputSchema:{projectId:z.string(),request:operationJobSchema}},async ({projectId,request})=>callApi('POST',`/api/projects/${encodeURIComponent(projectId)}/operations`,request));
   server.registerTool('get_operation',{description:'Read durable operation status and private result URL.',inputSchema:{projectId:z.string(),operationId:z.string()},annotations:{readOnlyHint:true}},async ({projectId,operationId})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/operations/${encodeURIComponent(operationId)}`));
   registerDesignSystemTools(server, callApi);
+  registerCommunityTools(server, async (method,path,body)=>app.request(`${origin(c)}${path}`,{
+    method,headers:{Authorization:c.req.header('Authorization')!,'X-Studio-Client':'mcp',...(body!==undefined&&!(body instanceof FormData)?{'Content-Type':'application/json'}:{})},
+    ...(body===undefined?{}:{body:body instanceof FormData?body:JSON.stringify(body)}),
+  },telemetryEnv(c,toolSpan.getStore())));
   registerObservabilityTools(server, callApi);
   server.registerTool('inspect_scene',{description:'Inspect saved 3D mesh, skeleton and sampled pose.',inputSchema:{projectId:z.string(),pageId:z.string().optional(),time:z.number().min(0).max(3600).optional()},annotations:{readOnlyHint:true}},async ({projectId,pageId,time})=>callApi('GET',`/api/projects/${encodeURIComponent(projectId)}/scene?${new URLSearchParams({...pageId?{pageId}:{},...time!==undefined?{time:String(time)}:{}})}`));
   server.registerTool('author_scene',{description:'Preview or apply a shared 3D command. Requires current revision; preview defaults to true.',inputSchema:{projectId:z.string(),...sceneRequestSchema.shape}},async ({projectId,...body})=>callApi('POST',`/api/projects/${encodeURIComponent(projectId)}/scene`,body));

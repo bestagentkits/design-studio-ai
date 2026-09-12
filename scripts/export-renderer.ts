@@ -10,12 +10,21 @@ import { mountExportPage, captureExportPage, rasterizeExportPage } from '../src/
 import { usesDom } from '../src/app/document-view';
 import { exportScene } from '../src/shared/scene-runtime';
 
-async function thumbnail(doc: DesignDocument) {
+async function thumbnail(doc: DesignDocument, selection?: {pageIndex:number;time:number;focalX:number;focalY:number}) {
   document.body.style.cssText = 'margin:0;background:transparent';
-  const mounted = await mountExportPage(doc, 0, (doc.timeline?.duration ?? 0) / 2);
+  const index=selection?.pageIndex??0;
+  const mounted = await mountExportPage(doc, index, selection?.time??(doc.timeline?.duration ?? 0) / 2);
   try {
-    const page = doc.pages[0], scale = Math.min(480 / page.width, 480 / page.height);
+    const page = doc.pages[index], scale = Math.min((selection?960:480) / page.width, (selection?960:480) / page.height);
     const canvas = await rasterizeExportPage(mounted.host, Math.max(1, Math.round(page.width * scale)), Math.max(1, Math.round(page.height * scale)));
+    if(selection){
+      const cover=document.createElement('canvas');cover.width=480;cover.height=360;
+      const factor=Math.max(cover.width/canvas.width,cover.height/canvas.height),width=cover.width/factor,height=cover.height/factor;
+      const x=Math.max(0,Math.min(canvas.width-width,selection.focalX*canvas.width-width/2));
+      const y=Math.max(0,Math.min(canvas.height-height,selection.focalY*canvas.height-height/2));
+      cover.getContext('2d')!.drawImage(canvas,x,y,width,height,0,0,480,360);
+      return cover.toDataURL('image/png').split(',')[1];
+    }
     return canvas.toDataURL('image/png').split(',')[1];
   } finally { mounted.dispose(); }
 }
@@ -96,7 +105,7 @@ async function pptx(input: DesignDocument) {
   }
   return await deck.write({ outputType: 'base64' });
 }
-async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 'mp4') {
+async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 'mp4', options?:{start?:number;end?:number;fps?:number}) {
   const selected = { ...input, pages: [input.pages[pageIndex]] };
   const hasScene = !!selected.pages[0].scene || selected.pages[0].nodes.some(n => n.scene);
   const doc = hasScene ? selected : await prepare(selected), page = doc.pages[0];
@@ -104,7 +113,9 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
   const timeline = doc.timeline ?? (gifDuration > 0 ? { duration: gifDuration, fps: 30, tracks: [] } : undefined);
   if (timeline && !doc.timeline) doc.timeline = timeline;
   if (!timeline) throw new Error('This document needs a timeline.');
-  if (timeline.duration > 60) throw new Error('Cloud video exports currently support up to 60 seconds per clip.');
+  const rangeStart=options?.start??0,rangeEnd=options?.end??timeline.duration,fps=options?.fps??timeline.fps;
+  if(rangeEnd<=rangeStart||rangeEnd>timeline.duration||rangeStart<0)throw new Error('Select a video interval within the document timeline.');
+  if (rangeEnd-rangeStart > 60) throw new Error('Cloud video exports currently support up to 60 seconds per clip.');
   // Prefer VP8 for real-time capture; cloud VP9 initialization can backlog short clips.
   const candidates = format === 'mp4' ? ['video/mp4;codecs=avc1.42001E', 'video/mp4'] : ['video/webm;codecs=vp8', 'video/webm;codecs=vp9', 'video/webm'];
   const mime = candidates.find(t => MediaRecorder.isTypeSupported(t));
@@ -112,9 +123,9 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
   const canvas = document.createElement('canvas'); canvas.width = page.width; canvas.height = page.height;
   document.body.appendChild(canvas);
   const context = canvas.getContext('2d')!;
-  const mounted = hasScene ? await mountExportPage(doc, 0) : undefined;
+  const mounted = hasScene ? await mountExportPage(doc, 0,rangeStart) : undefined;
   const sceneCanvas = mounted?.host.querySelector('canvas');
-  context.drawImage(sceneCanvas ?? (usesDom(page) ? await captureExportPage(doc, 0, 0) : await imageOf(renderSvg(doc, 0, 0))), 0, 0);
+  context.drawImage(sceneCanvas ?? (usesDom(page) ? await captureExportPage(doc, 0, rangeStart) : await imageOf(renderSvg(doc, 0, rangeStart))), 0, 0);
   const stream = canvas.captureStream(0), videoTrack = stream.getVideoTracks()[0] as CanvasCaptureMediaStreamTrack;
   const media = new Map<string, HTMLMediaElement>(), audio = new AudioContext(), destination = audio.createMediaStreamDestination();
   let activeRecorder: MediaRecorder | undefined;
@@ -123,6 +134,7 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
     for (const node of page.nodes.filter(n => (n.type === 'video' || n.type === 'audio') && n.src && n.visible !== false)) {
       const element = document.createElement(node.type === 'video' ? 'video' : 'audio'); element.crossOrigin = 'anonymous'; element.src = node.src!;
       await new Promise<void>((resolve, reject) => { element.onloadeddata = () => resolve(); element.onerror = () => reject(new Error(`Could not decode media: ${node.name}`)); });
+      if(rangeStart>0&&Number.isFinite(element.duration)&&element.duration>0){element.currentTime=Math.min(rangeStart,element.duration);await new Promise<void>((resolve,reject)=>{element.onseeked=()=>resolve();element.onerror=()=>reject(new Error('Could not seek media to the selected video start.'));});}
       audio.createMediaElementSource(element).connect(destination); media.set(node.id, element);
     }
     if (media.size) for (const track of destination.stream.getAudioTracks()) stream.addTrack(track);
@@ -143,11 +155,11 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
     const start = performance.now();
     do {
       if (startupFailure) throw startupFailure;
-      const time = Math.min(timeline.duration, (performance.now() - start) / 1000);
+      const time = Math.min(rangeEnd, rangeStart+(performance.now() - start) / 1000);
       context.clearRect(0, 0, page.width, page.height);
       if (sceneCanvas || usesDom(page)) {
         mounted?.draw(time); context.drawImage(sceneCanvas ?? await captureExportPage(doc, 0, time), 0, 0); videoTrack.requestFrame();
-        await new Promise(resolve => setTimeout(resolve, 1000 / timeline.fps)); continue;
+        await new Promise(resolve => setTimeout(resolve, 1000 / fps)); continue;
       }
       let layers: typeof page.nodes = [], background = page.background;
       const paintLayers = async () => {
@@ -164,8 +176,8 @@ async function video(input: DesignDocument, pageIndex: number, format: 'webm' | 
       }
       await paintLayers();
       videoTrack.requestFrame();
-      await new Promise(resolve => setTimeout(resolve, 1000 / timeline.fps));
-    } while ((performance.now() - start) / 1000 < timeline.duration);
+      await new Promise(resolve => setTimeout(resolve, 1000 / fps));
+    } while ((performance.now() - start) / 1000 < rangeEnd-rangeStart);
     videoTrack.requestFrame();
     await ready; if (startupFailure) throw startupFailure;
     // Allow queued frames to drain after initialization, including subsecond clips.

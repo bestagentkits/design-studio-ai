@@ -75,6 +75,12 @@ For concurrent editing, retain the exact document and revision you read. `projec
 
 `api METHOD /api/path --file request.json` provides an explicit REST escape hatch constrained to the configured server. It neither bypasses server auth nor evaluates local code. Requests reject redirects to keep tokens bound to the configured origin.
 
+## Community designs
+
+`dsa community schema` discovers the current source build's shared commands and inputs. Search with `dsa community search --q TEXT --kind web --sort newest`; download an available artifact with `dsa community download LISTING_ID VERSION FILE_ID --out design.zip`. Import that portable archive using `dsa community import --file design.zip --operation-id UNIQUE_ID`, then poll `dsa community job UNIQUE_ID`. Imports and remixes own independent media.
+
+Publishing requires preflight, the exact reviewed digest and project revision, a stable operation ID, and explicit CC BY 4.0/public consent. Pass canonical JSON using `--file request.json`; retry an uncertain operation with the identical payload and ID. Existing project share/publish commands retain their original behavior. See the [Community guide](../../docs/community.md) for privacy, licenses, profiles and operator authorization. Community commands require the current source build until included in a tagged CLI release.
+
 ## Creative documents
 
 The bundled schema reads v1/v2 and exposes board transforms, paste, semantic diagrams and painting layer/group operations through `schema --operations`. Preserve v2 roots when applying edits. `projects paint PROJECT_ID --file command.json` executes a real server-side stroke/fill using the live `paintingCommand` schema; include the observed revision, painting generation and a unique operation ID. An uncertain write can be retried with the identical command and ID. Direct painting replacement still requires owned PNG tiles and verified source hashes. Offline creative HTML/SVG requires locally embedded media; use authenticated `projects export` for owned assets. Static GIF export uses the saved poster; timed browser exports sample actual frames. See [creative tools](../../docs/creative-tools.md) for persistence, SVG flattening, public projections and acceptance limits.

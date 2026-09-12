@@ -120,3 +120,11 @@ The affected browser-downloading code is not used by the Cloudflare runtime. Pow
 For additional browser checks, install Firefox/WebKit with `npx playwright install firefox webkit`, then run `STUDIO_CROSS_BROWSER=1 npm run test:e2e -- tests/editor-ergonomics.spec.ts tests/observability-ui.spec.ts --project=firefox` (repeat with `--project=webkit`). Each invocation uses an isolated database; the default release suite covers Chromium desktop/mobile.
 
 See [durable operation jobs](operation-jobs.md) for save/export recovery, result retention and Cloudflare queue provisioning.
+
+## Community rollout
+
+Apply additive Community and admin-claim migrations before deploying. Set `COMMUNITY_ENABLED=true` only when enabling Community on this deployment. Node/Compose defaults remain off. Configure `COMMUNITY_ADMIN_IDS` for explicit existing account IDs using private environment configuration or Wrangler secrets. Optional `COMMUNITY_ADMIN_EMAILS` pregrants are claimed only from verified email identities returned directly during GitHub sign-in/link; password registration alone cannot claim them. Removing an email from configuration revokes its claim-based grant. Explicit ID grants are independent and must also be removed when revoking that account. OAuth cannot moderate. These settings never grant observability administration.
+
+Community uses the existing operation queue with tagged messages and the existing R2 bucket. Keep queue bindings and renderer assets available while jobs drain. Disabling Community stops normal admission/discovery; owned job status and administrative cleanup remain available. Roll back code while retaining the additive schema and encryption key; never reset D1 to remove a failed release. See [Community](community.md).
+
+For an authorized production release check, inject the deployment's Cloudflare credentials and run `node --import tsx scripts/smoke-community.mjs`. This creates isolated temporary accounts, publishes a real design, inspects downloads, imports/remixes, verifies revocation and cleans its own records. It requires the configured production origin and database to match. Optional `COMMUNITY_SMOKE_LARGE_PACKAGE` points to a valid archive for an additional real import/memory-boundary check. Do not run it as a routine local test.

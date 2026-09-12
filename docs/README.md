@@ -22,3 +22,5 @@ Use the executable owners linked from each guide for current schemas, routes, co
 [Editable 3D characters](3d-characters.md) covers mesh, rig, expressions, UV painting and agent commands.
 
 See [durable operation jobs](operation-jobs.md) for save/export recovery, result retention and Cloudflare queue provisioning.
+
+Community sharing, publication privacy, packages, discovery and moderation are owned by [Community](community.md).

@@ -1,4 +1,6 @@
 import {OperationStatus} from './operation-status';
+import { CommunityPublishDialog } from './community-publish-dialog';
+import { useCommunityEnabled } from './community-client';
 import type {OperationJob} from '../shared/operation-jobs';
 import {startOperation,operationPath,runOperation} from './operation-client';
 import {operationJobSchema} from '../shared/operation-jobs';
@@ -154,6 +156,8 @@ export function Editor({
   onProject: (project: Project) => void;
   notify: (message: string) => void;
 }) {
+  const [communityPublish, setCommunityPublish] = useState<Project | null>(null);
+  const communityEnabled = useCommunityEnabled();
   const [brief, setBrief] = useState<DesignBrief | null>(null),
     [briefLoaded, setBriefLoaded] = useState(false),
     [briefManual, setBriefManual] = useState(false),
@@ -1638,6 +1642,12 @@ export function Editor({
             <Redo2 size={18} />
           </button>
           <OperationStatus projectId={project.id}/>
+          {communityEnabled && <button className="button small" aria-label="Publish to Community" disabled={!!busy} onClick={() => void (async () => {
+            if (syncUncertain.current) { setError('Reload the project to reconcile the timed-out save before Community publication.'); return; }
+            if (documentFingerprint(docRef.current) !== documentFingerprint(projectRef.current.document)) await save();
+            if (syncUncertain.current || documentFingerprint(docRef.current) !== documentFingerprint(projectRef.current.document)) { setError('Save and reconcile all current edits before reviewing Community publication.'); return; }
+            setCommunityPublish(projectRef.current);
+          })()}>Publish to Community</button>}
           <span className="toolbar-divider" />
           <button className={`button small ${!preview ? "selected" : ""}`} aria-pressed={!preview} onClick={() => setPreview(false)}><Pencil size={15}/> Edit</button>
           <button
@@ -2582,6 +2592,7 @@ export function Editor({
           </div>
         </Modal>
       )}
+      {communityPublish && <CommunityPublishDialog project={communityPublish} accountId={accountId} onClose={() => setCommunityPublish(null)}/>}
       {shareUrl && (
         <Modal
           title="Your design is out in the world"

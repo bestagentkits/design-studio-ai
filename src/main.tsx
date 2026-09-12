@@ -7,6 +7,8 @@ import "./app/studio-feedback.css";
 const App = React.lazy(() => import('./app/app').then(module => ({ default: module.App })));
 const DocsApp = React.lazy(() => import('./app/documentation').then(module => ({ default: module.DocsApp })));
 const GuideApp = React.lazy(() => import('./app/guide').then(module => ({ default: module.GuideApp })));
+const CommunityApp = React.lazy(() => import('./app/community').then(module => ({ default: module.CommunityApp })));
+if (location.pathname === '/marketplace' || location.pathname.startsWith('/marketplace/')) location.replace('/community' + location.search);
 initializeTheme();
 
 class ErrorBoundary extends React.Component<
@@ -34,7 +36,7 @@ createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
       <React.Suspense fallback={<main className="fatal-error" aria-busy="true">Opening the studio…</main>}>
-        {location.pathname === '/docs' || location.pathname.startsWith('/docs/') ? <DocsApp /> : location.pathname === '/guide' || location.pathname === '/guide/' ? <GuideApp /> : <App />}
+        {location.pathname === '/docs' || location.pathname.startsWith('/docs/') ? <DocsApp /> : location.pathname === '/guide' || location.pathname === '/guide/' ? <GuideApp /> : location.pathname === '/community' || location.pathname.startsWith('/community/') ? <CommunityApp /> : <App />}
       </React.Suspense>
     </ErrorBoundary>
   </React.StrictMode>,

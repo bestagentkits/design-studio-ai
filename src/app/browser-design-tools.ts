@@ -1,4 +1,5 @@
 import {operationJobSchema} from '../shared/operation-jobs';
+export { registerCommunityBrowserTools } from './browser-community-tools';
 import {inspectSceneAnimation} from '../shared/scene-inspection';
 import { sceneDocumentCommand } from './scene-document-command';
 import { sceneCommandSchema } from '../shared/scene-authoring-schema';
@@ -39,7 +40,7 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     execute: async () => result({ operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
   }];
   // Only first-party documented endpoints are callable; the browser supplies its own session.
-  for (const endpoint of apiEndpoints.filter(e => !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
+  for (const endpoint of apiEndpoints.filter(e => !e.path.startsWith('/api/community') && !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
     const operation = `${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
     tools.push({ name: `studio_api_${operation}`, description: endpoint.summary + '. Saved state; writes require observed revisions.' + (/\/(publish|preview|share)$/.test(endpoint.path)?' Creates or manages public snapshots.':''),
       annotations: { readOnlyHint: endpoint.method === 'GET' },

@@ -1,7 +1,7 @@
 import { test, expect, type Page } from '@playwright/test';
 
-const publicPaths = ['/', '/guide', '/docs', '/docs/revisions', '/docs/motion', '/docs/3d', '/docs/api', '/docs/cli', '/docs/mcp', '/docs/webmcp', '/docs/api-keys', '/docs/observability', '/docs/self-hosting'];
-const markdownPaths = ['/docs.md', '/guide.md', '/docs/index.md', '/docs/quickstart.md', '/docs/revisions.md', '/docs/motion.md', '/docs/3d.md', '/docs/api.md', '/docs/cli.md', '/docs/mcp.md', '/docs/webmcp.md', '/docs/api-keys.md', '/docs/observability.md', '/docs/self-hosting.md'];
+const publicPaths = ['/docs/community', '/', '/guide', '/docs', '/docs/revisions', '/docs/motion', '/docs/3d', '/docs/api', '/docs/cli', '/docs/mcp', '/docs/webmcp', '/docs/api-keys', '/docs/observability', '/docs/self-hosting'];
+const markdownPaths = ['/docs/community.md', '/docs.md', '/guide.md', '/docs/index.md', '/docs/quickstart.md', '/docs/revisions.md', '/docs/motion.md', '/docs/3d.md', '/docs/api.md', '/docs/cli.md', '/docs/mcp.md', '/docs/webmcp.md', '/docs/api-keys.md', '/docs/observability.md', '/docs/self-hosting.md'];
 async function fitsViewport(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 }
@@ -36,8 +36,9 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions']);
   expect(schema.supportedDocumentVersions).toEqual([1, 2]);
+  expect(schema.community['POST /api/community/listings'].required).toEqual(expect.arrayContaining(['digest','operationId','confirmPublic','acceptLicense','expectedProjectRevision']));
   expect(schema.paintingCommand.required).toEqual(expect.arrayContaining(['expectedRevision', 'expectedGeneration', 'operationId', 'paintingId', 'layerId', 'action']));
   expect(schema.sceneCommands.oneOf.map((command: any) => command.properties.action.const)).toContain('rig-quadruped');
   expect(schema.documentWrite.properties.expectedBriefRevision).toBeDefined();
@@ -56,7 +57,7 @@ test('public HTML and agent references have real content, correct types, and pub
   const sitemap = await request.get('/sitemap.xml');
   expect(sitemap.headers()['content-type']).toContain('application/xml');
   const locations = [...(await sitemap.text()).matchAll(/<loc>([^<]+)<\/loc>/g)].map(match => new URL(match[1]).pathname);
-  expect(locations.sort()).toEqual([...publicPaths].sort());
+  expect(locations.sort()).toEqual([...publicPaths, '/community'].sort());
   const llms = await request.get('/llms.txt');
   expect(llms.headers()['content-type']).toContain('text/plain');
   const llmsText = await llms.text();
