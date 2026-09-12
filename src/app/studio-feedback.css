@@ -10,6 +10,7 @@
 .public-header nav { display:flex;flex:1;overflow-x:auto;min-width:0;white-space:nowrap;gap:20px; }
 .public-header nav a { display:inline-flex;align-items:center;min-height:44px;font-size:12px; }
 .public-header nav a[aria-current] { color:var(--accent-ink);text-decoration:underline;text-underline-offset:8px; }
+@media(max-width:900px) {.public-header { flex-wrap:wrap;height:auto;gap:6px;padding:8px 16px; }.public-header nav { order:3;flex-basis:100%;flex-wrap:wrap;overflow:visible;gap:0 18px; }.public-header .header-end { margin-left:auto; }}
 .docs-pane-toggle { margin:8px 20px; }
 .docs-layout:has(.docs-sidebar:not(.is-open)) { grid-template-columns:minmax(0,1fr); }
 .docs-sidebar:not(.is-open) { display:none; }
@@ -56,7 +57,7 @@
 .motion-heading small { color:var(--muted);margin-left:auto; }.motion-editor.is-collapsed { height:auto;min-height:0;resize:none; }.motion-editor.is-collapsed .motion-content { display:none; }
 .motion-toolbar { gap:6px;border-bottom:1px solid var(--line); }.motion-toolbar button { display:inline-flex;align-items:center;gap:5px;min-height:30px;background:var(--paper);border-color:var(--line); }.motion-toolbar label { font-size:10px; }.motion-toolbar select { max-width:150px;min-height:30px; }.motion-scroll { overflow:auto;min-height:90px; }.motion-ruler,.motion-track { grid-template-columns:150px minmax(200px,1fr); }.motion-ruler { background:var(--surface); }.motion-lane button { min-width:20px;min-height:24px;top:4px; }.motion-track>div:first-child { position:sticky;left:0;background:var(--paper);z-index:2; }
 @media(max-width:760px) {
- .public-header { flex-wrap:wrap;height:auto;gap:6px;padding:8px 16px; }.public-header nav { order:3;flex-basis:100%;gap:18px; }.public-header .header-end { margin-left:auto; }.public-header .brand { font-size:14px; }
+ .public-header .brand { font-size:14px; }
  .pane-controls { display:none; }.editor-shell.left-closed .editor-workspace,.editor-shell.right-closed .editor-workspace { display:flex; }
  .editor-shell.mobile-chat .left-panel,.editor-shell.mobile-inspector .inspector { display:flex; }
  .editor-shell.preview-mode .left-panel,.editor-shell.preview-mode .inspector { display:none; }
