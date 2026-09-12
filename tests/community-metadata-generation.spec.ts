@@ -69,6 +69,10 @@ test('listing generation stays a separate draft and applying it clears actual pr
   await expectProjectUnchanged(page, project);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await ai.screenshot({ path: `plans/2026-09-12-community-ai-metadata/reports/metadata-suggestion-${testInfo.project.name}.png` });
+  if (testInfo.project.name === 'mobile') {
+    await ai.getByRole('button', { name: 'Use suggestion', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: 'plans/2026-09-12-community-ai-metadata/reports/metadata-suggestion-mobile-actions.png' });
+  }
   await ai.getByRole('button', { name: 'Use suggestion', exact: true }).click();
   await expect(dialog.getByLabel('Title', { exact: true })).toHaveValue(suggestion.title);
   await expect(dialog.getByLabel('Description', { exact: true })).toHaveValue(suggestion.description);
