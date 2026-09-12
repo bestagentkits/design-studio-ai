@@ -10,6 +10,18 @@ export const communitySortSchema = z.enum(['trending','newest','most-used','most
 export const communityTagSchema = z.string().trim().min(1).max(32).transform(v => v.normalize('NFC').toLowerCase());
 export const communityMetadataSchema = z.object({ title: z.string().trim().min(1).max(200), description: z.string().trim().max(4000).default(''), tags: z.array(communityTagSchema).max(8).default([]).transform(v => [...new Set(v)]), formats: z.array(exportOptionsSchema.omit({expectedRevision:true})).max(16).default([]), cover: z.object({pageIndex:z.number().int().min(0).default(0), focalX:z.number().min(0).max(1).default(.5), focalY:z.number().min(0).max(1).default(.5),time:z.number().min(0).max(3600).default(0)}).strict().default({pageIndex:0,focalX:.5,focalY:.5,time:0}) }).strict();
 export const communityPreflightSchema = communityMetadataSchema.extend({projectId:communityIdSchema,expectedProjectRevision:z.number().int().positive()}).strict();
+export const communityMetadataSuggestionSchema = communityMetadataSchema.pick({title:true,description:true,tags:true}).extend({
+  description:z.string().trim().min(1).max(4000),
+  tags:z.array(communityTagSchema.refine(tag=>!tag.includes(','),'Tags cannot contain commas.')).min(1).max(8).transform(tags=>[...new Set(tags)]),
+});
+export type CommunityMetadataSuggestion = z.infer<typeof communityMetadataSuggestionSchema>;
+export const communityMetadataGenerationSchema = communityMetadataSchema.pick({description:true,tags:true}).extend({
+  projectId:communityIdSchema,
+  expectedProjectRevision:z.number().int().positive(),
+  provider:textProviderSchema.optional(),
+  title:z.string().trim().max(200).default(''),
+  prompt:z.string().trim().max(1000).default(''),
+}).strict();
 export const communityPublishSchema = communityPreflightSchema.extend({operationId:communityOperationIdSchema,digest:z.string().min(20).max(128),license:z.literal('CC-BY-4.0'),acceptLicense:z.literal(true),confirmPublic:z.literal(true),expectedListingRevision:z.number().int().positive().optional()}).strict();
 export const communityUnlistSchema = z.object({operationId:communityOperationIdSchema,expectedListingRevision:z.number().int().positive()}).strict();
 export const communityRemixSchema = z.object({operationId:communityOperationIdSchema,version:z.number().int().positive()}).strict();

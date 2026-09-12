@@ -10,6 +10,14 @@ The [shared contracts](../src/shared/community.ts) and [operation inventory](../
 
 [Publication jobs](../server/community-publication.ts) pin immutable versions and copy assets before rendering a selected cover/download formats and the portable package. Only a guarded activation makes a version live. Later private edits do not change it. Owner unlisting, moderator suppression and source deletion remain separate state. Restore cannot override owner unlisting or deletion. An active source-copy lease makes source deletion return `409 publication_busy`; otherwise deletion claims against new work, revokes public serving and schedules cleanup. Completed private remixes survive.
 
+## Draft listing details with AI
+
+The Publish dialog offers **Generate with AI** for Title, Description and Tags, including when a public profile already exists. It uses the first configured text provider and its saved model by default, with another connection selectable. Optional writing instructions, entered listing fields and a bounded summary of the saved design's visible text and structure are sent to the provider. Notes, hidden content, account identity and media URLs are excluded. This is text-based drafting; AI does not inspect the cover image. Provider usage may incur charges.
+
+The [metadata generation service](../server/community-metadata-generation.ts) verifies project ownership and the observed saved revision before and after generation. It returns a validated suggestion without saving or publishing. Review and apply it to the editable fields; applying clears any previous preflight and consent. Manual edits or a changed source revision prevent stale suggestions from overwriting the form. Missing providers, provider errors and revision conflicts have recovery controls; manual entry remains available.
+
+Use `POST /api/community/metadata/generate`, MCP `community_generate_metadata`, WebMCP `studio_community_generate_metadata`, or `dsa community generate-metadata --file request.json`. The shared schema requires `projectId` and `expectedProjectRevision`, with optional `provider`, `title`, `description`, `tags` and `prompt`. Responses contain `suggestion`, `provider` and `projectRevision`. Show the suggestion to the person, then run a separate preflight using their reviewed fields. Generation is never publication consent.
+
 ## Files, jobs and storage
 
 [Portable packages](../src/shared/community-package.ts) wrap the canonical document with checked asset bytes, hashes, license and attribution. Limits are 20 MiB compressed, 64 MiB expanded and 1,000 entries. The builder uses STORE; imports also support bounded streaming DEFLATE. Package-local asset URLs resolve exclusively through the manifest, without fetching source URLs. GLB media must contain its dependencies. Import validates paths, sizes, checksums and references before creating an independent project; archive attribution remains unverified.
