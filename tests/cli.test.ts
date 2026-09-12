@@ -12,6 +12,8 @@ import { FileBucket, SqliteDatabase } from '../server/node-adapters';
 import { secret } from '../server/security';
 import type { Bindings } from '../server/types';
 import { documentSchema } from '../src/shared/schema';
+import { createDocument } from '../src/shared/catalog';
+import { z } from 'zod';
 
 const executable = resolve('packages/cli/dist/dsa.js');
 let directory: string;
@@ -74,16 +76,20 @@ test('CLI persists a versioned brief, approves scope and reads deterministic des
   const begun=await json(['brief','put',projectId,'--revision','0','--file','-'],{input:JSON.stringify({request:'Create a ceramics class landing page',interview:{message:'Who is it for?',questions:[{id:'audience',title:'Audience',description:'',type:'text',options:[],required:true}],scope}})});
   assert.equal(begun.brief.status,'interview');
   const incomplete=await run(['brief','approve',projectId,'--revision','1']);
-  assert.notEqual(incomplete.code,0);
+  assert.equal(incomplete.code,1);assert.equal(JSON.parse(incomplete.stderr).error.code,'brief_incomplete');
   const answered=await json(['brief','put',projectId,'--revision','1','--file','-'],{input:JSON.stringify({answers:{audience:'Local beginners'}})});
   assert.equal(answered.brief.status,'ready');
   const approved=await json(['brief','approve',projectId,'--revision','2']);
   assert.equal(approved.brief.status,'approved');
   assert.equal((await json(['brief','get',projectId])).brief.revision,3);
-  assert.notEqual((await run(['brief','approve',projectId,'--revision','2'])).code,0);
+  const reapproved=await run(['brief','approve',projectId,'--revision','2']);
+  assert.equal(reapproved.code,1);assert.equal(JSON.parse(reapproved.stderr).error.code,'revision_conflict');
+  const textNode=created.project.document.pages[0].nodes.find((value:any)=>value.type==='text');
+  const patched=await json(['projects','document','patch',projectId,'--revision',String(created.project.revision),'--file','-'],{input:JSON.stringify([{op:'update-node',nodeId:textNode.id,changes:{text:'A heading that cannot possibly fit inside this layer',width:40,height:2}}])});
   const checks=await json(['projects','check',projectId]);
   assert.equal(checks.projectId,projectId);
-  assert.equal(checks.revision,created.project.revision);
+  assert.equal(checks.revision,patched.project.revision);
+  assert.ok(checks.issues.some((issue:any)=>issue.code==='text-overflow'),'a known text-overflow defect must be reported');
   assert.ok(Array.isArray(checks.issues)&&Array.isArray(checks.limitations));
 });
 
@@ -108,6 +114,30 @@ test('offline rendering accepts canonical JSON on stdin without authentication',
   const document = await json(['templates', 'instantiate', 'product-deck']);
   const rendered = await run(['render', '--file', '-', '--format', 'svg', '--page', '1'], { input: JSON.stringify(document), token: '' });
   assert.equal(rendered.code, 0, rendered.stderr); assert.match(rendered.stdout, /^<svg /); assert.match(rendered.stdout, /A clear perspective/);
+});
+
+const cliError = z.object({ error: z.object({ code: z.string() }) });
+test('offline rendering refuses documents whose media is not embedded, legacy and current', async () => {
+  const legacy = createDocument('slides', 'Offline media');
+  legacy.assets.push({ id: 'owned', name: 'Owned', type: 'image', mimeType: 'image/png', url: '/api/assets/owned' });
+  // The asset must be referenced, or the public projection prunes it before the guard runs.
+  legacy.pages[0].nodes.push({ id: 'owned-image', type: 'image', name: 'Owned', x: 0, y: 0, width: 10, height: 10, src: '/api/assets/owned' });
+  // A legacy document cannot resolve owned assets offline either: the check must not depend on the
+  // input version, or v1 silently renders markup pointing at unreachable /api/assets URLs.
+  const current = documentSchema.parse({ ...legacy, schemaVersion: 2, boards: [], paintings: [] });
+  for (const [label, candidate] of [['legacy v1', legacy], ['current v2', current]] as const) {
+    const refused = await run(['render', '--file', '-', '--format', 'svg'], { input: JSON.stringify(candidate), token: '' });
+    assert.equal(refused.code, 1, `${label}: ${refused.stderr}`);
+    assert.equal(cliError.parse(JSON.parse(refused.stderr)).error.code, 'offline_asset_unavailable', label);
+  }
+  // The guard must not be unconditional: embedded media still renders offline.
+  const dataUrl = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+  const embedded = createDocument('slides', 'Embedded media');
+  embedded.assets.push({ id: 'embedded', name: 'Embedded', type: 'image', mimeType: 'image/png', url: dataUrl });
+  embedded.pages[0].nodes.push({ id: 'embedded-image', type: 'image', name: 'Embedded', x: 0, y: 0, width: 10, height: 10, src: dataUrl });
+  const rendered = await run(['render', '--file', '-', '--format', 'html'], { input: JSON.stringify(embedded), token: '' });
+  assert.equal(rendered.code, 0, rendered.stderr);
+  assert.match(rendered.stdout, /data:image\/png;base64/, 'the embedded asset must reach the rendered output');
 });
 
 test('invalid commands, insecure origins, and missing tokens return useful nonzero JSON errors', async () => {

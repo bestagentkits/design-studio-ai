@@ -4,7 +4,9 @@ import { visitDocumentAssetIds } from './document-asset-references';
 /** Public files contain visible output, never editable paint source or private board elements. */
 export function publicCreativeProjection(document: DesignDocument): DesignDocument {
   const doc = structuredClone(document);
-  if (doc.schemaVersion !== 2) return doc;
+  // Legacy documents cannot be projected: every asset they carry would stay registered, including
+  // unreferenced ones, and become publicly retrievable. Callers upgrade first (upgradeDocument).
+  if (doc.schemaVersion !== 2) throw new Error('Upgrade the document before publishing or exporting it.');
   const boards = new Set<string>(), keepAssets = new Set<string>();
   const usePainting = (id: string) => {
     const painting = doc.paintings.find(p => p.id === id), composite = painting?.composite;

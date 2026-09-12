@@ -69,6 +69,14 @@ Configure repository or production-environment secrets `CLOUDFLARE_API_TOKEN` an
 
 The workflow preserves dashboard variables with `--keep-vars` and does not upload or replace runtime secrets. Keep the existing `ENCRYPTION_KEY` and GitHub OAuth secrets on the Worker. CI's public probes do not create accounts. The separate [thumbnail release check](../scripts/smoke-thumbnails.mjs) creates one disposable production account/project, invokes Browser Rendering for two revisions, verifies cached bytes and ownership, then deletes the project and account in `finally`. It requires D1 cleanup permission and must not be used as a routine local test. No AI provider is invoked. These probes do not prove a complete ChatGPT login; browser OAuth behavior is covered by the isolated verification suite.
 
+### Release verification and maintenance
+
+The verification job uploads the built site as the `web-build` artifact, and the build writes `dist/release.json` containing the commit SHA. Deploy downloads that same artifact, so the deployed assets are exactly the ones that were verified. The Worker serves the marker as `/release.json` and reports the SHA as the `revision` field of `/api/health`; the post-deploy probe asserts that field equals the deployed commit, so the marker proves which revision is live instead of trusting the deploy step. Owners: [CI workflow](../.github/workflows/ci.yml) and [health route](../server/index.ts).
+
+Legacy v1 publications can expose assets that the public projection no longer references. [scripts/sweep-publications.ts](../scripts/sweep-publications.ts) scans the D1 publication rows, projects each document, and prunes the `publication_assets` entries the projection drops. It is a dry run by default and reports each affected slug/revision plus the kept and pruned asset IDs and a summary; pass `--apply` to write. It reads the D1 database id from [wrangler.jsonc](../wrangler.jsonc) and requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment. After `--apply`, files that were already exported or downloaded keep their old bytes; the sweep only changes stored projections. Run `node --import tsx scripts/sweep-publications.ts` (add `--apply` to write) with the deployment's credentials injected.
+
+The [nightly workflow](../.github/workflows/nightly.yml) runs the full browser suite plus additional cross-browser coverage that change-based selection skips: `unit` (typecheck, full unit suite, packaging), `build`, `browser-full` (every spec on both device projects) and `cross-browser` (the character-editor, structured-editor and editor-ergonomics specs on Firefox and WebKit). Change-based selection in [scripts/test-plan.mjs](../scripts/test-plan.mjs) is a pull-request optimisation only; `main` pushes and the nightly run both execute the full suite.
+
 ## Optional integrations
 
 ### GitHub sign-in

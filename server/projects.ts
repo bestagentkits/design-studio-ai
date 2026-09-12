@@ -9,6 +9,7 @@ import { creativeSaveIdentity, readCreativeReceipt } from './creative-save-recei
 import { reserveAsset } from './asset-lifecycle';
 import { guardCommunityProjectDeletion } from './community-publication';
 import { publicCreativeProjection } from '../src/shared/public-creative-projection';
+import { upgradeDocument } from '../src/shared/document-upgrade';
 import { preparePaintingAssets } from './painting-assets';
 import { ownedDocumentAssetIds, remapDocumentAssets } from '../src/shared/document-asset-references';
 import {documentWriteSchema} from '../src/shared/document-write';
@@ -419,7 +420,7 @@ async function createPublication(c: Context<Env>) {
   const projectId = c.req.param("id");
   if (!projectId) fail(400, "invalid_project", "Project ID is required.");
   const row = await projectRow(c, projectId);
-  const doc = publicCreativeProjection(documentSchema.parse(JSON.parse(row.document)));
+  const doc = publicCreativeProjection(upgradeDocument(documentSchema.parse(JSON.parse(row.document))));
   const refs = await validateAssets(c, doc, row.id);
   const slug = id();
   const replace = (url: string) =>

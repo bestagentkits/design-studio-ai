@@ -3,6 +3,7 @@ import {registerCommunityCommands} from './community-commands';
 import { registerSceneCommands } from './scene-commands';
 import { paintingCommandSchema } from '../../../src/shared/painting-command';
 import { publicCreativeProjection } from '../../../src/shared/public-creative-projection';
+import { upgradeDocument } from '../../../src/shared/document-upgrade';
 import { Command, CommanderError } from 'commander';
 import { readFile } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
@@ -149,8 +150,10 @@ projects.command('export <id>').description('Export through the authenticated se
 program.command('render').description('Render a local JSON document offline using shared static HTML/SVG rendering').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--format <format>', 'json, html, or svg').option('--output <file>', 'Output filename; omitted writes content to stdout').option('--page <index>', 'Zero-based SVG page', '0').option('--time <seconds>', 'SVG timeline position', '0').action(async options => {
   if (!['json', 'html', 'svg'].includes(options.format)) throw new CliError('unsupported_format', 'Offline rendering supports json, html, or svg. Use projects export for cloud-rendered binary formats.');
   const input = await documentInput(options.file);
-  const document = options.format === 'json' ? input : publicCreativeProjection(input);
-  if (options.format !== 'json' && input.schemaVersion === 2 && document.assets.some(a => !a.url.startsWith('data:'))) throw new CliError('offline_asset_unavailable', 'Creative media is not embedded locally. Use authenticated projects export to resolve owned assets.');
+  const document = options.format === 'json' ? input : publicCreativeProjection(upgradeDocument(input));
+  // The rendered document is always the upgraded, projected one, so the offline-asset check must not
+  // depend on the version of the input: a legacy document with owned assets cannot render offline either.
+  if (options.format !== 'json' && document.assets.some(a => !a.url.startsWith('data:'))) throw new CliError('offline_asset_unavailable', 'Creative media is not embedded locally. Use authenticated projects export to resolve owned assets.');
   const page = nonnegativeNumber(options.page);
   if (!Number.isInteger(page)) throw new CliError('invalid_page', 'Page must be a zero-based integer.');
   const content = options.format === 'json' ? JSON.stringify(document, null, 2) : options.format === 'html' ? renderHtml(document) : renderSvg(document, page, nonnegativeNumber(options.time));

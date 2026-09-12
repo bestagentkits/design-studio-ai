@@ -94,6 +94,20 @@ test('OAuth, asset lifetime and isolated renderer security boundaries', async t 
       await save(copy);
     });
 
+    await t.test('legacy v1 publications never expose unreferenced assets', async () => {
+      let legacy = await create(createDocument('web', 'Legacy publication'));
+      const referenced = await upload(legacy, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jTzQAAAAASUVORK5CYII=', 'base64'), 'referenced.png', 'image/png');
+      const orphan = await upload(legacy, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jTzQAAAAASUVORK5CYII=', 'base64'), 'orphan.png', 'image/png');
+      legacy.document.assets.push(referenced, orphan);
+      legacy.document.pages[0].nodes.push({ id: 'referenced-image', type: 'image', name: 'Referenced', x: 0, y: 0, width: 10, height: 10, src: referenced.url });
+      legacy = await save(legacy);
+      const published = await request(`/api/projects/${legacy.id}/publish`, 'POST');
+      assert.equal(published.status, 200);
+      const snapshot = new URL((await published.json() as { url: string }).url).pathname;
+      assert.equal((await request(`${snapshot}/assets/${referenced.id}`, 'GET', undefined, undefined, '')).status, 200);
+      assert.equal((await request(`${snapshot}/assets/${orphan.id}`, 'GET', undefined, undefined, '')).status, 404, 'an unreferenced legacy asset must not be publicly retrievable');
+    });
+
     await t.test('cloud exports reject oversized objects and external media before browser launch', async () => {
       const doc = createDocument('3d', 'Bounds'); doc.pages[0].width = 100; doc.pages[0].height = 100;
       doc.pages[0].nodes = [{ id: 'large-model', type: 'model3d', name: 'Large object', x: 0, y: 0, width: 20000, height: 20000 }];
