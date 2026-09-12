@@ -51,5 +51,15 @@ test('real headless renderer creates PNG, PDF, editable PowerPoint, 3D and video
       const bytes = Buffer.from(recorded.base64, 'base64'); assert.equal(bytes.subarray(0, 4).toString('hex'), '1a45dfa3'); assert.ok(bytes.length > 500);
       assert.ok(recorded.startedAt > 0 && recorded.stoppedAt - recorded.startedAt >= 90, 'queued frames need a drain interval after encoder startup');
     });
+    await t.test('selected video interval samples its actual start and limits duration and frame cadence',async()=>{
+      const motion=createDocument('video','Selected interval');motion.pages=[{id:'page',name:'Page',width:160,height:90,background:'#ffffff',nodes:[{id:'red',type:'shape',name:'Red',x:0,y:0,width:20,height:20,style:{fill:'#ff0000'}}]}];
+      motion.timeline={duration:3,fps:30,tracks:[{id:'move',nodeId:'red',keyframes:[{time:0,values:{x:0}},{time:1,values:{x:100}},{time:3,values:{x:100}}]}]};
+      const observation=await page.evaluate(async doc=>{
+        const proto=CanvasCaptureMediaStreamTrack.prototype,original=proto.requestFrame;let frames=0,first:number[]=[];
+        proto.requestFrame=function(){frames++;if(frames===1){const canvas=[...document.querySelectorAll('canvas')].find(canvas=>canvas.width===160&&canvas.height===90)!;first=[...canvas.getContext('2d')!.getImageData(110,10,1,1).data];}return original.call(this);};
+        const start=performance.now();try{return {base64:await(globalThis as any).studioRenderer.video(doc,0,'webm',{start:1,end:1.4,fps:5}),first,frames,elapsed:performance.now()-start};}finally{proto.requestFrame=original;}
+      },motion);
+      assert.deepEqual(observation.first,[255,0,0,255]);assert.ok(observation.frames>=3&&observation.frames<=8,`Observed ${observation.frames} requested frames`);assert.ok(observation.elapsed<2500,`Selected clip took ${observation.elapsed}ms instead of a short interval`);assert.equal(Buffer.from(observation.base64,'base64').subarray(0,4).toString('hex'),'1a45dfa3');
+    });
   } finally { await browser.close(); }
 });

@@ -3,6 +3,7 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import { z } from 'zod';
 import type { Env, User } from './types';
 import { ApiError, createSession, decrypt, encrypt, fail, hash, id, now, origin, passwordHash, rateLimit, secret } from './security';
+import { claimCommunityAdminEmails } from './community-admin-grants';
 
 export const githubRoutes = new Hono<Env>();
 const stateCookie = 'studio_github_state';
@@ -11,6 +12,7 @@ const lifetime = 10 * 60 * 1000;
 interface LoginState { verifier: string; link_user_id: string | null; session_hash: string | null }
 export const githubProfileSchema = z.object({ id: z.number().int().positive().safe(), login: z.string().min(1).max(100), name: z.string().nullable().optional() });
 const emailSchema = z.array(z.object({ email: z.string().email().max(254), primary: z.boolean(), verified: z.boolean() }));
+export const verifiedGitHubEmails = (records:unknown) => emailSchema.parse(records).filter(item=>item.verified).map(item=>item.email.toLowerCase());
 type GitHubProfile = z.infer<typeof githubProfileSchema>;
 
 export function githubEnabled(c: Context<Env>) {
@@ -134,6 +136,7 @@ githubRoutes.get('/callback', async c => {
     const email = (emails.find(item => item.primary && item.verified) ?? emails.find(item => item.verified))?.email.toLowerCase() ?? null;
     stage = 'identity';
     const user = await resolveGitHubUser(c, profile, email, state.link_user_id);
+    await claimCommunityAdminEmails(c.env, user.id, verifiedGitHubEmails(emails));
     stage = 'session';
     await createSession(c, user);
     return c.redirect(state.link_user_id ? '/?github=connected' : '/');

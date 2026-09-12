@@ -1,3 +1,7 @@
+import { communityRoutes } from './community-routes';
+import { communityPages } from './community-pages';
+import { communityEnabled, isCommunityOperator } from './community-access';
+import { communitySchemas } from '../src/shared/community-endpoints';
 import {operationJobSchema} from '../src/shared/operation-jobs';
 import {operationRoutes} from './operation-jobs';
 import { sceneRequestSchema, sceneCommandSchema } from '../src/shared/scene-authoring-schema';
@@ -154,14 +158,15 @@ app.onError((error, c) => {
     500,
   );
 });
-app.get('/api/openapi', c => c.json(openApiDocument({'POST /api/projects/{id}/operations':z.toJSONSchema(operationJobSchema),'POST /api/projects/{id}/scene':z.toJSONSchema(sceneRequestSchema),'POST /api/projects/{id}/paint':z.toJSONSchema(paintingCommandSchema),'PUT /api/projects/{id}/document':z.toJSONSchema(documentWriteSchema),'POST /api/projects/{id}/export':z.toJSONSchema(exportOptionsSchema), 'PUT /api/providers/{provider}': z.toJSONSchema(providerSettingsSchema), 'POST /api/projects/{id}/media': z.toJSONSchema(mediaInputSchema), 'POST /api/projects/{id}/generate': z.toJSONSchema(generationInputSchema), 'POST /api/projects/{id}/brief/interview': z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
+app.get('/api/openapi', c => c.json(openApiDocument({...communitySchemas(),'POST /api/projects/{id}/operations':z.toJSONSchema(operationJobSchema),'POST /api/projects/{id}/scene':z.toJSONSchema(sceneRequestSchema),'POST /api/projects/{id}/paint':z.toJSONSchema(paintingCommandSchema),'PUT /api/projects/{id}/document':z.toJSONSchema(documentWriteSchema),'POST /api/projects/{id}/export':z.toJSONSchema(exportOptionsSchema), 'PUT /api/providers/{provider}': z.toJSONSchema(providerSettingsSchema), 'POST /api/projects/{id}/media': z.toJSONSchema(mediaInputSchema), 'POST /api/projects/{id}/generate': z.toJSONSchema(generationInputSchema), 'POST /api/projects/{id}/brief/interview': z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), 'POST /api/observability/client-events': z.toJSONSchema(clientEventSchema), 'POST /api/design-systems': z.toJSONSchema(designSystemSchema), 'PUT /api/design-systems/{id}': z.toJSONSchema(systemUpdateSchema), 'POST /api/design-systems/{id}/apply': z.toJSONSchema(systemApplySchema) })));
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "design-studio-ai" }),
 );
-app.get('/api/schema', c => c.json({ operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], paintingCommand:z.toJSONSchema(paintingCommandSchema), documentSave:z.toJSONSchema(documentWriteSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
+app.get('/api/schema', c => c.json({ community:communitySchemas(), operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], paintingCommand:z.toJSONSchema(paintingCommandSchema), documentSave:z.toJSONSchema(documentWriteSchema), providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), providerSettings: z.toJSONSchema(providerSettingsSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), interview: z.toJSONSchema(interviewSchema), scope: z.toJSONSchema(scopeSchema), observabilityQuery: z.toJSONSchema(telemetryQuerySchema), clientEvent: z.toJSONSchema(clientEventSchema) }));
 app.get('/api/catalog', c => c.json({ themes, templates, blocks }));
-app.get("/api/config", (c) =>
+app.get("/api/config", async (c) =>
   c.json({
+    community: { enabled: communityEnabled(c.env), operator: await isCommunityOperator(c) },
     googleClientId: c.env.GOOGLE_CLIENT_ID ?? null,
     allowRegistration: c.env.ALLOW_REGISTRATION === "true",
     githubEnabled: githubEnabled(c),
@@ -242,6 +247,7 @@ app.use("/api/projects/*", async (c, next) => {
   owner(c);
   await next();
 });
+app.route('/api/community', communityRoutes);
 app.route("/api/projects", projectRoutes);
 app.route('/api/design-systems', designSystemRoutes);
 app.route('/api', discoveryRoutes);
@@ -294,6 +300,7 @@ app.delete("/api/tokens/:id", async (c) => {
 });
 app.route("/", oauthRoutes);
 app.all("/mcp", (c) => handleMcp(c, app));
+app.route('/',communityPages);
 app.notFound((c) => {
   if (
     c.req.path.startsWith("/api/") ||

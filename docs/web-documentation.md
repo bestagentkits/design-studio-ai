@@ -45,3 +45,7 @@ The portal supports searchable section navigation, endpoint filtering, native ex
 Public content is present in HTML before JavaScript runs; JavaScript enables search/copy/navigation behavior. Without JavaScript, navigation remains visible and copy-only controls are hidden. Templates/manual editing do not require BYOK; generation does. Provider/Google verification, experimental WebMCP, encoder limitations, and format fidelity boundaries remain explicitly documented.
 
 See [web-documentation verification](../plans/2026-09-07-bootstrap-design-studio-ai/reports/web-documentation.md) for the observed checks. Serving/deployment validation is distinct from successful local rendering.
+
+## Community discovery
+
+`/docs/community` is generated from [CommunityDocumentation](../src/app/community-documentation.tsx). The API and CLI tables derive Community operations from the shared inventory. The [Community page handler](../server/community-pages.tsx) renders live public listing/profile content at request time with escaped titles, canonical metadata and useful no-JavaScript download/navigation links. Community user data is never baked into static output. The dynamic sitemap adds only live public listings and their creators; private Community pages and filtered searches are excluded from indexing.

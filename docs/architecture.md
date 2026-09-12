@@ -126,3 +126,7 @@ Creative document versioning, immutable tiles, safe composites and current integ
 ## 3D character authoring
 
 [Editable 3D characters](3d-characters.md) describes the shared bounded scene-command pipeline, worker execution, inspection and portable skin/morph/paint data. The schema and operation owners remain canonical across clients.
+
+## Community publication boundary
+
+[Community](community.md) adds immutable community versions, owned file copies, durable jobs and a live-only search projection alongside the existing private projects and share snapshots. [Snapshot export](../server/snapshot-export.ts) reuses the renderer through an explicit authorized asset resolver; it does not impersonate a downloader or source owner. Tagged queue messages share the operation queue, while Node alternates the two durable runners. See the owning modules linked in the Community guide for concurrency and storage contracts.

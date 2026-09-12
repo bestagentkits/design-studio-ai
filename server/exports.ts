@@ -11,10 +11,10 @@ import { documentSchema, type DesignDocument } from '../src/shared/schema';
 import { renderSvg } from '../src/shared/render';
 import { createReactArchive, type ReactRuntimeManifest } from '../src/shared/react-export';
 import { documentFontFamilies, googleFontsStylesheetUrl } from '../src/shared/font-loading';
-import type { Env } from './types';
+import type { Env, Bindings } from './types';
 import { projectRow, validateAssets } from './projects';
 import { ApiError, fail, origin, owner, rateLimit } from './security';
-import { interactiveHtml } from './published-html';
+import { interactiveSnapshotHtml } from './published-html';
 
 // Both adapters expose the small browser surface used here; the renderer itself is shared.
 export interface ExportBrowser { newPage(): Promise<any>; close(): Promise<void> }
@@ -65,23 +65,36 @@ export async function embeddedDocumentFonts(doc: DesignDocument) {
 
 exportRoutes.post('/:id/export', async c => renderProjectExport(c, c.req.param('id'), await c.req.json()));
 
+export type SnapshotAssetResolver = (url: string) => Promise<{bytes: Uint8Array; mimeType: string}>;
 export async function renderProjectExport(c: Context<Env>, projectId: string, input: unknown, thumbnail = false, snapshot?: Awaited<ReturnType<typeof projectRow>>) {
-return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'export.render' }, async span => {
-  const { env: bindings } = c;
-  const owned = await projectRow(c, projectId), row = snapshot??owned, options = optionsSchema.parse(input);
-  if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
-  span.event.projectId = row.id; span.event.action = thumbnail ? 'thumbnail.render' : `export.${options.format}`;
-  await updateEvent(c.env, span.event);
-  let doc = documentSchema.parse(JSON.parse(row.document));
+  return withSpan(c, {kind:'export',action:thumbnail?'thumbnail.render':'export.render'}, async span => {
+    const owned = await projectRow(c, projectId), row = snapshot ?? owned, options = optionsSchema.parse(input);
+    if (options.expectedRevision && options.expectedRevision !== row.revision) fail(409, 'revision_conflict', 'Save or reload the current revision before export.');
+    span.event.projectId = row.id; span.event.action = thumbnail ? 'thumbnail.render' : `export.${options.format}`;
+    await updateEvent(c.env, span.event);
+    let doc = documentSchema.parse(JSON.parse(row.document));
+    if (options.format !== 'json') { doc = publicCreativeProjection(doc); await validateAssets(c, doc, row.id); }
+    return renderSnapshotExport(c.env, row.name, doc, options, async url => {
+      const asset = await c.env.DB.prepare('SELECT storage_key,mime_type FROM assets WHERE id=? AND user_id=?').bind(url.split('/').pop(), owner(c)).first<{storage_key:string;mime_type:string}>();
+      if (!asset) fail(400, 'missing_asset', 'A referenced asset is unavailable.');
+      const object = await c.env.ASSETS_BUCKET.get(asset.storage_key);
+      if (!object) fail(400, 'missing_asset', 'An asset could not be loaded.');
+      return {bytes:new Uint8Array(await object.arrayBuffer()),mimeType:asset.mime_type};
+    }, {thumbnail, onBytes: outputBytes => span.set({outputBytes}), beforeRender: () => rateLimit(c, `${thumbnail?'thumbnail':'export'}:${owner(c)}`, thumbnail?60:20)});
+  });
+}
+
+/** Render only a document and asset resolver already authorized by the calling service. */
+export async function renderSnapshotExport(bindings: Bindings, name: string, document: DesignDocument, input: unknown, resolveAsset: SnapshotAssetResolver, hooks: {thumbnail?:boolean;thumbnailSelection?:{pageIndex:number;time:number;focalX:number;focalY:number};onBytes?:(bytes:number)=>void;beforeRender?:()=>Promise<void>} = {}) {
+  const options=optionsSchema.parse(input), thumbnail=hooks.thumbnail ?? false;
+  let doc=documentSchema.parse(structuredClone(document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
   if (options.format === 'react' && !['web', 'wireframe'].includes(doc.kind)) fail(400, 'unsupported_export', 'React source export is available for Web/App and wireframe projects.');
   if (['glb', 'gltf'].includes(options.format) && doc.pages[options.pageIndex].nodes.some(node=>node.character)) fail(400,'unsupported_export','Character motion uses the native motion package; GLB/glTF cannot preserve 2D rigs.');
   if (['glb', 'gltf'].includes(options.format) && !doc.pages[options.pageIndex].nodes.some(node => node.type === 'model3d')) fail(400, 'unsupported_export', 'Scene export requires a 3D object on the selected page.');
   const extension = ['react','motion','png-sequence','spritesheet','scene-angles'].includes(options.format) ? 'zip' : options.format;
-  const headers = { 'Content-Type': mimeTypes[options.format], 'Content-Disposition': `attachment; filename="${row.name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}"`, 'Cache-Control': 'private,no-store', 'X-Content-Type-Options': 'nosniff' };
-  if (options.format === 'json') { const output = JSON.stringify(doc, null, 2); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
-  doc = publicCreativeProjection(doc);
-  await validateAssets(c, doc, row.id);
+  const headers = { 'Content-Type': mimeTypes[options.format], 'Content-Disposition': `attachment; filename="${name.replace(/[^a-zA-Z0-9_-]/g, '_')}.${extension}"`, 'Cache-Control': 'private,no-store', 'X-Content-Type-Options': 'nosniff' };
+  if (options.format === 'json') { const output = JSON.stringify(doc, null, 2); hooks.onBytes?.(new TextEncoder().encode(output).length); return new Response(output, { headers }); }
   if (!['html', 'svg', 'react'].includes(options.format)) {
     const selectedPages = options.format === 'pdf' || options.format === 'pptx' ? doc.pages : [doc.pages[options.pageIndex]];
     const renderNodes = selectedPages.flatMap(page => page.nodes.filter(node => node.visible !== false));
@@ -90,42 +103,40 @@ return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'e
     const characterMedia=doc.characters?.flatMap(c=>c.attachments.flatMap(a=>[a.assetId,...(a.frames??[])])).filter(Boolean)??[];
     const characterUrls=doc.assets.filter(a=>characterMedia.includes(a.id)).map(a=>a.url);
     const media = renderNodes.flatMap(node => [node.src, doc.assets.find(asset => asset.id === node.scene?.material?.textureAssetId)?.url]);
-    if ([...media,...characterUrls].some(url => url && !url.startsWith('/api/assets/') && !url.startsWith('data:'))) fail(400, 'import_asset_required', 'Import external media into the project before cloud rendering. Cloud renderers have no external network access.');
+    if ([...media,...characterUrls].some(url => url && !url.startsWith('/api/assets/') && !url.startsWith('/api/community/') && !url.startsWith('data:'))) fail(400, 'import_asset_required', 'Import external media into the project before cloud rendering. Cloud renderers have no external network access.');
   }
   let embeddedSize = 0;
   const embedded = new Map<string, string>();
   const embed = async (url: string): Promise<string> => {
-    if (!url.startsWith('/api/assets/')) return url;
+    if (!url.startsWith('/api/assets/') && !url.startsWith('/api/community/')) return url;
     if (embedded.has(url)) return embedded.get(url)!;
-    const asset = await bindings.DB.prepare('SELECT storage_key,mime_type FROM assets WHERE id=? AND user_id=?').bind(url.split('/').pop(), owner(c)).first<{ storage_key: string; mime_type: string }>();
-    if (!asset) fail(400, 'missing_asset', 'A referenced asset is unavailable.');
-    const object = await bindings.ASSETS_BUCKET.get(asset.storage_key); if (!object) fail(400, 'missing_asset', 'An asset could not be loaded.');
-    const bytes = await object.arrayBuffer(); embeddedSize += bytes.byteLength;
+    const asset = await resolveAsset(url);
+    embeddedSize += asset.bytes.byteLength;
     if (embeddedSize > 30 * 1024 * 1024) fail(413, 'export_too_large', 'Embedded media exceeds 30 MB; reduce the export assets.');
-    const result = `data:${asset.mime_type};base64,${Buffer.from(bytes).toString('base64')}`;
+    const result = `data:${asset.mimeType};base64,${Buffer.from(asset.bytes).toString('base64')}`;
     embedded.set(url, result);
     return result;
   };
   for (const page of doc.pages) for (const node of page.nodes) if (node.src) node.src = await embed(node.src);
   for (const asset of doc.assets) asset.url = await embed(asset.url);
-  if (options.format === 'svg') { const output = renderSvg(doc, options.pageIndex); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
-  if (options.format === 'html') { const output = await interactiveHtml(c, doc); span.set({ outputBytes: new TextEncoder().encode(output).length }); return new Response(output, { headers }); }
+  if (options.format === 'svg') { const output = renderSvg(doc, options.pageIndex); hooks.onBytes?.(new TextEncoder().encode(output).length); return new Response(output, { headers }); }
+  if (options.format === 'html') { const output = await interactiveSnapshotHtml(bindings, doc); hooks.onBytes?.(new TextEncoder().encode(output).length); return new Response(output, { headers }); }
   if (options.format === 'motion') {
-    const runtime=await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-viewer.js`));if(!runtime?.ok)fail(503,'renderer_not_built','Build the viewer before exporting.');
+    const runtime=await bindings.ASSETS?.fetch(new Request(`${(bindings.APP_URL ?? 'http://localhost')}/studio-viewer.js`));if(!runtime?.ok)fail(503,'renderer_not_built','Build the viewer before exporting.');
     if(doc.assets.some(a=>!a.url.startsWith('data:')))fail(400,'import_asset_required','Import all assets before portable export.');
-    const output=await createMotionArchive(doc,await runtime.text());span.set({outputBytes:output.byteLength});return new Response(new Uint8Array(output).buffer,{headers});
+    const output=await createMotionArchive(doc,await runtime.text());hooks.onBytes?.(output.byteLength);return new Response(new Uint8Array(output).buffer,{headers});
   }
   if (options.format === 'react') {
-    await rateLimit(c, `${thumbnail ? 'thumbnail' : 'export'}:${owner(c)}`, thumbnail ? 60 : 20);
-    const runtime = await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-react-runtime.json`));
+    await hooks.beforeRender?.();
+    const runtime = await bindings.ASSETS?.fetch(new Request(`${(bindings.APP_URL ?? 'http://localhost')}/studio-react-runtime.json`));
     if (!runtime?.ok) fail(503, 'renderer_not_built', 'Build the React runtime manifest before exporting.');
     const output = await createReactArchive(doc, await runtime.json() as ReactRuntimeManifest);
-    span.set({ outputBytes: output.byteLength });
+    hooks.onBytes?.(output.byteLength);
     return new Response(new Uint8Array(output).buffer, { headers });
   }
   if (!bindings.BROWSER && !bindings.EXPORT_BROWSER) fail(503, 'renderer_not_configured', 'Enable the Cloudflare Browser Rendering binding or install Chromium for self-hosting.');
   if (doc.pages.some(p => p.width * p.height > 16777216)) fail(413, 'canvas_too_large', 'Render exports support up to 16 megapixels per page.');
-  await rateLimit(c, `${thumbnail ? 'thumbnail' : 'export'}:${owner(c)}`, thumbnail ? 60 : 20);
+  await hooks.beforeRender?.();
   const fonts = ['png', 'pdf', 'pptx', 'webm', 'mp4','png-sequence','spritesheet'].includes(options.format) ? await embeddedDocumentFonts(doc) : null;
   let browser: ExportBrowser | undefined;
   try {
@@ -146,7 +157,7 @@ return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'e
       const style = await page.addStyleTag({ content: fonts.css });
       await style.evaluate((element: HTMLElement, url: string) => element.setAttribute('data-studio-fonts-embedded', url), fonts.url);
     }
-    const bundle = await bindings.ASSETS?.fetch(new Request(`${origin(c)}/studio-renderer.js`));
+    const bundle = await bindings.ASSETS?.fetch(new Request(`${(bindings.APP_URL ?? 'http://localhost')}/studio-renderer.js`));
     if (!bundle?.ok) fail(503, 'renderer_not_built', 'Build the renderer bundle before exporting.');
     await page.addScriptTag({ content: await bundle.text() });
     let output: Uint8Array;
@@ -154,7 +165,7 @@ return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'e
       let timeout: ReturnType<typeof setTimeout> | undefined;
       try {
         const encoded = await Promise.race([
-          page.evaluate((doc: DesignDocument) => (globalThis as any).studioRenderer.thumbnail(doc), doc),
+          page.evaluate(({doc,selection}:any) => (globalThis as any).studioRenderer.thumbnail(doc,selection), {doc,selection:hooks.thumbnailSelection}),
           new Promise<never>((_, reject) => { timeout = setTimeout(() => reject(new Error('Thumbnail render timed out')), 45000); }),
         ]);
         output = Buffer.from(encoded, 'base64');
@@ -167,22 +178,21 @@ return withSpan(c, { kind: 'export', action: thumbnail ? 'thumbnail.render' : 'e
       if(count<1||count>300||current.width*current.height*count>67108864)fail(413,'render_budget_exceeded','Use 1–300 frames and at most 64 megapixels in total.');
       const encoded=await page.evaluate(({doc,index,format,start,end,fps}:any)=>(globalThis as any).studioRenderer.motionFrames(doc,index,format,start,end,fps),{doc,index:options.pageIndex,format:options.format,start:options.start,end,fps:options.fps});output=Buffer.from(encoded,'base64');
     } else if (['pptx', 'webm', 'mp4', 'glb', 'gltf'].includes(options.format)) {
-      const encoded = await page.evaluate(async ({ document, pageIndex, format }: { document: DesignDocument; pageIndex: number; format: string }) => {
+      const encoded = await page.evaluate(async ({ document, pageIndex, format, videoOptions }: { document: DesignDocument; pageIndex: number; format: string; videoOptions:{start:number;end?:number;fps:number} }) => {
         const renderer = (globalThis as any).studioRenderer;
-        return format === 'pptx' ? renderer.pptx(document) : format === 'glb' || format === 'gltf' ? renderer.scene(document, pageIndex, format) : renderer.video(document, pageIndex, format);
-      }, { document: doc, pageIndex: options.pageIndex, format: options.format });
+        return format === 'pptx' ? renderer.pptx(document) : format === 'glb' || format === 'gltf' ? renderer.scene(document, pageIndex, format) : renderer.video(document, pageIndex, format,videoOptions);
+      }, { document: doc, pageIndex: options.pageIndex, format: options.format,videoOptions:{start:options.start,end:options.end,fps:options.fps} });
       output = Buffer.from(encoded, 'base64');
     } else {
       await page.evaluate(({ document, pageIndex, all }: { document: DesignDocument; pageIndex: number; all: boolean }) => (globalThis as any).studioRenderer.present(document, pageIndex, all), { document: doc, pageIndex: options.pageIndex, all: options.format === 'pdf' });
       output = options.format === 'png' ? await page.screenshot({ type: 'png' }) : await page.pdf({ printBackground: true, preferCSSPageSize: true });
     }
     if (output.byteLength < 32) fail(502, 'empty_render', 'The renderer produced no usable file. Retry the export.');
-    span.set({ outputBytes: output.byteLength });
+    hooks.onBytes?.(output.byteLength);
     return new Response(new Uint8Array(output).buffer, { headers });
   } catch (error) {
     if (error instanceof ApiError) throw error;
     // Browser errors can include URLs. Avoid leaking provider/asset credentials.
     fail(502, 'render_failed', 'Cloud rendering failed. Check that media files decode and external assets permit cross-origin access; try PNG or WebM.');
   } finally { await browser?.close(); }
-});
 }

@@ -11,8 +11,10 @@ export async function reserveAsset(c: Context<Env>, projectId: string, bytes: nu
   const result = await c.env.DB.prepare(`INSERT INTO asset_reservations(id,user_id,project_id,bytes,expires_at)
     SELECT ?,?,?,?,? WHERE
     COALESCE((SELECT SUM(size) FROM assets WHERE project_id=?),0) + COALESCE((SELECT SUM(bytes) FROM asset_reservations WHERE project_id=? AND expires_at>=?),0) + ? <= ? AND
-    COALESCE((SELECT SUM(size) FROM assets WHERE user_id=?),0) + COALESCE((SELECT SUM(bytes) FROM asset_reservations WHERE user_id=? AND expires_at>=?),0) + ? <= ?`)
-    .bind(key, owner(c), projectId, bytes, expires, projectId, projectId, time, bytes, PROJECT_ASSET_QUOTA, owner(c), owner(c), time, bytes, OWNER_ASSET_QUOTA).run();
+    COALESCE((SELECT SUM(size) FROM assets WHERE user_id=?),0) + COALESCE((SELECT SUM(bytes) FROM asset_reservations WHERE user_id=? AND expires_at>=?),0) +
+    COALESCE((SELECT SUM(size) FROM community_files WHERE user_id=? AND status!='deleted'),0) +
+    COALESCE((SELECT SUM(bytes) FROM community_storage_reservations WHERE user_id=?),0) + ? <= ?`)
+    .bind(key, owner(c), projectId, bytes, expires, projectId, projectId, time, bytes, PROJECT_ASSET_QUOTA, owner(c), owner(c), time, owner(c), owner(c), bytes, OWNER_ASSET_QUOTA).run();
   if (!result.meta.changes) fail(413, 'asset_quota_exceeded', 'Asset storage is full, including retained history and uploads in progress. Export a backup and remove unused projects before uploading.');
   return key;
 }

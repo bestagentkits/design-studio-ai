@@ -41,6 +41,12 @@ import { ThemeToggle } from "./theme-toggle";
 import { workspaceTab, workspacePaths, navigateWorkspace, type WorkspaceTab } from "./workspace-navigation";
 import { trackClient, resetAnalyticsIdentity } from "./analytics";
 import { ObservabilityDashboard } from "./observability-dashboard";
+import { CommunitySearchDialog } from './community-search-dialog';
+import { useContextualSearch } from './contextual-search';
+import { resumeCommunitySignIn } from './community-navigation';
+import { CommunityJobStatus } from './community-job-status';
+import type { CommunityJob } from '../shared/community';
+import { useCommunityEnabled, storedCommunityImport } from './community-client';
 
 type Kind = DesignDocument["kind"];
 const kinds: {
@@ -193,6 +199,7 @@ function githubReturn() {
 }
 
 export function App() {
+  const communityEnabled = useCommunityEnabled();
   const [oauthReturn] = useState(githubReturn);
   const [callbackError, setCallbackError] = useState(() =>
     oauthReturn.errorCode ? githubError(oauthReturn.errorCode) : "",
@@ -211,6 +218,9 @@ export function App() {
   const [project, setProject] = useState<Project | null>(null),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
+  const contextualSearch = useContextualSearch(!project);
+  const [communityImport, setCommunityImport] = useState<string | null>(null);
+  useEffect(() => { if (user && !screenParam('project')) setCommunityImport(storedCommunityImport(user.id)); else setCommunityImport(null); }, [user?.id]);
   const [authScreen, setAuthScreen] = useScreenState("auth", "", ["", "signin"]);
   const auth = authScreen === "signin";
   const setAuth = (value: boolean) => setAuthScreen(value ? "signin" : "");
@@ -282,6 +292,7 @@ export function App() {
     api<{ user: User | null }>("/api/auth/me")
       .then((data) => {
         setUser(data.user);
+        if (data.user) resumeCommunitySignIn();
       })
       .catch((e) => setError(message(e)))
       .finally(() => setReady(true));
@@ -600,6 +611,13 @@ export function App() {
     setBusy(true);
     setError("");
     try {
+      if (/\.zip$/i.test(file.name)) {
+        if (!user) { setAuth(true); setNotice('Sign in, then choose the Studio package again to import.'); return; }
+        const operationId = crypto.randomUUID(); storedCommunityImport(user.id, operationId); setCommunityImport(operationId);
+        const body = new FormData(); body.append('file', file); body.append('operationId', operationId);
+        const { job } = await api<{ job: CommunityJob }>('/api/community/imports', { method: 'POST', body });
+        setCommunityImport(job.operationId); return;
+      }
       const result = await importDesign(file);
       setDraft({
         kind: result.document.kind,
@@ -653,6 +671,7 @@ export function App() {
               <Brand />
             </a>
             <nav aria-label="Main navigation">
+              {communityEnabled && <a href="/community">Community</a>}
               {([['projects', 'Workspace'], ['templates', 'Templates'], ['themes', 'Design systems']] as const).map(([key, label]) => (
                 <a key={key} href={workspacePaths[key]} className={tab === key ? 'active' : ''} aria-current={tab === key ? 'page' : undefined}
                   onClick={event => { if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) { event.preventDefault(); setTab(key); } }}>
@@ -671,6 +690,7 @@ export function App() {
               </a>
             </nav>
             <div className="header-end">
+              <button className="icon-button" aria-label="Search My projects" title="Search My projects (Ctrl+K)" onClick={() => contextualSearch.setOpen(true)}><Search size={19}/></button>
               <ThemeToggle />
               <a
                 className="icon-button documentation-shortcut"
@@ -733,7 +753,7 @@ export function App() {
                         <Import size={19} />
                         <input
                           type="file"
-                          accept=".json,.svg,.html,.htm"
+                          accept=".json,.svg,.html,.htm,.zip"
                           aria-label="Import a design"
                           onChange={(e) => {
                             const file = e.target.files?.[0];
@@ -1276,6 +1296,7 @@ export function App() {
           }}
           onUser={(value) => {
             setUser(value);
+            if (resumeCommunitySignIn()) return;
             setAuth(false);
             setCallbackError("");
             if (oauthReturn.saved?.imported)
@@ -1303,12 +1324,14 @@ export function App() {
           }}
         />
       )}
+      {contextualSearch.open && <CommunitySearchDialog initialScope="projects" accountId={user?.id} onClose={() => contextualSearch.setOpen(false)}/>}
+      {communityImport && <Modal title="Import Studio project package" onClose={() => { setCommunityImport(null); if(user) storedCommunityImport(user.id, ''); }}><div className="modal-body"><CommunityJobStatus operationId={communityImport}/></div></Modal>}
       {remove && (
         <Modal title="Delete this project?" onClose={() => setRemove(null)}>
           <div className="modal-body">
             <p>
               “{remove.name}” and its saved design will be deleted. This cannot
-              be undone.
+              be undone. Any Community listing for this project will be unlisted. Existing private remixes and downloaded files remain with their recipients.
             </p>
             <div className="button-row">
               <button className="button" onClick={() => setRemove(null)}>

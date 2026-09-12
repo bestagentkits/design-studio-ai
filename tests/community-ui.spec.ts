@@ -1,0 +1,26 @@
+import { test, expect } from '@playwright/test';
+test('guest exploration preserves filters and requires an account only for private pages', async ({page}) => {
+  await page.goto('/community');
+  await expect(page.getByRole('heading',{name:'Explore Community',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Presentation',exact:true}).click();
+  await expect(page).toHaveURL(/kind=slides/);
+  await page.getByRole('searchbox',{name:'Search public designs'}).fill('typography');
+  await page.getByRole('search').getByRole('button',{name:'Search',exact:true}).click();
+  await expect(page).toHaveURL(/q=typography/);
+  await page.getByRole('button',{name:'Filters',exact:true}).click();
+  await page.getByLabel('Tags',{exact:true}).fill('minimal, editorial');
+  await page.getByLabel('First published',{exact:true}).selectOption('month');
+  await page.getByRole('button',{name:'Apply filters'}).click();
+  await expect(page).toHaveURL(/period=month/);
+  await page.goBack();
+  await expect(page).not.toHaveURL(/period=month/);
+  await expect(page.getByRole('searchbox',{name:'Search public designs'})).toHaveValue('typography');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.setViewportSize({width:320,height:844});await page.emulateMedia({reducedMotion:'reduce'});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.goto('/community/saved');
+  await expect(page.getByRole('button',{name:'Sign in to continue'})).toBeVisible();
+  await page.getByRole('button',{name:'Sign in to continue'}).click();
+  await expect(page).toHaveURL(/auth=signin/);
+  await expect(page.getByRole('dialog')).toBeVisible();
+});

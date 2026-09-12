@@ -137,3 +137,11 @@ For editable 3D character meshes and animation, discover scene commands and foll
 ## Saved covers
 
 Use `get_project_thumbnail` (MCP) or `dsa projects thumbnail ID --output cover.png` for a small persisted cover. Optional revision selects a retained saved revision. Project summaries expose `thumbnailUrl` and latest ready `thumbnailRevision`. A busy render returns 202/status rendering: retry after 2 seconds; do not claim an image exists yet. Covers are private, maximum 480px per side, generated lazily with the shared server renderer, and retain the latest two completed revisions. Import external media before cloud rendering. Use full exports for detailed visual review.
+
+## Community discovery and publication
+
+Use `dsa community schema` or MCP `community_capabilities` to discover the current shared operations. Search uses `dsa community search --q TEXT --kind KIND --sort relevance`; get a listing to select its exact version and available file IDs. Download with `dsa community download LISTING VERSION FILE --out design.zip`. A portable import uses `dsa community import --file design.zip --operation-id UNIQUE_ID`. MCP binary transfers and browser base64 imports are capped at 12 MiB; larger packages use CLI or the browser file picker.
+
+Publishing is separate from the legacy Share link. Preflight the saved project revision with public metadata, show its projection/disclosures and CC-BY-4.0 license, and obtain explicit authorization before submitting the confirmed payload and returned digest. Mutation JSON files follow `/api/schema` → `community`. Preserve operation ID and exact payload for uncertain retries. Never substitute a fresh revision/digest to force stale approval. Poll `community job` until succeeded. Updates create immutable versions; unlist revokes new public access. Downloaded copies and completed private remixes survive source removal. A remix stays private until separately published. Imported attribution is unverified and never awards upstream milestones.
+
+Home Cmd/Ctrl+K searches owned projects; Community searches live shared designs. WebMCP Community tools use `studio_community_*` and are scoped to Community pages. Save/bookmark lists are private. Moderation is separately allowlisted, session/API-key only; OAuth never grants it.

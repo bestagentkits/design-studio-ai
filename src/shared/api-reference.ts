@@ -1,6 +1,8 @@
 import { z } from 'zod';
 import { clientEventSchema, telemetryQuerySchema } from './observability';
+import { communityEndpoints, type CommunityEndpoint } from './community-endpoints';
 export const apiEndpoints = [
+  ...(communityEndpoints as readonly CommunityEndpoint[]).map(endpoint=>({method:endpoint.method,path:`/api/community${endpoint.path}`,summary:endpoint.summary,body:endpoint.body||endpoint.upload?{}:undefined})),
   {method:'GET',path:'/api/projects/{id}/scene/animation',summary:'Inspect complete animation; required pageId and optional start, end, samples (2–61) query',body:undefined},
   {method:'POST',path:'/api/projects/{id}/operations',summary:'Start idempotent save/export job; reuse operationId and exact payload on uncertain response',body:{kind:'export',operationId:'unique-operation-id',input:{format:'glb',expectedRevision:1,pageIndex:0}}},
   {method:'GET',path:'/api/projects/{id}/operations/{operationId}',summary:'Read owner-scoped operation status, stage, revision and result URL',body:undefined},
@@ -71,11 +73,15 @@ export function openApiDocument(schemas: Record<string, unknown>) {
       for (const [name, schema] of Object.entries(definition.properties)) parameters.push({ name, in: 'query', schema });
     }
     if (path.endsWith('/thumbnail')) parameters.push({ name: 'revision', in: 'query', schema: { type: 'integer', minimum: 1 }, description: 'Saved revision; defaults to current. Only the two latest completed covers are retained.' });
-    const upload = method === 'POST' && path.endsWith('/assets');
+    const community = (communityEndpoints as readonly CommunityEndpoint[]).find(endpoint=>`/api/community${endpoint.path}`===path&&endpoint.method===method);
+    if(community?.query)for(const [name,schema] of Object.entries((z.toJSONSchema(community.query,{io:'input'}) as {properties:Record<string,unknown>}).properties))parameters.push({name,in:'query',schema});
+    if(method==='GET'&&path==='/api/projects')for(const name of ['q','kind','sort','limit'])parameters.push({name,in:'query',schema:name==='limit'?{type:'integer',minimum:1,maximum:500}:{type:'string'}});
+    const upload = method === 'POST' && (path.endsWith('/assets') || !!community?.upload);
     const content = upload
-      ? { 'multipart/form-data': { schema: { type: 'object', required: ['file'], properties: { file: { type: 'string', format: 'binary' } } } } }
+      ? { 'multipart/form-data': { schema: { type: 'object', required: community?.upload?['file','operationId']:['file'], properties: { file: { type: 'string', format: 'binary' },...(community?.upload?{operationId:{type:'string',maxLength:120}}:{}) } } } }
       : { 'application/json': { schema: path.endsWith('/client-events') ? z.toJSONSchema(clientEventSchema) : schemas[`${method} ${path}`] ?? { type: 'object' }, example: body } };
     (paths[path] ??= {})[method.toLowerCase()] = { summary, parameters,
+      ...(community?.public?{security:[]}:{}),
       ...(body ? { requestBody: { required: true, content } } : {}),
       responses: { '2XX': { description: 'Success; exports return file bytes with Content-Type and Content-Disposition' }, '400': { description: 'Invalid request' }, '401': { description: 'Authentication required' }, '403': { description: 'Insufficient scope' }, '404': { description: 'Resource not found' }, '409': { description: 'Revision or merge conflict' } },
     };
