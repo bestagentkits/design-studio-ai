@@ -26,6 +26,10 @@ Generation `mode: motion` returns operations plus preview document and base docu
 
 [export-contract.ts](../src/shared/export-contract.ts) owns format/range fields. `motion` returns native ZIP with embedded media/player. The Character Motion importer reads only validated JSON, rejects unsafe ZIP paths and oversized expansion, and uploads embedded images through the existing owned-asset endpoint; `png-sequence` and `spritesheet` return PNG files plus time/rectangle manifest. `start`, `end`, `fps` control sampling, with bounded frame/pixel counts. HTML/React use trusted bundled sources. 3D scene composition retains the ordered SVG/3D layers from the scene renderer; standalone 3D nodes in a 2D character page use an isolated transparent scene. Game engines, Spine file import/export and PSD parsing are separate integrations, not implied by this native format.
 
+The shared [frame budget](../src/shared/frame-export-budget.ts) limits PNG sequence and spritesheet archives to 300 frames and 64 megapixels across native-size frames. The count is `ceil((end - start) * fps)`; the range must have positive duration. Cloud exports reject an oversized request before launching a browser, and Community checks the same budget during preflight. The error reports a fitting FPS when possible; the server preserves explicit sampling options rather than reducing them.
+
+Spritesheets also limit the assembled grid to 16,384 pixels per side. The shared budget accounts for the renderer's `ceil(sqrt(frameCount))` columns and enough rows for all frames. PNG sequence archives do not have this grid constraint.
+
 ## Verification
 
 Use focused character tests and the isolated browser harness. Runtime spike results in the implementation plan measure CPU submission and synchronous layout, not full device FPS. Full frame latency, blend/alpha fidelity and context-loss behavior need browser tests and artifact inspection before claiming parity. Do not interpret a build as proof of live provider generation or deployment.

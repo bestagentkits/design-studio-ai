@@ -3,6 +3,7 @@ import type { InspectionRenderOptions } from '../src/shared/visual-inspection';
 
 import {exportOptionsSchema as optionsSchema} from '../src/shared/export-contract';
 import { createMotionArchive } from '../src/shared/motion-export';
+import { frameExportBudget, frameExportBudgetMessage } from '../src/shared/frame-export-budget';
 import { updateEvent } from './observability-store';
 import { withSpan } from './observability';
 import { Hono, type Context } from 'hono';
@@ -90,6 +91,11 @@ export async function renderSnapshotExport(bindings: Bindings, name: string, doc
   const options=optionsSchema.parse(input), thumbnail=hooks.thumbnail ?? false;
   let doc=documentSchema.parse(structuredClone(document));
   if (!doc.pages[options.pageIndex]) fail(400, 'invalid_page', 'This page does not exist.');
+  const frameEnd = options.end ?? doc.timeline?.duration ?? 2;
+  if (!thumbnail && !hooks.inspection && (options.format === 'png-sequence' || options.format === 'spritesheet')) {
+    const frameInput = {...doc.pages[options.pageIndex], start: options.start, end: frameEnd, fps: options.fps, format: options.format};
+    if (!frameExportBudget(frameInput).withinLimits) fail(413, 'render_budget_exceeded', frameExportBudgetMessage(frameInput));
+  }
   if (options.format === 'react' && !['web', 'wireframe'].includes(doc.kind)) fail(400, 'unsupported_export', 'React source export is available for Web/App and wireframe projects.');
   if (['glb', 'gltf'].includes(options.format) && doc.pages[options.pageIndex].nodes.some(node=>node.character)) fail(400,'unsupported_export','Character motion uses the native motion package; GLB/glTF cannot preserve 2D rigs.');
   if (['glb', 'gltf'].includes(options.format) && !doc.pages[options.pageIndex].nodes.some(node => node.type === 'model3d')) fail(400, 'unsupported_export', 'Scene export requires a 3D object on the selected page.');
@@ -185,8 +191,7 @@ export async function renderSnapshotExport(bindings: Bindings, name: string, doc
       if(current.width*current.height*4>67108864)fail(413,'render_budget_exceeded','Four views exceed 64 megapixels');
       const encoded=await page.evaluate(({doc,index,time}:any)=>(globalThis as any).studioRenderer.sceneAngles(doc,index,time),{doc,index:options.pageIndex,time:options.start});output=Buffer.from(encoded,'base64');
     } else if(['png-sequence','spritesheet'].includes(options.format)){
-      const end=options.end??doc.timeline?.duration??2;const count=Math.ceil((end-options.start)*options.fps);
-      if(count<1||count>300||current.width*current.height*count>67108864)fail(413,'render_budget_exceeded','Use 1–300 frames and at most 64 megapixels in total.');
+      const end=frameEnd;
       const encoded=await page.evaluate(({doc,index,format,start,end,fps}:any)=>(globalThis as any).studioRenderer.motionFrames(doc,index,format,start,end,fps),{doc,index:options.pageIndex,format:options.format,start:options.start,end,fps:options.fps});output=Buffer.from(encoded,'base64');
     } else if (['pptx', 'webm', 'mp4', 'glb', 'gltf'].includes(options.format)) {
       const encoded = await page.evaluate(async ({ document, pageIndex, format, videoOptions }: { document: DesignDocument; pageIndex: number; format: string; videoOptions:{start:number;end?:number;fps:number} }) => {
