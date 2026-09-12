@@ -44,8 +44,8 @@ async function setup(t: TestContext) {
 }
 
 function providerTransport(t: TestContext) {
-  const calls: { url: string; headers: Headers; payload: { model: string; messages: { role: string; content: string }[] } }[] = [];
-  let output = JSON.stringify(suggestion), status = 200, unavailable = false;
+  const calls: { url: string; headers: Headers; payload: { model: string; max_tokens?: number; messages: { role: string; content: string }[] } }[] = [];
+  let output: string | null = JSON.stringify(suggestion), status = 200, unavailable = false;
   let duringCall: (() => Promise<void>) | undefined;
   // Only outbound provider transport is replaced; auth, encryption, validators,
   // ownership, revision checks and SQLite persistence use the actual application.
@@ -57,7 +57,7 @@ function providerTransport(t: TestContext) {
     if (unavailable) throw new Error('Isolated transport failure');
     return Response.json({ choices: [{ message: { content: output } }] }, { status });
   });
-  return { calls, respond(value: unknown) { output = JSON.stringify(value); }, respondText(value: string) { output = value; },
+  return { calls, respond(value: unknown) { output = JSON.stringify(value); }, respondText(value: string | null) { output = value; },
     fail(httpStatus: number) { status = httpStatus; }, disconnect() { unavailable = true; }, during(callback: () => Promise<void>) { duringCall = callback; } };
 }
 
@@ -115,6 +115,39 @@ test('explicit metadata provider selection uses the owner saved model and refuse
   assert.equal(transport.calls[0].url, 'https://api.deepseek.com/chat/completions');
   assert.equal(transport.calls[0].payload.model, 'chosen-text-model');
   assert.equal(transport.calls[0].headers.get('Authorization'), 'Bearer alice-isolated-provider-key');
+});
+
+test('metadata generation sends a bounded output budget to the configured reasoning model', async t => {
+  const { json, connect, create, generate } = await setup(t), transport = providerTransport(t);
+  const project = await create(), model = 'deepseek/deepseek-v4.1-flash';
+  await connect('openrouter', 'alice', model);
+  const result = await json(await generate(project));
+  assert.deepEqual(result, { suggestion, provider: 'openrouter', projectRevision: project.revision });
+  assert.equal(transport.calls.length, 1);
+  assert.equal(transport.calls[0].url, 'https://openrouter.ai/api/v1/chat/completions');
+  assert.equal(transport.calls[0].payload.model, model);
+  // Verify the actual provider request, including its upper bound; the caller
+  // must leave room for reasoning without silently selecting a different model.
+  assert.equal(transport.calls[0].payload.max_tokens, 8192);
+});
+
+test('null empty and truncated metadata outputs are rejected without saving or retrying automatically', async t => {
+  const { json, connect, create, generate, db } = await setup(t), transport = providerTransport(t);
+  const project = await create();
+  await connect('openrouter', 'alice', 'deepseek/deepseek-v4.1-flash');
+  const before = await db.prepare('SELECT * FROM projects WHERE id=?').bind(project.id).first();
+  const incomplete = [null, '', '{"title":"Paper Lantern","description":"An editable study'];
+  for (const [index, output] of incomplete.entries()) {
+    transport.respondText(output);
+    const result = await json(await generate(project), 502);
+    assert.equal(result.error.code, 'invalid_generation');
+    assert.equal('suggestion' in result, false);
+    assert.equal(transport.calls.length, index + 1);
+    assert.deepEqual(await db.prepare('SELECT * FROM projects WHERE id=?').bind(project.id).first(), before);
+    for (const table of ['community_profiles', 'community_listings', 'community_jobs', 'publications']) {
+      assert.equal((await db.prepare(`SELECT COUNT(*) count FROM ${table}`).first<{ count: number }>())!.count, 0);
+    }
+  }
 });
 
 test('metadata generation rejects invalid inputs before provider transport and accepts boundary inputs', async t => {
