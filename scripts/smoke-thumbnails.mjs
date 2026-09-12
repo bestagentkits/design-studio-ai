@@ -52,6 +52,31 @@ try {
   const anonymous = await fetch(`${origin}/api/projects/${projectId}/thumbnail?revision=3`, { redirect: 'error' });
   assert.equal(anonymous.status, 401);
   console.log('PASS production revision cache, stable bytes, revision refresh, retained cover and ownership.');
+  const inspect = async (path, body) => {
+    const response = await request(path, 'POST', body);
+    assert.equal(response.status, 200, 'Visual inspection response');
+    assert.match(response.headers.get('cache-control'), /private.*no-store/);
+    const result = await response.json();
+    assert.equal(result.source, 'saved');
+    assert.equal(result.items[0].projectId, projectId);
+    assert.equal(result.items[0].revision, 3);
+    for (const image of result.images) {
+      const bytes = Buffer.from(image.data, 'base64');
+      assert.equal(image.mimeType, 'image/png');
+      assert.equal(bytes.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+      assert.equal(bytes.readUInt32BE(16), image.width);
+      assert.equal(bytes.readUInt32BE(20), image.height);
+    }
+    return result;
+  };
+  const page = await inspect(`/api/projects/${projectId}/inspect`, { mode: 'page', pageIndex: 0, expectedRevision: 3, maxDimension: 256 });
+  assert.equal(page.scope, 'page'); assert.equal(page.images.length, 1);
+  const overview = await inspect(`/api/projects/${projectId}/inspect`, { mode: 'overview', expectedRevision: 3, limit: 2, tileSize: 160 });
+  assert.equal(overview.scope, 'project'); assert.equal(overview.items.length, Math.min(2, project.document.pages.length));
+  const workspace = await inspect('/api/projects/inspect', { limit: 1, tileSize: 160 });
+  assert.equal(workspace.scope, 'workspace'); assert.equal(workspace.total, 1);
+  assert.equal((await request(`/api/projects/${projectId}/inspect`, 'POST', { expectedRevision: 2 })).status, 409);
+  console.log('PASS production page, project and workspace visual inspection, PNG dimensions and revision protection.');
 } finally {
   try {
     if (projectId) assert.equal((await request(`/api/projects/${projectId}`, 'DELETE')).status, 200, 'Verification project cleanup');

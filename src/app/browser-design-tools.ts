@@ -1,4 +1,6 @@
 import {operationJobSchema} from '../shared/operation-jobs';
+import { visualInspectionSchema, workspaceInspectionSchema } from '../shared/visual-inspection';
+import { visualInspectionTools } from './browser-visual-inspection-tools';
 export { registerCommunityBrowserTools } from './browser-community-tools';
 import {inspectSceneAnimation} from '../shared/scene-inspection';
 import { sceneDocumentCommand } from './scene-document-command';
@@ -22,7 +24,7 @@ interface Tool { name: string; description: string; inputSchema: Record<string, 
 interface Context { registerTool: (tool: Tool) => void; unregisterTool?: (name: string) => void }
 export function registerDesignTools(context: Context, get: () => DesignDocument, set: (doc: DesignDocument) => void) {
   const result = (value: unknown) => ({ content: [{ type: 'text', text: JSON.stringify(value) }] });
-  const tools: Tool[] = [{name:'studio_inspect_scene_animation',description:'Sample the complete local animation and return time-indexed geometry diagnostics and foot contact errors.',inputSchema:{type:'object',properties:{pageId:{type:'string'},start:{type:'number'},end:{type:'number'},samples:{type:'integer'}},required:['pageId']},annotations:{readOnlyHint:true},execute:async args=>result(inspectSceneAnimation(get(),String(args.pageId),Number(args.start??0),Number(args.end??get().timeline?.duration??0),Number(args.samples??25)))},{
+  const tools: Tool[] = [...visualInspectionTools(), {name:'studio_inspect_scene_animation',description:'Sample the complete local animation and return time-indexed geometry diagnostics and foot contact errors.',inputSchema:{type:'object',properties:{pageId:{type:'string'},start:{type:'number'},end:{type:'number'},samples:{type:'integer'}},required:['pageId']},annotations:{readOnlyHint:true},execute:async args=>result(inspectSceneAnimation(get(),String(args.pageId),Number(args.start??0),Number(args.end??get().timeline?.duration??0),Number(args.samples??25)))},{
     name:'studio_scene_command', description:'Preview or apply an atomic 3D command to the open document. Discover sceneCommands via studio_capabilities. Compact response contains diagnostics, not mesh buffers. Preview defaults true; apply is undoable and live mode autosaves.',
     inputSchema:{type:'object',properties:{pageId:{type:'string'},command:{type:'object'},preview:{type:'boolean',default:true}},required:['pageId','command']},
     execute:async args=>{const input=z.object({pageId:z.string(),command:sceneCommandSchema,preview:z.boolean().default(true)}).parse(args);const original=get();const next=await sceneDocumentCommand(original,input.pageId,input.command);if(get()!==original)throw new Error('Design changed while geometry was processing. Inspect and retry.');if(!input.preview)set(next);return result({preview:input.preview,...inspectScene(next,input.pageId)});}
@@ -37,10 +39,10 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
     execute: async args => { const next = mutateDocument(get(), args.operations); set(next); return result({ document: next }); },
   }, {
     name: 'studio_capabilities', description: 'Discover canonical document/operation/component/layout/3D schemas and available API operations.', inputSchema: { type: 'object', properties: {} }, annotations: { readOnlyHint: true },
-    execute: async () => result({ operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
+    execute: async () => result({ visualInspection:z.toJSONSchema(visualInspectionSchema),workspaceInspection:z.toJSONSchema(workspaceInspectionSchema),operationJob:z.toJSONSchema(operationJobSchema),sceneCommands:z.toJSONSchema(sceneCommandSchema), supportedDocumentVersions: [1,2], providers: builtInProviders, providerId: z.toJSONSchema(providerIdSchema), mediaInput: z.toJSONSchema(mediaInputSchema), generationInput: z.toJSONSchema(generationInputSchema), documentWrite:z.toJSONSchema(documentWriteSchema),motionProposal:z.toJSONSchema(motionProposalSchema),exportInput:z.toJSONSchema(exportOptionsSchema), providerInterview: z.toJSONSchema(providerInterviewSchema), componentNames, document: z.toJSONSchema(documentSchema), operations: z.toJSONSchema(operationsSchema), designSystem: z.toJSONSchema(designSystemSchema), component: z.toJSONSchema(componentSchema), layout: z.toJSONSchema(layoutSchema), scene: z.toJSONSchema(sceneObjectSchema), endpoints: apiEndpoints }),
   }];
   // Only first-party documented endpoints are callable; the browser supplies its own session.
-  for (const endpoint of apiEndpoints.filter(e => !e.path.startsWith('/api/community') && !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
+  for (const endpoint of apiEndpoints.filter(e => !e.path.endsWith('/inspect') && !e.path.startsWith('/api/community') && !e.path.endsWith('/client-events') && !e.path.includes('/auth/') && !e.path.includes('/tokens') && (!e.path.includes('/providers') || e.method === 'GET'))) {
     const operation = `${endpoint.method.toLowerCase()}_${endpoint.path.replace(/^\/api\//, '').replace(/\{(\w+)\}/g, '$1').replace(/[^a-z0-9]/gi, '_')}`;
     tools.push({ name: `studio_api_${operation}`, description: endpoint.summary + '. Saved state; writes require observed revisions.' + (/\/(publish|preview|share)$/.test(endpoint.path)?' Creates or manages public snapshots.':''),
       annotations: { readOnlyHint: endpoint.method === 'GET' },
@@ -51,7 +53,10 @@ export function registerDesignTools(context: Context, get: () => DesignDocument,
         const query = new URLSearchParams(args.query as Record<string, string> ?? {});
         const upload = endpoint.method === 'POST' && endpoint.path.endsWith('/assets');
         const response = await fetch(path + (query.size ? `?${query}` : ''), { method: endpoint.method, credentials: 'same-origin', headers: { 'X-Studio-Client': 'webmcp', ...(!upload ? { 'Content-Type': 'application/json' } : {}) }, ...(endpoint.body ? { body: upload ? assetUploadBody(args.body as Record<string, unknown>) : JSON.stringify(args.body) } : {}) });
-        if ((response.headers.get('Content-Type') ?? '').includes('json')) { const data = await response.json(); return { ...result(data), ...(!response.ok ? { isError: true } : {}) }; }
+        if ((response.headers.get('Content-Type') ?? '').includes('json')) {
+          const data = await response.json();
+          return { ...result(data), ...(!response.ok ? { isError: true } : {}) };
+        }
         if (!response.ok) throw new Error(`Request failed: ${response.status}`);
         const blob = await response.blob(); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = /filename="([^"]+)"/.exec(response.headers.get('Content-Disposition')??'')?.[1]??'studio-export'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 10000);
         return result({ downloaded: true, mimeType: blob.type, bytes: blob.size, filename:a.download });
