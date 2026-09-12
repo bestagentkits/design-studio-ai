@@ -166,13 +166,17 @@ test('docs search, endpoint keyboard controls, copy, theme, and history work on 
   expect(errors).toEqual([]);
 });
 
-test('documentation contents keep their open state when navigating sections', async ({ page }, info) => {
-  const narrow = info.project.name === 'mobile';
+test('documentation contents keep their open state when navigating sections', async ({ page }) => {
+  const narrow = (page.viewportSize()?.width ?? 0) <= 760;
   await page.goto('/docs');
   const sidebar = page.locator('#docs-navigation');
+  const toggle = page.getByRole('button', { name: /documentation navigation/ });
+  if (narrow) { await expect(sidebar).toBeHidden(); await toggle.click(); }
+  await expect(sidebar).toBeVisible();
+  await page.keyboard.press('Escape');
   if (narrow) {
     await expect(sidebar).toBeHidden();
-    await page.getByRole('button', { name: 'Open documentation navigation' }).click();
+    await toggle.click();
   }
   await expect(sidebar).toBeVisible();
   await sidebar.getByRole('link', { name: '3D characters' }).click();

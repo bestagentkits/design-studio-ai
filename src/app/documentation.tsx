@@ -221,7 +221,7 @@ export function DocsApp({ sectionId }: { sectionId?: SectionId } = {}) {
   useEffect(() => {
     const title = document.title;
     const hashChanged = () => { setActive(initialSection()); setQuery(''); if (window.innerWidth <= 760) setMobileOpen(false); window.scrollTo({ top: 0 }); requestAnimationFrame(() => heading.current?.focus({ preventScroll: true })); };
-    const keydown = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setMobileOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); } if (event.key === 'Escape') { setQuery(''); setMobileOpen(false); } };
+    const keydown = (event: KeyboardEvent) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); setMobileOpen(true); requestAnimationFrame(() => searchInput.current?.focus()); } if (event.key === 'Escape') { setQuery(''); if (window.innerWidth <= 760) setMobileOpen(false); } };
     window.addEventListener('hashchange', hashChanged); window.addEventListener('popstate', hashChanged); window.addEventListener('keydown', keydown);
     return () => { document.title = title; window.removeEventListener('hashchange', hashChanged); window.removeEventListener('popstate', hashChanged); window.removeEventListener('keydown', keydown); };
   }, []);
