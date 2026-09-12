@@ -4,7 +4,9 @@ import { mkdir } from 'node:fs/promises';
 import type { Page } from '@playwright/test';
 async function pane(page: Page, name: string) { const nav = page.locator('.mobile-editor-nav'); if (await nav.isVisible()) await nav.getByRole('button', { name, exact: true }).click(); }
 
-const mainNavigationOrder = ['Workspace', 'Templates', 'Design systems', 'Community', 'Activity', 'Documentation', 'Guide'];
+// Community is deployment-gated; every deployment renders the rest in this order.
+const workspaceNavigation = ['Workspace', 'Templates', 'Design systems'];
+const documentationNavigation = ['Activity', 'Documentation', 'Guide'];
 
 test('main navigation keeps its order on the workspace, guide and documentation', async ({ page }, info) => {
   await mkdir('plans/260910-1813-studio-feedback/reports', { recursive: true });
@@ -14,7 +16,8 @@ test('main navigation keeps its order on the workspace, guide and documentation'
   for (const route of ['/', '/guide', '/docs']) {
     await page.goto(route);
     const nav = page.getByRole('navigation', { name: 'Main navigation', exact: true });
-    await expect(nav.getByRole('link')).toHaveText(mainNavigationOrder);
+    const communityEnabled = (await (await page.request.get('/api/config')).json()).community?.enabled === true;
+    await expect(nav.getByRole('link')).toHaveText([...workspaceNavigation, ...(communityEnabled ? ['Community'] : []), ...documentationNavigation]);
     await expect(nav.getByRole('link', { name: 'Design systems', exact: true })).toHaveAttribute('href', '/design-systems');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   }
