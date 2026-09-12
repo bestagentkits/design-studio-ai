@@ -7,7 +7,15 @@ export function fileSize(size: number) { return size < 1024 ? `${size} B` : size
 export function formatLabel(format: string) { return format === 'package' ? 'Studio project package (.zip)' : format === 'react' ? 'React source (.zip)' : format.toUpperCase(); }
 export function useCommunityEnabled() {
   const [enabled, setEnabled] = useState(false);
-  useEffect(() => { const controller = new AbortController(); void api<{ community?: { enabled: boolean } }>('/api/config', { signal: controller.signal }).then(data => setEnabled(data.community?.enabled === true)).catch(() => {}); return () => controller.abort(); }, []);
+  useEffect(() => {
+    // One failed configuration request must not hide an enabled feature for the rest of the session.
+    const controller = new AbortController(); let timer = 0; let attempts = 0;
+    const load = async () => {
+      try { const data = await api<{ community?: { enabled: boolean } }>('/api/config', { signal: controller.signal }); if (!controller.signal.aborted) setEnabled(data.community?.enabled === true); }
+      catch (error) { if (controller.signal.aborted || (error instanceof ApiError && error.status === 404)) return; if (attempts++ < 2) timer = window.setTimeout(() => void load(), 500 * attempts); }
+    };
+    void load(); return () => { controller.abort(); window.clearTimeout(timer); };
+  }, []);
   return enabled;
 }
 export function storedCommunityImport(accountId: string, operationId?: string) {

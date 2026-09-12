@@ -16,15 +16,42 @@ test('public HTML and agent references have real content, correct types, and pub
     expect(html, path).toMatch(/<h1\b/);
     expect(html.match(/rel="canonical"/g), path).toHaveLength(1);
     expect(html.match(/type="application\/ld\+json"/g), path).toHaveLength(1);
+    expect(html.match(/name="twitter:card"/g), path).toHaveLength(1);
+    expect(html, path).toContain('name="twitter:card" content="summary_large_image"');
+    expect(html, path).toContain('property="og:image:width" content="1200"');
+    expect(html, path).toContain('property="og:image:height" content="630"');
+    expect(html, path).toContain('href="/favicon.svg"');
+    expect(html, path).toContain('href="/apple-touch-icon.png"');
     expect(html, path).toContain('type="module"');
     expect(html, path).toContain('design-studio:appearance');
     const canonical = html.match(/rel="canonical" href="([^"]+)"/)?.[1];
     expect(new URL(canonical!).pathname, path).toBe(path);
+    const image = html.match(/property="og:image" content="([^"]+)"/)?.[1];
+    expect(image, path).toBe(new URL('/social-card.png', canonical).href);
+    const graph = JSON.parse(html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)![1])['@graph'];
+    expect(graph.some((node: any) => node['@type'] === 'WebSite'), path).toBe(true);
+    expect(graph.find((node: any) => node['@id'] === `${canonical}#page`)?.url, path).toBe(canonical);
     const title = html.match(/<title>([^<]+)<\/title>/)?.[1];
     expect(title, path).toBeTruthy();
+    expect(title, path).toMatch(/ · Design Studio AI$/);
     titles.add(title!);
   }
   expect(titles.size).toBe(publicPaths.length);
+  for (const [path, mime] of [['/favicon.svg', 'image/svg+xml'], ['/favicon.ico', 'image/x-icon'], ['/apple-touch-icon.png', 'image/png'], ['/social-card.png', 'image/png']]) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    expect(response.headers()['content-type'], path).toContain(mime);
+    if (path.endsWith('.png')) {
+      const bytes = await response.body();
+      expect(bytes.subarray(0, 8).toString('hex')).toBe('89504e470d0a1a0a');
+      expect([bytes.readUInt32BE(16), bytes.readUInt32BE(20)]).toEqual(path === '/social-card.png' ? [1200, 630] : [180, 180]);
+    }
+  }
+  for (const path of ['/templates', '/design-systems', '/activity']) {
+    const html = await (await request.get(path)).text();
+    expect(html).toContain('name="robots" content="noindex,follow"');
+    expect(html).not.toContain('application/ld+json');
+  }
   for (const path of markdownPaths) {
     const response = await request.get(path);
     expect(response.status(), path).toBe(200);
@@ -36,7 +63,12 @@ test('public HTML and agent references have real content, correct types, and pub
   expect(apiMarkdown).toContain('## GET /api/projects/:id/checks');
   expect(apiMarkdown).toContain('expectedRevision');
   const schema = await (await request.get('/api/schema')).json();
-  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions']);
+  expect(Object.keys(schema).sort()).toEqual(['clientEvent', 'community', 'designSystem', 'document', 'documentSave', 'documentWrite', 'exportInput', 'generationInput', 'interview', 'mediaInput', 'motionProposal', 'observabilityQuery', 'operationJob', 'operations', 'paintingCommand', 'providerId', 'providerInterview', 'providerSettings', 'providers', 'sceneCommands', 'scope', 'supportedDocumentVersions', 'visualInspection', 'workspaceInspection']);
+  expect(schema.visualInspection.properties.mode.enum).toEqual(['page', 'overview']);
+  expect(schema.visualInspection.properties.expectedRevision).toBeDefined();
+  expect(schema.workspaceInspection.properties.limit.maximum).toBe(12);
+  expect(apiMarkdown).toContain('## POST /api/projects/:id/inspect');
+  expect(apiMarkdown).toContain('## POST /api/projects/inspect');
   expect(schema.supportedDocumentVersions).toEqual([1, 2]);
   expect(schema.community['POST /api/community/listings'].required).toEqual(expect.arrayContaining(['digest','operationId','confirmPublic','acceptLicense','expectedProjectRevision']));
   expect(schema.paintingCommand.required).toEqual(expect.arrayContaining(['expectedRevision', 'expectedGeneration', 'operationId', 'paintingId', 'layerId', 'action']));
@@ -141,6 +173,33 @@ test('docs search, endpoint keyboard controls, copy, theme, and history work on 
   await expect(page).toHaveURL(/\/docs$/);
   await expect(page.getByRole('heading', { name: 'Quickstart', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
+});
+
+test('documentation contents keep their open state when navigating sections', async ({ page }) => {
+  const narrow = (page.viewportSize()?.width ?? 0) <= 760;
+  await page.goto('/docs');
+  const sidebar = page.locator('#docs-navigation');
+  const toggle = page.getByRole('button', { name: /documentation navigation/ });
+  if (narrow) { await expect(sidebar).toBeHidden(); await toggle.click(); }
+  await expect(sidebar).toBeVisible();
+  await page.keyboard.press('Escape');
+  if (narrow) {
+    await expect(sidebar).toBeHidden();
+    await toggle.click();
+  }
+  await expect(sidebar).toBeVisible();
+  await sidebar.getByRole('link', { name: '3D characters' }).click();
+  await expect(page).toHaveURL(/\/docs\/3d$/);
+  await expect(page.getByRole('heading', { name: '3D characters', exact: true })).toBeVisible();
+  if (!narrow) {
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar.getByRole('link', { name: '3D characters' })).toHaveAttribute('aria-current', 'page');
+    await page.getByRole('button', { name: 'Close documentation navigation' }).click();
+    await expect(sidebar).toBeHidden();
+    await page.locator('.docs-article-footer > div > a').last().click();
+    await expect(page).toHaveURL(/\/docs\/motion$/);
+  }
+  await expect(sidebar).toBeHidden();
 });
 
 test('guide starter briefs copy the selected content and preserve keyboard-accessible disclosure', async ({ page, context }) => {

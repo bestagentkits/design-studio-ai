@@ -4,6 +4,7 @@ import { communityProjection } from '../src/shared/community-projection';
 import { documentSchema, type DesignDocument } from '../src/shared/schema';
 import { ownedDocumentAssetIds } from '../src/shared/document-asset-references';
 import { normalizeCommunityText } from '../src/shared/community-search';
+import { frameExportBudget, frameExportBudgetMessage } from '../src/shared/frame-export-budget';
 import { communityProfile } from './community-profiles';
 import { communityJobReceipt, dispatchCommunityJob, serializeCommunityJob, type CommunityJobRow } from './community-jobs';
 import { ownedCommunityListing, type CommunityListingRow } from './community-access';
@@ -16,6 +17,10 @@ async function inspectPublication(env:Bindings,userId:string,input:unknown) {
  let projected:ReturnType<typeof communityProjection>;try{projected=communityProjection(documentSchema.parse(JSON.parse(row!.document)));}catch(error){fail(400,'unsafe_public_projection',error instanceof Error?error.message:'The public projection could not be validated.');}const document=projected!.document;
  if(!document.pages[value.cover.pageIndex])fail(400,'invalid_page','Select an existing cover page.');
  for(const options of value.formats){if(!document.pages[options.pageIndex])fail(400,'invalid_page','A selected export page does not exist.');if(options.format==='react'&&!['web','wireframe'].includes(document.kind))fail(400,'unsupported_export','React export requires a Website or Wireframe project.');}
+ for(const options of value.formats)if(options.format==='png-sequence'||options.format==='spritesheet'){
+  const frameInput={...document.pages[options.pageIndex],start:options.start,end:options.end??document.timeline?.duration??2,fps:options.fps,format:options.format};
+  if(!frameExportBudget(frameInput).withinLimits)fail(413,'render_budget_exceeded',frameExportBudgetMessage(frameInput));
+ }
  const assetSources:PublicationInput['assetSources']=[];
  for(const assetId of ownedDocumentAssetIds(document)){const asset=await env.DB.prepare('SELECT id,storage_key,mime_type,size FROM assets WHERE id=? AND user_id=? AND project_id=?').bind(assetId,userId,row!.id).first<{id:string;storage_key:string;mime_type:string;size:number}>();if(!asset)fail(400,'invalid_asset','Import all media into this project before publishing.');assetSources.push({id:asset!.id,storageKey:asset!.storage_key,mimeType:asset!.mime_type,size:asset!.size});}
  // Publication never retrieves arbitrary network URLs. Portable media must already be owned.

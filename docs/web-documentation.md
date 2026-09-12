@@ -32,6 +32,14 @@ Generated artifacts live in `dist`:
 
 The canonical build origin is `PUBLIC_SITE_URL`, then `APP_URL`, then `https://studio.agentkit.best`. Set it explicitly for a different public deployment. Docker Compose passes `APP_URL` as the build origin; direct Docker builds accept `--build-arg PUBLIC_SITE_URL=https://your-studio.example`. It accepts an HTTP(S) origin without embedded credentials. No arbitrary environment-file contents are copied to generated output. Real guide screenshots are maintained in `public/guide/assets` and copied into the build by Vite.
 
+### Favicons, social previews, and structured data
+
+[public-metadata.ts](../src/shared/public-metadata.ts) owns canonical, robots, Open Graph, Twitter large-image cards, and JSON-LD for generated pages and live Community HTML. Images and entity URLs use the configured origin. The homepage describes the `WebSite`, `WebPage`, and `SoftwareApplication`; documentation and guide articles include breadcrumbs. Public Community pages use collection, profile, or item page types and prefer a listing's public cover over the default brand card. Private, filtered, unavailable Community pages and the signed-in workspace destinations are `noindex` and omit structured data. Replacing shell metadata also removes old Twitter tags, preventing homepage previews from leaking into Community cards.
+
+[index.html](../index.html) owns SVG/ICO favicons and the Apple touch icon links. The editable [favicon](../public/favicon.svg) and [social card](../public/social-card.svg) are the sources for committed raster assets. After editing them, run `node scripts/build-brand-assets.mjs` with Playwright Chromium installed, inspect the resulting PNGs, then run `npm run build`. Regular builds copy the committed assets and do not require Chromium for this step. The shared card is a 1200×630 PNG; custom Community cover dimensions are not guessed.
+
+SEO and generative-search discovery share the real server-rendered content, canonical URLs, schema.org entities, sitemap, and existing Markdown/LLM references. There is no separate GEO schema or ranking guarantee; see [Google's AI search guidance](https://developers.google.com/search/docs/appearance/ai-features). Keep claims aligned with visible content and do not add fabricated ratings, offers, or identities.
+
 The HTTP adapter must serve directory indexes for `/docs`, each reference route, and `/guide`, rather than fall back to the homepage shell. It must serve Markdown/text/XML with their proper MIME types. Optional `Accept: text/markdown` negotiation is owned by the server, not this UI. The build process does not execute authenticated or paid API requests.
 
 ## Verification and boundaries

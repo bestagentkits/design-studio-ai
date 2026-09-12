@@ -6,6 +6,7 @@ import { communityEnabled, communityOperator, communityRateLimit, isCommunityOpe
 import { communityListing, listCommunity, ownedCommunityListings } from './community-queries';
 import { communityProfile, saveCommunityProfile } from './community-profiles';
 import { generateCommunityProfile } from './community-profile-generation';
+import { generateCommunityMetadata } from './community-metadata-generation';
 import { preflightCommunity, publishCommunity, unlistCommunity } from './community-publication';
 import { communityJobReceipt, dispatchCommunityJob, serializeCommunityJob } from './community-jobs';
 import { remixCommunity } from './community-remix';
@@ -28,6 +29,7 @@ communityRoutes.get('/collections/:id',async c=>{const collection=(await communi
 communityRoutes.get('/me/profile',async c=>c.json({profile:await communityProfile(c.env,owner(c)),moderator:await isCommunityOperator(c)}));
 communityRoutes.put('/me/profile',async c=>c.json({profile:await saveCommunityProfile(c.env,owner(c),await c.req.json())}));
 communityRoutes.post('/me/profile/generate',async c=>c.json(await generateCommunityProfile(c,await c.req.json())));
+communityRoutes.post('/metadata/generate',async c=>c.json(await generateCommunityMetadata(c,await c.req.json())));
 communityRoutes.get('/me/listings',async c=>c.json({listings:await ownedCommunityListings(c.env,owner(c))}));
 communityRoutes.get('/me/bookmarks',async c=>c.json({listings:await ownedCommunityListings(c.env,owner(c),true)}));
 communityRoutes.get('/me/impact',async c=>c.json({impact:await communityImpact(c.env,owner(c))}));

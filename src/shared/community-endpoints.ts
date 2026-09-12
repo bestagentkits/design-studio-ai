@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { communityProfileGenerationSchema } from './community';
+import { communityProfileGenerationSchema, communityMetadataGenerationSchema } from './community';
 import { communityPreflightSchema, communityPublishSchema, communityUnlistSchema, communityRemixSchema, communityProfileSchema, communityReportSchema, communityResolveSchema, communityCollectionSchema, communityQuerySchema } from './community';
 
 /** One operation inventory for REST discovery, MCP, WebMCP and the CLI. */
@@ -13,6 +13,7 @@ export const communityEndpoints = [
   { name:'preview', method:'GET', path:'/listings/{id}/versions/{version}/preview', summary:'Get sandboxed HTML preview of a retained live version', public:true, binary:true },
   { name:'download', method:'GET', path:'/listings/{id}/versions/{version}/files/{fileId}', summary:'Download real ready file bytes; first eligible download contributes to creator impact', public:true, binary:true },
   { name:'preflight', method:'POST', path:'/preflight', summary:'Review the public projection, disclosures, formats and digest before publishing', body:communityPreflightSchema },
+  { name:'generate-metadata', method:'POST', path:'/metadata/generate', summary:'Draft a listing title, description and tags using an owned saved project revision and configured text provider. Sends bounded visible text/structure plus entered fields/instructions, incurs provider usage, and never saves or publishes. Defaults to the first configured text connection. Review the suggestion and run preflight with the approved fields before publication.', body:communityMetadataGenerationSchema },
   { name:'publish', method:'POST', path:'/listings', summary:'Explicitly confirm CC-BY-4.0 and public disclosure to publish the reviewed revision; reuse exact operation ID and payload on retry', body:communityPublishSchema },
   { name:'release', method:'POST', path:'/listings/{id}/releases', summary:'Publish a new immutable release at the reviewed project and listing revisions', body:communityPublishSchema },
   { name:'unlist', method:'POST', path:'/listings/{id}/unlist', summary:'Revoke public access to all listing versions at the observed listing revision', body:communityUnlistSchema },

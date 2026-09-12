@@ -18,6 +18,31 @@ test('workspace deep links survive reload and browser history without creating d
   expect(after).toBe(before);
 });
 
+test('browser Back works as soon as the reloaded workspace navigation appears', async ({ page }) => {
+  const before = (await (await page.request.get('/api/projects')).json()).projects.length;
+  await page.addInitScript(() => {
+    if (location.pathname !== '/design-systems') return;
+    // A real history action at the first visible commit must not fall between
+    // the rendered navigation and registration of its history subscription.
+    const observer = new MutationObserver(() => {
+      if (!document.querySelector('nav[aria-label="Main navigation"] a[href="/design-systems"][aria-current="page"]')) return;
+      observer.disconnect();
+      history.back();
+    });
+    observer.observe(document, { childList: true, subtree: true });
+  });
+  await page.goto('/templates');
+  await expect(page.getByRole('heading', { name: 'Find your starting point' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Design systems', exact: true }).click();
+  await expect(page).toHaveURL(/\/design-systems$/);
+  await page.reload();
+  await expect(page).toHaveURL(/\/templates$/);
+  await expect(page.getByRole('heading', { name: 'Find your starting point' })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Main navigation' }).getByRole('link', { name: 'Templates', exact: true })).toHaveAttribute('aria-current', 'page');
+  const after = (await (await page.request.get('/api/projects')).json()).projects.length;
+  expect(after).toBe(before);
+});
+
 test('activity displays real actions, trace errors and unavailable measurements', async ({ page, baseURL }, testInfo) => {
   const created = await page.request.post('/api/projects', { headers: { Origin: baseURL! }, data: { name: `Activity ${randomUUID()}`, kind: 'web' } });
   expect(created.status()).toBe(201);
