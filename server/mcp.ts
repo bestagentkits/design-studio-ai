@@ -22,6 +22,7 @@ import { mergeRequestSchema } from '../src/shared/collaboration-contract';
 import { withSpan, telemetryEnv, type TelemetrySpan } from './observability';
 import { registerObservabilityTools } from './observability-tools';
 import { registerDesignSystemTools } from './design-system-tools';
+import { version as packageVersion } from '../package.json';
 import { compactToolInput, toolSchemaDocument, validateHeavyArguments, type CompactedTool } from './mcp-tool-schemas';
 import { completeModernResponse, dispatchMcpRequest, jsonRpcError, supportedProtocolVersions, type McpRequestInfo, type McpServerDescription } from './mcp-protocol';
 // Hosted connectors send their own Origin; these are accepted alongside the app and TRUSTED_ORIGINS.
@@ -29,7 +30,7 @@ import { completeModernResponse, dispatchMcpRequest, jsonRpcError, supportedProt
 const hostedConnectorOrigins = ['https://chatgpt.com', 'https://chat.openai.com'];
 const loggedMethods = new Set(['initialize', 'notifications/initialized', 'ping', 'server/discover', 'tools/list', 'tools/call', 'resources/list', 'resources/templates/list', 'resources/read', 'prompts/list', 'prompts/get', 'subscriptions/listen']);
 const serverDescription: McpServerDescription = {
-  serverInfo: { name: "design-studio-ai", version: "0.3.1" },
+  serverInfo: { name: "design-studio-ai", version: packageVersion },
   instructions:
     "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public. Large document arguments are summarized in tool discovery; call get_tool_schema for their complete JSON Schema.",
   capabilities: { tools: {}, resources: {} },
@@ -577,6 +578,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     if (dispatch.info.era === 'modern') response = await completeModernResponse(response, serverDescription);
   } catch (error) {
     response = jsonRpcError(500, dispatch.info.id, -32603, 'Internal error');
+    c.set('telemetryErrorCode', 'mcp_internal_error');
     console.warn('mcp_request_failed', { method: logMethod(dispatch.info.method), error: error instanceof Error ? error.name : 'unknown' });
   } finally {
     await server.close();

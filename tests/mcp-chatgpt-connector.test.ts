@@ -8,6 +8,9 @@ import { app } from '../server/index';
 import { FileBucket, SqliteDatabase } from '../server/node-adapters';
 import { hash, secret } from '../server/security';
 import { supportedProtocolVersions } from '../server/mcp-protocol';
+import { inputJsonSchema } from '../server/mcp-tool-schemas';
+import { documentSchema } from '../src/shared/schema';
+import { version as packageVersion } from '../package.json';
 import type { Bindings } from '../server/types';
 import { builtStaticAssets } from './built-static-assets';
 
@@ -19,7 +22,7 @@ const Ajv2020 = require('ajv/dist/2020').default as typeof Ajv;
 type Rpc = { jsonrpc: string; id?: string | number | null; result?: Record<string, any>; error?: { code: number; message: string; data?: any } };
 const modernMeta = { 'io.modelcontextprotocol/protocolVersion': '2026-07-28', 'io.modelcontextprotocol/clientInfo': { name: 'openai-mcp', version: '1.0.0' }, 'io.modelcontextprotocol/clientCapabilities': {} };
 const discoveryBudgetBytes = 256 * 1024;
-const schemaAnswerBudgetBytes = 32 * 1024;
+const schemaAnswerBudgetBytes = 24 * 1024;
 
 test('a hosted connector authorizes with OAuth, discovers the catalog and calls tools on both MCP eras', { timeout: 60000 }, async t => {
   const dir = await mkdtemp(join(tmpdir(), 'design-studio-mcp-connector-'));
@@ -85,7 +88,7 @@ test('a hosted connector authorizes with OAuth, discovers the catalog and calls 
       assert.equal(discovered.message.result!.resultType, 'complete');
       assert.deepEqual(discovered.message.result!.supportedVersions, supportedProtocolVersions);
       assert.deepEqual(discovered.message.result!.capabilities, { tools: {}, resources: {} });
-      assert.equal(discovered.message.result!._meta['io.modelcontextprotocol/serverInfo'].name, 'design-studio-ai');
+      assert.deepEqual(discovered.message.result!._meta['io.modelcontextprotocol/serverInfo'], { name: 'design-studio-ai', version: packageVersion });
 
       const listed = await modern(2, 'tools/list');
       assert.equal(listed.status, 200);
@@ -191,4 +194,9 @@ test('a hosted connector authorizes with OAuth, discovers the catalog and calls 
     db.close();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('schema conversions are reused across per-request optional wrappers', () => {
+  assert.equal(inputJsonSchema(documentSchema.optional()), inputJsonSchema(documentSchema.optional()));
+  assert.equal(inputJsonSchema(documentSchema.optional()), inputJsonSchema(documentSchema));
 });
