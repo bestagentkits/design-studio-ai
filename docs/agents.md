@@ -27,7 +27,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `brief get/put/interview/approve` | Persisted interactive questions, answers, scope and explicit version-bound approval |
 | `observability summary/events/trace` | Owner-scoped activity, provider usage, and correlated spans; global reads require configured operator authorization |
 | `projects check` | Read-only preflight hints with exact layer IDs; inspect the actual preview too |
-| `projects import/export`, `render` | Canonical JSON import; authenticated cloud export; offline JSON/HTML/SVG rendering |
+| `projects import/export`, `render` | Canonical JSON or YAML import; authenticated cloud export; offline JSON/HTML/SVG rendering |
 | `assets list/upload/download` | Authenticated asset storage; node placement is a separate document edit |
 | `generate` | Real provider document proposal; no implicit save |
 | `fonts --query`, `providers models PROVIDER --query` | Search catalog metadata with explicit live/cache/fallback provenance |
@@ -39,7 +39,7 @@ This reference follows the current [CLI source](../packages/cli/src/dsa.ts) and 
 | `google-slides` | Server export using a short-lived Google OAuth token |
 | `api METHOD /api/path` | Same-origin REST escape hatch; JSON input from file/stdin |
 
-All option details are available through command `--help`. Document and operation files accept `--file -` for stdin. The default output is JSON; document/export/template content is raw when sent to stdout. `--output` writes the artifact and returns JSON metadata. Errors are JSON on stderr. Exit codes are 0 success, 1 input/API/conflict, 2 auth, 3 network/invalid response, and 4 local runtime/file errors.
+All option details are available through command `--help`. Document and operation files accept `--file -` for stdin and may be JSON or YAML (see [YAML authoring](#yaml-authoring)). The default output is JSON; document/export/template content is raw when sent to stdout. `--output` writes the artifact and returns JSON metadata. Errors are JSON on stderr. Exit codes are 0 success, 1 input/API/conflict, 2 auth, 3 network/invalid response, and 4 local runtime/file errors.
 
 ## Activity, usage, and traces
 
@@ -64,6 +64,31 @@ Run `inspect_design` (CLI `projects check`) after saving: findings point to spec
 3. Apply a short operation array with `projects document patch PROJECT_ID --revision N --file edits.json`.
 4. If a conflict occurs, read the current project and reconcile the requested change. Do not blindly retry with a higher revision.
 5. Inspect output at the intended viewport, then export, preview, publish, or share within the user's requested scope. `preview` and `share` return a public immutable snapshot URL; `unpreview`, `unshare`, and `unpublish` all remove the project's public snapshots.
+
+## YAML authoring
+
+JSON remains the canonical contract: storage, REST, MCP responses, exports and revisions are unchanged. YAML is an optional input convenience that is parsed first and then validated by the identical `DesignDocument v1` and operation schemas, so a YAML input saves exactly what the equivalent JSON input saves.
+
+- **Network MCP:** `create_project` and `update_document` accept `documentYaml`; `patch_document` accepts `operationsYaml`. Each is a string alternative to the JSON field (`document`, `operations`); send one, never both. The `studio://schema` and `studio://operations` resources describe the schema both forms validate against. Invalid or unsafe YAML returns an `isError` result with an `invalid_input` message and never mutates the project; `expectedRevision`, ownership and asset checks apply unchanged.
+- **CLI:** `projects create/import`, `projects document put/patch` and offline `render` take `--input-format auto|json|yaml` (default `auto`). `auto` selects YAML for `.yaml`/`.yml` files and JSON for `.json`; for stdin or other names, text starting with `{` or `[` must be valid JSON (error `invalid_json`), and anything else is parsed as YAML. Use `--input-format yaml` for the exact parser error. Other commands that read files (`document merge`, `paint`, scene, brief and operation-job files) remain JSON-only. Errors use the codes `invalid_yaml`, `invalid_json` and `invalid_input_format`.
+- **Accepted subset:** one YAML 1.2 document using core-schema scalars. Tags (`!!js/...`), anchors/aliases (`&a`, `*a`), duplicate keys, `__proto__` keys and `.nan`/`.inf` are rejected. Merge keys are not expanded (a literal `<<` key fails schema validation), and keys that stringify identically (`1` and `"1"`) resolve last-wins, as in JSON. Input is limited to 1 MB, 64 flow-nesting levels and 128 columns of indentation, because YAML parsing costs far more memory and CPU than JSON; send larger documents as JSON. Quote strings that must not become numbers, booleans or comments: `"007"`, `"#ff0000"` (an unquoted `#ff0000` is a comment and becomes `null`). YAML 1.2 treats `yes`/`no` as strings. Missing fields are never invented. WebMCP is unchanged and still takes structured JSON.
+
+```yaml
+- op: update-node
+  nodeId: ACTUAL_NODE_ID
+  changes:
+    text: The next chapter
+    style:
+      fontSize: 64
+- op: apply-theme
+  themeId: atelier
+```
+
+```sh
+dsa projects document patch PROJECT_ID --revision OBSERVED_REVISION --file operations.yaml
+```
+
+Size is not a reason to choose YAML by itself. For the six bundled template documents (one per kind), default YAML serialization measured 25–34% larger in bytes than compact JSON and 25–30% smaller than 2-space-indented JSON. An o200k tokenizer proxy (not any Claude tokenizer) showed the same order: 19–25% more tokens than compact JSON and 18–23% fewer than indented JSON. Compare against the JSON your agent would actually emit. Reproduce the byte table with `YAML_AUTHORING_REPORT=1 npx tsx --test tests/yaml-authoring.test.ts`.
 
 `generate` follows the same rule: its response is a proposal that can be read by document PUT, and the original revision is required to save it. CLI renames also use revision-checked document writes. Clone is a distinct new project and copies referenced owned assets so source deletion does not break the clone.
 

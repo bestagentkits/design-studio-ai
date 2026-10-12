@@ -11,7 +11,7 @@ import { interviewSchema, answerSchema, scopeSchema } from '../../../src/shared/
 import { mergeRequestSchema } from '../../../src/shared/collaboration-contract';
 import { registerObservabilityCommands } from './observability-commands';
 import { registerDesignSystemCommands } from './design-system-commands';
-import { Client, CliError, inputJson, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
+import { Client, CliError, inputJson, inputStructured, inputText, nonnegativeNumber, output, outputFile, positiveInteger, secretInput } from './client';
 
 const program = new Command().name('dsa').description('Design Studio AI: structured design workflows for agents. JSON output by default.')
   .version('0.3.1').option('--url <origin>', 'Server origin; defaults to DESIGN_STUDIO_URL or https://studio.agentkit.best')
@@ -27,8 +27,8 @@ const part = (value: string) => encodeURIComponent(value);
 const projectPath = (id: string) => `/api/projects/${part(id)}`;
 const wrap = (handler: (...args: any[]) => Promise<unknown> | unknown) => async (...args: any[]) => { const value = await handler(...args); if (value !== undefined) output(value); };
 async function project(id: string): Promise<Project> { return (await client().json<{ project: Project }>(projectPath(id))).project; }
-async function documentInput(file: string): Promise<DesignDocument> {
-  const input = await inputJson(file) as any;
+async function documentInput(file: string, format?: string): Promise<DesignDocument> {
+  const input = await inputStructured(file, format) as any;
   return documentSchema.parse(input?.project?.document ?? input?.document ?? input);
 }
 function revision(value: string): number { return positiveInteger(value); }
@@ -89,10 +89,10 @@ projects.command('list').option('--query <text>', 'Search name/description').opt
 }));
 projects.command('get <id>').action(wrap(id => client().json(projectPath(id))));
 projects.command('check <id>').description('Read-only preflight with node IDs, severity and actionable design checks').action(wrap(id => client().json(`${projectPath(id)}/checks`)));
-projects.command('create').requiredOption('--name <name>', 'Project name').option('--description <text>', 'Project description', '').option('--kind <kind>', 'Document kind').option('--template <id>', 'Template ID').option('--theme <id>', 'Theme ID').option('--file <path>', 'Document JSON file or - for stdin').action(wrap(async options => {
+projects.command('create').requiredOption('--name <name>', 'Project name').option('--description <text>', 'Project description', '').option('--kind <kind>', 'Document kind').option('--template <id>', 'Template ID').option('--theme <id>', 'Theme ID').option('--file <path>', 'Document JSON/YAML file or - for stdin').option('--input-format <format>', 'Input parser: auto (by .json/.yaml/.yml extension; stdin tries JSON then YAML), json or yaml', 'auto').action(wrap(async options => {
   if (options.file && options.template) throw new CliError('conflicting_options', 'Choose either --file or --template.');
   const template = options.template ? selection(templates, options.template) : undefined;
-  const document = options.file ? await documentInput(options.file) : undefined;
+  const document = options.file ? await documentInput(options.file, options.inputFormat) : undefined;
   const kind = selectedKind(options.kind ?? document?.kind ?? template?.kind ?? 'web');
   if (document && document.kind !== kind || template && template.kind !== kind) throw new CliError('kind_mismatch', 'Requested kind must match the document or template.');
   if (options.theme) selection(themes, options.theme);
@@ -111,14 +111,14 @@ const documents = projects.command('document').description('Read and write the c
 documents.command('merge <id>').description('Merge edits against the actual base you read; overlapping changes return conflict').requiredOption('--file <path>', 'JSON {base,document,baseRevision}, or - for stdin').action(wrap(async (id, options) => client().json(`${projectPath(id)}/merge`, 'POST', mergeRequestSchema.parse(await inputJson(options.file)))));
 documents.command('changes <id>').option('--since <revision>', 'Last observed revision', '0').action(wrap((id, options) => client().json(`${projectPath(id)}/changes?since=${nonnegativeNumber(options.since)}`)));
 documents.command('get <id>').option('--output <file>', 'Save document JSON to a file').action(async (id, options) => { await outputFile(options.output, JSON.stringify((await project(id)).document, null, 2)); });
-documents.command('put <id>').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => save(id, await documentInput(options.file), revision(options.revision))));
-documents.command('patch <id>').description('Apply shared targeted operations; reuses atomic revision-checked save').requiredOption('--file <path>', 'Operations array JSON or - for stdin').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => {
-  const operations = operationsSchema.parse(await inputJson(options.file)); const expected = revision(options.revision);
+documents.command('put <id>').requiredOption('--file <path>', 'Document JSON/YAML or - for stdin').option('--input-format <format>', 'Input parser: auto (by .json/.yaml/.yml extension; stdin tries JSON then YAML), json or yaml', 'auto').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => save(id, await documentInput(options.file, options.inputFormat), revision(options.revision))));
+documents.command('patch <id>').description('Apply shared targeted operations; reuses atomic revision-checked save').requiredOption('--file <path>', 'Operations array JSON/YAML or - for stdin').option('--input-format <format>', 'Input parser: auto (by .json/.yaml/.yml extension; stdin tries JSON then YAML), json or yaml', 'auto').requiredOption('--revision <number>', 'Expected saved revision').action(wrap(async (id, options) => {
+  const operations = operationsSchema.parse(await inputStructured(options.file, options.inputFormat)); const expected = revision(options.revision);
   const current = await project(id); ensureRevision(current, expected);
   return save(id, mutateDocument(current.document, operations), expected);
 }));
-projects.command('import').description('Create a new project from canonical JSON').requiredOption('--file <path>', 'Document JSON or - for stdin').option('--name <name>', 'Override project name').action(wrap(async options => {
-  const document = await documentInput(options.file);
+projects.command('import').description('Create a new project from a canonical JSON or YAML document').requiredOption('--file <path>', 'Document JSON/YAML or - for stdin').option('--input-format <format>', 'Input parser: auto (by .json/.yaml/.yml extension; stdin tries JSON then YAML), json or yaml', 'auto').option('--name <name>', 'Override project name').action(wrap(async options => {
+  const document = await documentInput(options.file, options.inputFormat);
   return client().json('/api/projects', 'POST', { name: options.name ?? document.name, kind: document.kind, document });
 }));
 
@@ -133,9 +133,9 @@ projects.command('export <id>').description('Export through the authenticated se
   const content = binary ? new Uint8Array(await response.arrayBuffer()) : await response.text();
   await outputFile(destination, content, { format: options.format, mimeType: response.headers.get('Content-Type') });
 });
-program.command('render').description('Render a local JSON document offline using shared static HTML/SVG rendering').requiredOption('--file <path>', 'Document JSON or - for stdin').requiredOption('--format <format>', 'json, html, or svg').option('--output <file>', 'Output filename; omitted writes content to stdout').option('--page <index>', 'Zero-based SVG page', '0').option('--time <seconds>', 'SVG timeline position', '0').action(async options => {
+program.command('render').description('Render a local JSON/YAML document offline using shared static HTML/SVG rendering').requiredOption('--file <path>', 'Document JSON/YAML or - for stdin').option('--input-format <format>', 'Input parser: auto (by .json/.yaml/.yml extension; stdin tries JSON then YAML), json or yaml', 'auto').requiredOption('--format <format>', 'json, html, or svg (output format)').option('--output <file>', 'Output filename; omitted writes content to stdout').option('--page <index>', 'Zero-based SVG page', '0').option('--time <seconds>', 'SVG timeline position', '0').action(async options => {
   if (!['json', 'html', 'svg'].includes(options.format)) throw new CliError('unsupported_format', 'Offline rendering supports json, html, or svg. Use projects export for cloud-rendered binary formats.');
-  const document = await documentInput(options.file); const page = nonnegativeNumber(options.page);
+  const document = await documentInput(options.file, options.inputFormat); const page = nonnegativeNumber(options.page);
   if (!Number.isInteger(page)) throw new CliError('invalid_page', 'Page must be a zero-based integer.');
   const content = options.format === 'json' ? JSON.stringify(document, null, 2) : options.format === 'html' ? renderHtml(document) : renderSvg(document, page, nonnegativeNumber(options.time));
   await outputFile(options.output, content, { format: options.format });
