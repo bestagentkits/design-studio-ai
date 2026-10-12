@@ -30,7 +30,7 @@ export async function inputJson(path: string): Promise<unknown> {
 }
 export const inputFormats = ['auto', 'json', 'yaml'] as const;
 export type CliInputFormat = typeof inputFormats[number];
-/** Read structured input: `auto` uses .yaml/.yml/.json extensions and, for stdin or other names, JSON first then YAML. */
+/** Read structured input: `auto` uses .yaml/.yml/.json extensions; for stdin or other names, text starting with { or [ must be valid JSON, anything else is tried as YAML. */
 export async function inputStructured(path: string, format: string = 'auto'): Promise<unknown> {
   if (!(inputFormats as readonly string[]).includes(format)) throw new CliError('invalid_input_format', `Input format must be one of: ${inputFormats.join(', ')}.`);
   const text = await inputText(path);
@@ -41,8 +41,8 @@ export async function inputStructured(path: string, format: string = 'auto'): Pr
   try { return JSON.parse(text); }
   catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
-    if (selected === 'json') throw new CliError('invalid_json', 'Input is not valid JSON.');
-    try { return yaml(); } catch { throw new CliError('invalid_input', 'Input is neither valid JSON nor valid YAML. Use --input-format json|yaml for the exact parser error.'); }
+    if (selected === 'json' || /^\uFEFF?\s*[[{]/.test(text)) throw new CliError('invalid_json', 'Input is not valid JSON.');
+    try { return yaml(); } catch { throw new CliError('invalid_yaml', 'Input is neither valid JSON nor valid YAML. Use --input-format json|yaml for the exact parser error.'); }
   }
 }
 export function output(value: unknown): void { process.stdout.write(JSON.stringify(value, null, 2) + '\n'); }

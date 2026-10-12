@@ -1,21 +1,38 @@
-import { isAlias, isNode, isScalar, parseAllDocuments, visit } from 'yaml';
+import { Lexer, isAlias, isNode, isScalar, parseAllDocuments, visit } from 'yaml';
 
-export const yamlInputMaxBytes = 21 * 1024 * 1024;
-export type InputFormat = 'json' | 'yaml';
+/** YAML composes recursively and costs ~100x the memory of JSON, so it gets a much smaller budget than JSON. */
+export const yamlInputMaxBytes = 1024 * 1024;
+const maxFlowDepth = 64, maxIndent = 128, maxCompactIndicators = 64;
 
 export class YamlInputError extends Error {
   readonly code = 'invalid_yaml';
   constructor(message: string) { super(message); this.name = 'YamlInputError'; }
 }
 
+/** Reject pathological nesting with an iterative scan before the recursive composer runs. */
+function assertShallow(text: string): void {
+  let depth = 0;
+  for (const token of new Lexer().lex(text)) {
+    if (token === '[' || token === '{') { if (++depth > maxFlowDepth) throw new YamlInputError(`YAML nesting exceeds ${maxFlowDepth} levels.`); }
+    else if (token === ']' || token === '}') depth = Math.max(0, depth - 1);
+  }
+  for (const line of text.split('\n')) {
+    const lead = /^[ \t]*/.exec(line)![0].length;
+    if (lead > maxIndent) throw new YamlInputError(`YAML indentation exceeds ${maxIndent} columns.`);
+    if ((line.slice(lead).match(/^(?:[-?:](?:\s+|$))+/)?.[0].match(/[-?:]/g)?.length ?? 0) > maxCompactIndicators) throw new YamlInputError(`YAML nesting exceeds ${maxCompactIndicators} levels.`);
+  }
+}
+
 /**
  * Parse authoring YAML into plain JSON-compatible data. This is only an input convenience: callers must
  * validate the result with the same schemas as JSON input, and storage/responses remain JSON.
  * Accepted subset: one YAML 1.2 document, core-schema scalars, no tags, no anchors/aliases/merge keys,
- * no duplicate keys and no prototype-polluting keys.
+ * no `__proto__` keys, bounded size and nesting. Merge keys are not expanded (a literal `<<` key is left for
+ * schema validation to reject) and keys that stringify identically (`1` and `"1"`) resolve last-wins like JSON.
  */
 export function parseYamlInput(text: string): unknown {
-  if (new TextEncoder().encode(text).length > yamlInputMaxBytes) throw new YamlInputError('YAML input exceeds 21 MB.');
+  if (new TextEncoder().encode(text).length > yamlInputMaxBytes) throw new YamlInputError('YAML input exceeds 1 MB; send large documents as JSON.');
+  assertShallow(text);
   const documents = parseAllDocuments(text, { version: '1.2', schema: 'core', uniqueKeys: true, merge: false, prettyErrors: true, strict: true });
   const parsed = Array.isArray(documents) ? documents : [documents];
   if (!parsed.length) throw new YamlInputError('YAML input is empty.');
@@ -33,7 +50,7 @@ export function parseYamlInput(text: string): unknown {
     },
     Pair: (_key, pair) => {
       const key = isScalar(pair.key) ? String(pair.key.value) : undefined;
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') { unsafe = `YAML key "${key}" is not allowed.`; return visit.BREAK; }
+      if (key === '__proto__') { unsafe = `YAML key "${key}" is not allowed.`; return visit.BREAK; }
     },
   });
   if (unsafe) throw new YamlInputError(unsafe);
@@ -42,7 +59,3 @@ export function parseYamlInput(text: string): unknown {
   return JSON.parse(JSON.stringify(value));
 }
 
-/** Format-aware parse used by the CLI: JSON stays strict JSON, YAML goes through the safe subset. */
-export function parseStructuredInput(text: string, format: InputFormat): unknown {
-  return format === 'yaml' ? parseYamlInput(text) : JSON.parse(text);
-}

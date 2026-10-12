@@ -62,7 +62,7 @@ Prefer a small operation array for requested edits over replacing the entire des
 dsa projects document patch PROJECT_ID --revision OBSERVED_REVISION --file operations.json
 ```
 
-YAML is accepted wherever a document or operation file is: use `operations.yaml` (CLI `--input-format auto|json|yaml`) or the MCP `documentYaml`/`operationsYaml` string fields instead of `document`/`operations`. One YAML 1.2 document only: no tags, anchors or aliases; quote strings that look like numbers. It validates against the same schema and saves the same JSON; it is not guaranteed smaller than compact JSON.
+YAML is accepted wherever a document or operation file is: use `operations.yaml` (CLI `--input-format auto|json|yaml`) or the MCP `documentYaml`/`operationsYaml` string fields instead of `document`/`operations`. One YAML 1.2 document only: no tags, anchors or aliases; quote strings that look like numbers or colours (`"#ff0000"`); input is capped at 1 MB. It validates against the same schema and saves the same JSON; it is not guaranteed smaller than compact JSON.
 
 `update-node` merges style properties. Supported operations also add/remove nodes/pages, insert catalog blocks, rename a document, set a full theme, and set timeline data. Removing a parent removes descendants; removal also cleans affected timeline tracks. The operation schema is the authority for payload shapes.
 

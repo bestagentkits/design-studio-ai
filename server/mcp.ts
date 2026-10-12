@@ -12,7 +12,7 @@ import type { Env } from "./types";
 import { documentSchema, kinds } from "../src/shared/schema";
 import { themes, templates, blocks } from "../src/shared/catalog";
 import { mutateDocument, operationsSchema } from "../src/shared/operations";
-import { parseYamlInput } from '../src/shared/yaml-input';
+import { parseYamlInput, yamlInputMaxBytes } from '../src/shared/yaml-input';
 import { renderHtml, renderSvg } from "../src/shared/render";
 import { fail, origin, owner, unb64 } from "./security";
 import { projectRow, saveDocument, storeAsset } from "./projects";
@@ -102,7 +102,7 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
   };
   registerConnectorAgentTools(server, callApi);
   // YAML is only an authoring convenience: it is parsed to plain data and then validated by the same JSON schemas.
-  const yamlField = (field: string) => z.string().max(21 * 1024 * 1024).optional().describe(`Alternative to ${field}: the same ${field} authored as one YAML 1.2 document (no tags, anchors or aliases). Parsed then validated by the identical JSON schema (see studio://schema and studio://operations); responses and storage stay JSON. Send ${field} or ${field}Yaml, not both.`);
+  const yamlField = (field: string) => z.string().max(yamlInputMaxBytes).optional().describe(`Alternative to ${field}: the same ${field} authored as one YAML 1.2 document (no tags, anchors or aliases). Parsed then validated by the identical JSON schema (see studio://schema and studio://operations); responses and storage stay JSON. Send ${field} or ${field}Yaml, not both.`);
   const authored = <T extends z.ZodType>(schema: T, field: string, json: unknown, yaml: string | undefined): { value?: z.output<T>; error?: ReturnType<typeof result> & { isError: true } } => {
     const fail = (message: string) => ({ error: { isError: true as const, ...result({ error: { code: 'invalid_input', message } }) } });
     if (yaml === undefined) return json === undefined ? { value: undefined } : { value: json as z.output<T> };

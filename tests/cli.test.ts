@@ -213,6 +213,8 @@ test('CLI reads YAML documents and operations for create, import, put, patch and
   const malformed = join(directory, 'malformed.yaml'); await writeFile(malformed, 'name: [');
   const rejectedCreate = await run(['projects', 'create', '--name', 'Never created', '--file', malformed]);
   assert.equal(rejectedCreate.code, 1); assert.equal(JSON.parse(rejectedCreate.stderr).error.code, 'invalid_yaml');
+  const badJson = await run(['projects', 'document', 'patch', created.id, '--revision', '4', '--file', '-'], { input: '{bad' });
+  assert.equal(JSON.parse(badJson.stderr).error.code, 'invalid_json', 'JSON-looking stdin keeps the JSON error code');
   const badFormat = await run(['projects', 'import', '--file', documentFile, '--input-format', 'toml']);
   assert.equal(JSON.parse(badFormat.stderr).error.code, 'invalid_input_format');
   const after = (await json(['projects', 'get', created.id])).project; assert.equal(after.revision, 4, 'rejected YAML never mutates the project');

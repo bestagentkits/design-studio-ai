@@ -11,7 +11,7 @@ import { secret } from '../server/security';
 import { createDocument, templates } from '../src/shared/catalog';
 import { documentSchema, kinds, type Project } from '../src/shared/schema';
 import { operationsSchema } from '../src/shared/operations';
-import { parseYamlInput, parseStructuredInput } from '../src/shared/yaml-input';
+import { parseYamlInput } from '../src/shared/yaml-input';
 import type { Bindings } from '../server/types';
 
 const authored = (value: unknown) => stringify(value, { lineWidth: 0 });
@@ -20,7 +20,7 @@ test('YAML input becomes the same plain data as JSON and rejects unsafe or ambig
   const document = createDocument('web', 'Equivalence');
   assert.deepEqual(parseYamlInput(authored(document)), JSON.parse(JSON.stringify(document)));
   assert.deepEqual(documentSchema.parse(parseYamlInput(authored(document))), JSON.parse(JSON.stringify(documentSchema.parse(document))));
-  assert.deepEqual(parseStructuredInput('{"a":[1,2]}', 'json'), parseYamlInput('{"a":[1,2]}'), 'JSON text is also valid YAML flow syntax');
+  assert.deepEqual(JSON.parse('{"a":[1,2]}'), parseYamlInput('{"a":[1,2]}'), 'JSON text is also valid YAML flow syntax');
   assert.deepEqual(parseYamlInput('name: "007"\nflag: yes'), { name: '007', flag: 'yes' }, 'YAML 1.2 core schema: yes is a string, quoted numbers stay strings');
   const rejected: Record<string, RegExp> = {
     'a: [': /Invalid YAML/,
@@ -34,11 +34,14 @@ test('YAML input becomes the same plain data as JSON and rejects unsafe or ambig
     'a: !!binary aGk=': /tags/,
     'a: .nan': /\.nan/,
     '__proto__: {polluted: true}': /not allowed/,
-    'constructor: 1': /not allowed/,
+    ['['.repeat(200000) + ']'.repeat(200000)]: /nesting/,
+    ['- '.repeat(100) + 'x']: /nesting/,
+    [' '.repeat(200) + 'a: 1']: /indentation/,
   };
   for (const [input, message] of Object.entries(rejected)) assert.throws(() => parseYamlInput(input), message, JSON.stringify(input));
   assert.equal(({} as { polluted?: boolean }).polluted, undefined);
-  assert.throws(() => parseYamlInput('a: ' + 'x'.repeat(21 * 1024 * 1024)), /21 MB/);
+  assert.throws(() => parseYamlInput('a: ' + 'x'.repeat(1024 * 1024)), /1 MB/);
+  assert.deepEqual(parseYamlInput('constructor: 1\nprototype: 2'), { constructor: 1, prototype: 2 });
 });
 
 test('MCP accepts YAML documents and operations with the same results, errors and protections as JSON', { timeout: 60000 }, async () => {
