@@ -46,6 +46,12 @@ The [CI workflow](.github/workflows/ci.yml) owns the full release gates. Fix obs
 - Edit renderer/viewer sources and public-doc components, then rebuild. Do not hand-edit `dist/`, `public/studio-renderer.js`, or `public/studio-viewer.js`; [build scripts](package.json) own those outputs.
 - Run `npm pack` from `packages/cli` when packaging the CLI. Do not rely on `npm pack --prefix packages/cli`; that invocation packaged the repository root in this environment.
 
+## Coordinate issue work
+
+- Before starting an issue, check its labels, assignees and linked pull requests; do not start work another contributor or agent has labelled `in progress`.
+- Assign the issue and move it through one status label at a time: `in progress` while implementing, `blocked` with a comment naming the blocker, `in review` during isolated review, `done` once the pull request is open, and `shipped` after it merges. Close the issue only after the merge is verified.
+- When you find an unrelated defect, open a separate issue instead of widening the change. Comment on a related or duplicate issue with a link to the issue being worked rather than duplicating its work.
+
 ## Finish without creating documentation drift
 
 - Update the smallest owning document when behavior, setup, security or a public contract changes. Link to executable owners rather than copying schemas, command inventories, or test counts into more files.
