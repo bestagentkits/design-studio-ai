@@ -81,7 +81,7 @@ Inspect the proposal before the second command. Preserve useful work unless the 
 
 ## Reuse libraries and discover resources
 
-Inspect `design-systems list`, the selected library, and `design-systems schema` before applying or inserting reusable tokens, components, or page compositions. Read the immutable library version and target project revision; use those observed values for updates and project writes. Reconcile a stale library or project instead of substituting newer version numbers. Capture only portable media in a library; private project asset references cannot be reused across projects. Discover equivalent network tools through `tools/list`.
+Inspect `design-systems list`, the selected library, and `design-systems schema` before applying or inserting reusable tokens, components, or page compositions. Read the immutable library version and target project revision; use those observed values for updates and project writes. Reconcile a stale library or project instead of substituting newer version numbers. Capture only portable media in a library; private project asset references cannot be reused across projects. Discover equivalent network tools through `tools/list`; call `get_tool_schema` for arguments that discovery summarizes, such as documents and operation lists.
 
 Use `fonts --query` and `providers models PROVIDER --query` to discover names and model IDs. Respect live/cache/fallback provenance: a suggestion does not prove model capability, credentials, quota, or successful generation. Model discovery needs account/API-key access rather than MCP OAuth. Choose actual schema-defined layout, component, mesh and timeline fields; do not invent a second design format.
 

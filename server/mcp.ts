@@ -22,8 +22,23 @@ import { mergeRequestSchema } from '../src/shared/collaboration-contract';
 import { withSpan, telemetryEnv, type TelemetrySpan } from './observability';
 import { registerObservabilityTools } from './observability-tools';
 import { registerDesignSystemTools } from './design-system-tools';
+import { compactToolInput, toolSchemaDocument, validateHeavyArguments, type CompactedTool } from './mcp-tool-schemas';
+import { completeModernResponse, dispatchMcpRequest, jsonRpcError, supportedProtocolVersions, type McpRequestInfo, type McpServerDescription } from './mcp-protocol';
+// Hosted connectors send their own Origin; these are accepted alongside the app and TRUSTED_ORIGINS.
+// Bearer credentials, not cookies, authorize MCP, so a browser origin cannot borrow a signed-in session.
+const hostedConnectorOrigins = ['https://chatgpt.com', 'https://chat.openai.com'];
+const loggedMethods = new Set(['initialize', 'notifications/initialized', 'ping', 'server/discover', 'tools/list', 'tools/call', 'resources/list', 'resources/templates/list', 'resources/read', 'prompts/list', 'prompts/get', 'subscriptions/listen']);
+const serverDescription: McpServerDescription = {
+  serverInfo: { name: "design-studio-ai", version: "0.3.1" },
+  instructions:
+    "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public. Large document arguments are summarized in tool discovery; call get_tool_schema for their complete JSON Schema.",
+  capabilities: { tools: {}, resources: {} },
+};
 export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
-  if (c.req.header("Origin") && c.req.header("Origin") !== origin(c))
+  const started = Date.now();
+  const requestOrigin = c.req.header("Origin");
+  const trustedOrigins = [origin(c), ...hostedConnectorOrigins, ...(c.env.TRUSTED_ORIGINS ?? "").split(",").filter(Boolean)];
+  if (requestOrigin && !trustedOrigins.includes(requestOrigin))
     fail(403, "invalid_origin", "MCP origin is not allowed.");
   if (!c.get("user") || c.get("authMethod") !== "token") {
     c.header(
@@ -50,32 +65,23 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       },
       405,
     );
-  const protocol = c.req.header("MCP-Protocol-Version");
-  if (
-    protocol &&
-    !["2025-11-25", "2025-06-18", "2025-03-26"].includes(protocol)
-  )
-    fail(
-      400,
-      "unsupported_protocol",
-      "Supported MCP protocol: 2025-11-25 and SDK legacy compatibility.",
-    );
-  const server = new McpServer(
-    { name: "design-studio-ai", version: "0.3.1" },
-    {
-      instructions:
-        "An agent-first design workspace. All tools act as the authenticated owner. Get the current project revision before changing a document. AI generation produces a draft which must be saved explicitly. Publishing makes an immutable snapshot public.",
-    },
-  );
+  const dispatch = await dispatchMcpRequest(c.req.raw, serverDescription);
+  if ('response' in dispatch) return finishMcpRequest(c, dispatch.info, dispatch.response, started);
+  const server = new McpServer(serverDescription.serverInfo, { instructions: serverDescription.instructions });
   // All tool outcomes share the request trace, including direct service operations.
   const toolSpan = new AsyncLocalStorage<TelemetrySpan>();
   const register = server.registerTool.bind(server);
-  server.registerTool = ((name: string, config: unknown, handler: (...args: any[]) => any) =>
-    register(name, config as any, async (...args: any[]) => withSpan(c, { kind: 'mcp', action: name }, async span => toolSpan.run(span, async () => {
-        const response = await handler(...args);
+  const toolInputs = new Map<string, CompactedTool>();
+  server.registerTool = ((name: string, config: { inputSchema?: unknown }, handler: (...args: any[]) => any) => {
+    const compacted = compactToolInput(name, config.inputSchema);
+    if (compacted) toolInputs.set(name, compacted);
+    return register(name, (compacted ? { ...config, inputSchema: compacted.advertised } : config) as any, async (...args: any[]) => withSpan(c, { kind: 'mcp', action: name }, async span => toolSpan.run(span, async () => {
+        const checked = compacted?.heavy.length ? validateHeavyArguments(name, compacted, args[0] ?? {}) : undefined;
+        const response = checked && 'error' in checked ? checked.error : await handler(...(checked ? [checked.args, ...args.slice(1)] : args));
         if (response?.isError) span.set({ status: 'error', errorCode: 'mcp_tool_error' });
         return response;
-    })))) as typeof server.registerTool;
+    })));
+  }) as typeof server.registerTool;
   const result = (value: unknown) => ({
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
   });
@@ -544,14 +550,46 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       };
     },
   );
+  server.registerTool(
+    "get_tool_schema",
+    {
+      description: "Read the complete input JSON Schema of a tool, or of one argument. Use it for arguments that discovery summarizes, such as documents and operation lists.",
+      inputSchema: {
+        tool: z.string().min(1).max(100),
+        property: z.string().min(1).max(100).optional(),
+        pointer: z.string().max(500).optional().describe('JSON Pointer inside the returned schema, from a $pointer in an outlined answer.'),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async ({ tool, property, pointer }) => {
+      const document = toolSchemaDocument(toolInputs, tool, property, pointer);
+      return 'error' in document ? { isError: true, ...result(document) } : result(document);
+    },
+  );
+  let response: Response;
   const transport = new WebStandardStreamableHTTPServerTransport({
     sessionIdGenerator: undefined,
     enableJsonResponse: true,
   });
   await server.connect(transport);
   try {
-    return await transport.handleRequest(c.req.raw);
+    response = await transport.handleRequest(dispatch.forward);
+    if (dispatch.info.era === 'modern') response = await completeModernResponse(response, serverDescription);
+  } catch (error) {
+    response = jsonRpcError(500, dispatch.info.id, -32603, 'Internal error');
+    console.warn('mcp_request_failed', { method: logMethod(dispatch.info.method), error: error instanceof Error ? error.name : 'unknown' });
   } finally {
     await server.close();
   }
+  return finishMcpRequest(c, dispatch.info, response, started);
+}
+
+const logMethod = (method: string | null) => method === null || loggedMethods.has(method) ? method : 'other';
+async function finishMcpRequest(c: Context<Env>, info: McpRequestInfo, response: Response, started: number) {
+  const bytes = Number(response.headers.get('Content-Length')) || (response.body ? (await response.clone().arrayBuffer()).byteLength : 0);
+  c.get('telemetrySpan')?.set({ outputBytes: bytes });
+  // Diagnostic metadata only: never credentials, arguments or results. Client strings are bounded.
+  const protocolVersion = info.protocolVersion === null || supportedProtocolVersions.includes(info.protocolVersion) ? info.protocolVersion : 'unsupported';
+  console.info('mcp_request', JSON.stringify({ requestId: c.get('telemetrySpan')?.event.traceId ?? null, method: logMethod(info.method), era: info.era, protocolVersion, status: response.status, durationMs: Date.now() - started, responseBytes: bytes }));
+  return response;
 }
