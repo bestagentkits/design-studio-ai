@@ -34,8 +34,11 @@ dsa templates list
 dsa projects create --name "Product story" --template product-deck
 dsa projects get PROJECT_ID
 dsa projects document patch PROJECT_ID --revision 1 --file operations.json
+dsa projects document patch PROJECT_ID --revision 2 --file operations.yaml
 dsa projects export PROJECT_ID --format html --output story.html
 ```
+
+Document and operation files may be JSON or YAML: `--input-format auto` (default) reads `.yaml`/`.yml` as YAML and `.json` as JSON, and tries JSON then YAML for stdin; pass `--input-format yaml|json` to force a parser. YAML is parsed into the same validated `DesignDocument`/operations (one document, no tags, anchors or aliases); storage and output stay JSON.
 
 Replace the example token using your shell's secret injection mechanism. `--api-key` and `--url` also work on each invocation; environment variables avoid placing secrets in command history. Provider configuration reads `${PROVIDER}_API_KEY`, a named `--key-env`, or `--key-stdin`. Google Slides reads `GOOGLE_ACCESS_TOKEN` or the same secret options. Local development permits HTTP only on loopback hosts.
 

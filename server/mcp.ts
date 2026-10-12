@@ -12,6 +12,7 @@ import type { Env } from "./types";
 import { documentSchema, kinds } from "../src/shared/schema";
 import { themes, templates, blocks } from "../src/shared/catalog";
 import { mutateDocument, operationsSchema } from "../src/shared/operations";
+import { parseYamlInput } from '../src/shared/yaml-input';
 import { renderHtml, renderSvg } from "../src/shared/render";
 import { fail, origin, owner, unb64 } from "./security";
 import { projectRow, saveDocument, storeAsset } from "./projects";
@@ -100,6 +101,17 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     return result(value);
   };
   registerConnectorAgentTools(server, callApi);
+  // YAML is only an authoring convenience: it is parsed to plain data and then validated by the same JSON schemas.
+  const yamlField = (field: string) => z.string().max(21 * 1024 * 1024).optional().describe(`Alternative to ${field}: the same ${field} authored as one YAML 1.2 document (no tags, anchors or aliases). Parsed then validated by the identical JSON schema (see studio://schema and studio://operations); responses and storage stay JSON. Send ${field} or ${field}Yaml, not both.`);
+  const authored = <T extends z.ZodType>(schema: T, field: string, json: unknown, yaml: string | undefined): { value?: z.output<T>; error?: ReturnType<typeof result> & { isError: true } } => {
+    const fail = (message: string) => ({ error: { isError: true as const, ...result({ error: { code: 'invalid_input', message } }) } });
+    if (yaml === undefined) return json === undefined ? { value: undefined } : { value: json as z.output<T> };
+    if (json !== undefined) return fail(`Send either ${field} (JSON) or ${field}Yaml, not both.`);
+    try {
+      const parsed = schema.safeParse(parseYamlInput(yaml));
+      return parsed.success ? { value: parsed.data } : fail(`${field}Yaml does not match the ${field} schema: ${parsed.error.issues.slice(0, 8).map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    } catch (error) { return fail(error instanceof Error ? error.message : `${field}Yaml could not be parsed.`); }
+  };
   registerDesignSystemTools(server, callApi);
   registerObservabilityTools(server, callApi);
   server.registerTool(
@@ -167,48 +179,63 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
     "create_project",
     {
       description:
-        "Create a persisted project with an optional complete DesignDocument.",
+        "Create a persisted project with an optional complete DesignDocument, sent as document (JSON) or documentYaml (YAML string, same schema).",
       inputSchema: {
         name: z.string(),
         kind: z.enum(kinds).default("web"),
         description: z.string().optional(),
         document: documentSchema.optional(),
+        documentYaml: yamlField('document'),
         themeId: z.string().optional(),
         templateId: z.string().optional(),
       },
     },
-    async (body) => callApi("POST", "/api/projects", body),
+    async ({ documentYaml, ...body }) => {
+      const input = authored(documentSchema, 'document', body.document, documentYaml);
+      if (input.error) return input.error;
+      return callApi("POST", "/api/projects", { ...body, document: input.value });
+    },
   );
   server.registerTool(
     "update_document",
     {
       description:
-        "Persist a complete validated document. expectedRevision is required; stale revisions fail with conflict.",
+        "Persist a complete validated document. expectedRevision is required; stale revisions fail with conflict. Send document (JSON) or documentYaml (YAML string, same schema).",
       inputSchema: {
         projectId: z.string(),
-        document: documentSchema,
+        document: documentSchema.optional(),
+        documentYaml: yamlField('document'),
         expectedRevision: z.number().int().positive(),
       },
     },
-    async ({ projectId, ...body }) =>
-      callApi(
+    async ({ projectId, documentYaml, ...body }) => {
+      const input = authored(documentSchema, 'document', body.document, documentYaml);
+      if (input.error) return input.error;
+      if (input.value === undefined) return { isError: true, ...result({ error: { code: 'invalid_input', message: 'Send document (JSON) or documentYaml.' } }) };
+      return callApi(
         "PUT",
         `/api/projects/${encodeURIComponent(projectId)}/document`,
-        body,
-      ),
+        { ...body, document: input.value },
+      );
+    },
   );
   server.registerTool(
     "patch_document",
     {
       description:
-        "Apply shared document operations atomically. Inspect schema resource for operation contracts. Requires expectedRevision.",
+        "Apply shared document operations atomically. Inspect schema resource for operation contracts. Requires expectedRevision. Send operations (JSON) or operationsYaml (YAML string, same schema).",
       inputSchema: {
         projectId: z.string(),
-        operations: operationsSchema,
+        operations: operationsSchema.optional(),
+        operationsYaml: yamlField('operations'),
         expectedRevision: z.number().int().positive(),
       },
     },
-    async ({ projectId, operations, expectedRevision }) => {
+    async ({ projectId, operations: jsonOperations, operationsYaml, expectedRevision }) => {
+      const input = authored(operationsSchema, 'operations', jsonOperations, operationsYaml);
+      if (input.error) return input.error;
+      const operations = input.value;
+      if (operations === undefined) return { isError: true, ...result({ error: { code: 'invalid_input', message: 'Send operations (JSON) or operationsYaml.' } }) };
       try {
         const row = await projectRow(c, projectId);
         const doc = mutateDocument(
@@ -487,13 +514,13 @@ export async function handleMcp(c: Context<Env>, app: Hono<Env>) {
       ),
   );
   server.registerResource(
-    'operation-schema', 'studio://operations', { description: 'Atomic design operation JSON schema' },
+    'operation-schema', 'studio://operations', { description: 'Atomic design operation JSON schema. Send as operations, or as the same array authored in YAML via operationsYaml; both validate against this schema.' },
     async uri => ({ contents: [{ uri: uri.href, mimeType: 'application/json', text: JSON.stringify(z.toJSONSchema(operationsSchema)) }] })
   );
   server.registerResource(
     "document-schema",
     "studio://schema",
-    { description: "DesignDocument v1 JSON schema" },
+    { description: "DesignDocument v1 JSON schema. Send as document, or the same structure authored in YAML via documentYaml; both validate against this schema." },
     async (uri) => ({
       contents: [
         {

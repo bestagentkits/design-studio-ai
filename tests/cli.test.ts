@@ -11,6 +11,8 @@ import { FileBucket, SqliteDatabase } from '../server/node-adapters';
 import { secret } from '../server/security';
 import type { Bindings } from '../server/types';
 import { documentSchema } from '../src/shared/schema';
+import { createDocument } from '../src/shared/catalog';
+import { stringify as yamlStringify } from 'yaml';
 
 const executable = resolve('packages/cli/dist/dsa.js');
 let directory: string;
@@ -179,4 +181,46 @@ test('CLI custom connections support secure input, metadata updates and no-auth 
   assert.notEqual(conflict.code, 0); assert.equal(conflict.stderr.includes('never-send'), false);
   assert.equal((await json(['providers', 'set', 'custom-cli', '--auth-method', 'none'])).authMethod, 'none');
   await json(['providers', 'remove', 'custom-cli']);
+});
+
+test('CLI reads YAML documents and operations for create, import, put, patch and offline render, and rejects unsafe YAML without mutating', async () => {
+  const yaml = (value: unknown) => yamlStringify(value, { lineWidth: 0 });
+  const document = createDocument('web', 'YAML CLI');
+  const documentFile = join(directory, 'authored.yaml'), operationsFile = join(directory, 'authored.yml'), jsonFile = join(directory, 'plain.json');
+  await writeFile(documentFile, yaml(document)); await writeFile(jsonFile, JSON.stringify(document));
+  const created = (await json(['projects', 'create', '--name', 'From YAML', '--file', documentFile])).project;
+  const imported = (await json(['projects', 'import', '--file', documentFile, '--name', 'Imported YAML'])).project;
+  const viaJson = (await json(['projects', 'import', '--file', jsonFile, '--name', 'Imported JSON'])).project;
+  const comparable = (value: any) => ({ ...value.document, id: '', name: '', metadata: undefined });
+  assert.deepEqual(comparable(imported), comparable(viaJson), 'YAML and JSON files save the same document');
+  assert.equal(created.revision, 1);
+  const node = created.document.pages[0].nodes.find((value: any) => value.type === 'text');
+  await writeFile(operationsFile, yaml([{ op: 'update-node', nodeId: node.id, changes: { text: 'Patched from YAML file' } }]));
+  const patched = (await json(['projects', 'document', 'patch', created.id, '--revision', '1', '--file', operationsFile])).project;
+  assert.equal(patched.revision, 2); assert.equal(patched.document.pages[0].nodes.find((value: any) => value.id === node.id).text, 'Patched from YAML file');
+  const stdinPatch = (await json(['projects', 'document', 'patch', created.id, '--revision', '2', '--file', '-'], { input: yaml([{ op: 'rename', name: 'Stdin YAML' }]) })).project;
+  assert.equal(stdinPatch.name, 'Stdin YAML', 'stdin falls back from JSON to YAML in auto mode');
+  const explicit = await run(['projects', 'document', 'patch', created.id, '--revision', '3', '--file', '-', '--input-format', 'json'], { input: yaml([{ op: 'rename', name: 'Wrong parser' }]) });
+  assert.equal(explicit.code, 1); assert.equal(JSON.parse(explicit.stderr).error.code, 'invalid_json');
+  const putFile = join(directory, 'replace.yaml'); await writeFile(putFile, yaml({ ...document, id: created.id, name: 'Replaced from YAML' }));
+  assert.equal((await json(['projects', 'document', 'put', created.id, '--revision', '3', '--file', putFile])).project.revision, 4);
+  const stale = await run(['projects', 'document', 'put', created.id, '--revision', '3', '--file', putFile]);
+  assert.equal(stale.code, 1); assert.equal(JSON.parse(stale.stderr).error.code, 'revision_conflict');
+
+  const unsafe = join(directory, 'unsafe.yaml'); await writeFile(unsafe, '- &a {op: rename, name: Unsafe}\n- *a\n');
+  const rejectedPatch = await run(['projects', 'document', 'patch', created.id, '--revision', '4', '--file', unsafe]);
+  assert.equal(rejectedPatch.code, 1); assert.equal(JSON.parse(rejectedPatch.stderr).error.code, 'invalid_yaml'); assert.match(rejectedPatch.stderr, /anchors|aliases/);
+  const malformed = join(directory, 'malformed.yaml'); await writeFile(malformed, 'name: [');
+  const rejectedCreate = await run(['projects', 'create', '--name', 'Never created', '--file', malformed]);
+  assert.equal(rejectedCreate.code, 1); assert.equal(JSON.parse(rejectedCreate.stderr).error.code, 'invalid_yaml');
+  const badFormat = await run(['projects', 'import', '--file', documentFile, '--input-format', 'toml']);
+  assert.equal(JSON.parse(badFormat.stderr).error.code, 'invalid_input_format');
+  const after = (await json(['projects', 'get', created.id])).project; assert.equal(after.revision, 4, 'rejected YAML never mutates the project');
+  const names = (await json(['projects', 'list'])).projects.map((value: any) => value.name); assert.ok(!names.includes('Never created'));
+
+  const renderedYaml = await run(['render', '--file', documentFile, '--format', 'svg']);
+  const renderedJson = await run(['render', '--file', jsonFile, '--format', 'svg']);
+  assert.equal(renderedYaml.code, 0, renderedYaml.stderr); assert.equal(renderedYaml.stdout, renderedJson.stdout, 'offline rendering is identical for YAML and JSON input');
+  const piped = await run(['render', '--file', '-', '--format', 'json', '--input-format', 'yaml'], { input: yaml(document) });
+  assert.equal(piped.code, 0, piped.stderr); assert.equal(JSON.parse(piped.stdout).name, 'YAML CLI');
 });

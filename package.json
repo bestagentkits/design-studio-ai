@@ -39,6 +39,7 @@
     "react-dom": "^19.2.8",
     "three": "^0.185.1",
     "unpdf": "1.8.1",
+    "yaml": "^2.9.1",
     "zod": "^4.5.4"
   },
   "devDependencies": {

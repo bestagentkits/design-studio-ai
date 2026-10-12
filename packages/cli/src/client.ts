@@ -1,4 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
+import { parseYamlInput, YamlInputError } from '../../../src/shared/yaml-input';
 
 export class CliError extends Error {
   constructor(public code: string, message: string, public exitCode = 1, public status?: number, public details?: unknown) { super(message); }
@@ -26,6 +27,23 @@ export async function inputText(path: string): Promise<string> {
 export async function inputJson(path: string): Promise<unknown> {
   try { return JSON.parse(await inputText(path)); }
   catch (error) { if (error instanceof SyntaxError) throw new CliError('invalid_json', 'Input is not valid JSON.'); throw error; }
+}
+export const inputFormats = ['auto', 'json', 'yaml'] as const;
+export type CliInputFormat = typeof inputFormats[number];
+/** Read structured input: `auto` uses .yaml/.yml/.json extensions and, for stdin or other names, JSON first then YAML. */
+export async function inputStructured(path: string, format: string = 'auto'): Promise<unknown> {
+  if (!(inputFormats as readonly string[]).includes(format)) throw new CliError('invalid_input_format', `Input format must be one of: ${inputFormats.join(', ')}.`);
+  const text = await inputText(path);
+  const extension = path === '-' ? '' : path.toLowerCase().match(/\.(json|ya?ml)$/)?.[1];
+  const selected = format !== 'auto' ? format : extension === 'json' ? 'json' : extension ? 'yaml' : 'detect';
+  const yaml = () => { try { return parseYamlInput(text); } catch (error) { if (error instanceof YamlInputError) throw new CliError('invalid_yaml', error.message); throw error; } };
+  if (selected === 'yaml') return yaml();
+  try { return JSON.parse(text); }
+  catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    if (selected === 'json') throw new CliError('invalid_json', 'Input is not valid JSON.');
+    try { return yaml(); } catch { throw new CliError('invalid_input', 'Input is neither valid JSON nor valid YAML. Use --input-format json|yaml for the exact parser error.'); }
+  }
 }
 export function output(value: unknown): void { process.stdout.write(JSON.stringify(value, null, 2) + '\n'); }
 export async function outputFile(path: string | undefined, content: string | Uint8Array, metadata: Record<string, unknown> = {}): Promise<void> {
