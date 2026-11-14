@@ -190,7 +190,7 @@ export function buildMediaRequest(body: MediaInput, source?: MediaSource): { mod
       return { model, path: "/audio/speech", payload: { model, input: body.prompt, voice: body.voice ?? "coral", response_format: "mp3" } };
     }
     if (body.voice !== undefined) fail(400, 'unsupported_option', 'The voice selector applies only to speech.');
-    const model = body.model ?? "gpt-image-1";
+    const model = body.model ?? "gpt-image-2.5-sunburst";
     if (!source) return { model, path: "/images/generations", payload: { model, prompt: body.prompt, size: "1024x1024", n: 1 } };
     if (!["image/png", "image/jpeg", "image/webp"].includes(source.mimeType)) fail(400, "invalid_source_type", "Image editing requires an owned PNG, JPEG, or WebP asset.");
     if (!/^(gpt-image-[\w.-]+|chatgpt-image-latest)$/.test(model)) fail(400, "unsupported_model", "Select a GPT Image model for multipart source image editing.");
